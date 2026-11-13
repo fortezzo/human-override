@@ -2,6 +2,7 @@
 // from chosen camera positions.
 //
 //   node tools/dev/shot.mjs outDir "name=x,y,z,yawDeg,pitchDeg[,fov]" ...
+//   node tools/dev/shot.mjs outDir "name=player"      (the player's own view)
 //
 // Options (environment variables):
 //   HO_URL      game address            (default http://localhost:5173)
@@ -48,6 +49,15 @@ if (process.env.HO_EVAL) await page.evaluate(process.env.HO_EVAL);
 
 for (const view of views) {
   const [name, spec] = view.split('=');
+  // "name=player" shoots through the player's own eyes (no camera override).
+  if (spec === 'player') {
+    await page.evaluate(() => {
+      window.__HO.releaseView();
+      window.__HO.step(1 / 60, 2);
+    });
+    await page.screenshot({ path: path.join(outDir, `${name}.png`) });
+    continue;
+  }
   const [x, y, z, yaw, pitch, fov] = spec.split(',').map(Number);
   await page.evaluate(
     ([x, y, z, yaw, pitch, fov]) => {

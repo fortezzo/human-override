@@ -103,7 +103,7 @@ export const FX = {
   gibLifetime: 9,
   sparkGravity: 9.8,
   muzzleFlashTime: 0.055,
-  muzzleLightIntensity: 46,
+  muzzleLightIntensity: 22,
 };
 
 export const AUDIO = {
@@ -243,7 +243,7 @@ export const LOOKDEV = {
   fogDensity: 0.034,
   ambientSky: 0x3a4d66,
   ambientGround: 0x0e0b08,
-  ambientIntensity: 0.9,
+  ambientIntensity: 0.6,
   environmentIntensity: 1.0,
   bloomThreshold: 0.92,
   bloomIntensity: 0.75,
@@ -255,7 +255,7 @@ export const LOOKDEV = {
   saturation: 0.8,
   /** Extra desaturation applied only to cool hues, keeping warm lights rich. */
   coolDesaturate: 0.35,
-  contrast: 1.08,
+  contrast: 1.13,
   shadowTint: [0.86, 0.97, 1.1] as [number, number, number],
   highlightTint: [1.06, 1.0, 0.92] as [number, number, number],
   vignette: 0.42,

@@ -207,10 +207,15 @@ export const OPENGAMEART = [
   },
 ];
 
-/** Gun models from Sketchfab (CC-BY 4.0), downloaded by the project owner. */
+/**
+ * Gun models from Sketchfab (CC-BY 4.0), downloaded by the project owner.
+ * `shipped` marks the ones that are converted and included in the game so far.
+ */
 export const SKETCHFAB = [
   {
     key: 'rifle',
+    shipped: true,
+    changes: 'Re-centred, scaled, and its textures re-packed and compressed.',
     title: 'Sci-Fi Rifle',
     author: 'ul1tka',
     license: 'CC-BY 4.0',

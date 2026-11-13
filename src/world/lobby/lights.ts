@@ -39,7 +39,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     name: 'yard',
     kind: 'spot',
     color: COLD,
-    intensity: 2600,
+    intensity: 1900,
     position: yardLamp,
     target: [0, 0.9, -4],
     angle: 0.2,
@@ -55,7 +55,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
   haze.push({ effect: createFogCard([0, 1.7, -10.3], [0, 0, 1], 5.6, 3.6, COLD, 0.16, [1, 1.1]) });
   haze.push({ effect: createFogCard([0, 1.6, z0 - 0.9], [0, 0, 1], 4.4, 3.4, COLD, 0.1, [1.05, 1.1]) });
   haze.push({ effect: createFogCard([yardLamp[0], yardLamp[1], yardLamp[2] + 0.4], [0, 0, 1], 4.5, 4.5, COLD, 1.1, [1, 1]) });
-  haze.push({ effect: createConeShaft([0, 2.4, z0 - 0.6], [0, 0.4, z0 + 5.5], 1.5, 2.6, COLD, 0.07) });
+  haze.push({ effect: createConeShaft([0, 2.4, z0 - 0.6], [0, 0.4, z0 + 5.5], 1.5, 2.6, COLD, 0.03) });
 
   // ---- Moonlight through the open west window.
   const open = WINDOWS.find((w) => w.open)!;
@@ -106,12 +106,12 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     name: 'flood',
     kind: 'spot',
     color: 0xe4ecff,
-    intensity: 260,
+    intensity: 150,
     position: work.flood.at,
     target: work.flood.aim,
-    angle: 0.42,
-    penumbra: 0.6,
-    distance: 16,
+    angle: 0.34,
+    penumbra: 0.7,
+    distance: 15,
     extra: true,
     glow: { materials: work.flood.materials, color: 0xdfe8ff, intensity: 7 },
   });
