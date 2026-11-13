@@ -1,10 +1,13 @@
 // Turns the Mixamo downloads in assets-source/robot into one game file,
-// public/assets/models/robot.glb:
+// public/assets/models/robot.glb, holding only:
 //
-//   - the "Y Bot" character mesh, reduced to a game-friendly triangle count
-//   - every animation clip merged onto that one skeleton, with finger tracks
-//     removed (robot hands stay rigid, and it halves the animation cost)
-//   - Meshopt-compressed
+//   - the skeleton (22 bones; the thirty finger bones are dropped because
+//     robot hands are rigid claws)
+//   - every animation clip, merged onto that one skeleton
+//
+// The Mixamo character's own body is not shipped. The game builds an
+// original robot body on this skeleton from code (src/entities/robot), so
+// nothing of the mannequin's appearance remains; only how it moves.
 //
 // The raw FBX files are never copied into the repo; only this converted,
 // compressed result ships with the game.
@@ -13,19 +16,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { NodeIO } from '@gltf-transform/core';
+import { NodeIO, PropertyType } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { dedup, meshopt, prune, resample, simplifyPrimitive, weld } from '@gltf-transform/functions';
-import { MeshoptDecoder, MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
-import { addBoxUvs } from './lib/box-uv.mjs';
+import { meshopt, prune, resample } from '@gltf-transform/functions';
+import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
 
 const SRC_DIR = 'assets-source/robot';
 const WORK_DIR = 'assets-source/_work/robot-glb';
 const OUT_FILE = 'public/assets/models/robot.glb';
-
-// Triangle budgets for the two body meshes (the source is about 55,000).
-const SHELL_TRIS = 9500;
-const JOINT_TRIS = 4500;
 
 // Which downloaded animation becomes which game clip. Mixamo lets you tick
 // "In Place" and "Without Skin" per download; where several copies of one
@@ -42,11 +40,11 @@ const CLIPS = [
 ];
 
 const require = createRequire(import.meta.url);
-const fbx2gltf = path.join(path.dirname(require.resolve('fbx2gltf/package.json')), 'bin', process.platform === 'win32' ? 'Windows_NT' : process.platform === 'darwin' ? 'Darwin' : 'Linux', process.platform === 'win32' ? 'FBX2glTF.exe' : 'FBX2glTF');
+const platformDir = process.platform === 'win32' ? 'Windows_NT' : process.platform === 'darwin' ? 'Darwin' : 'Linux';
+const fbx2gltf = path.join(path.dirname(require.resolve('fbx2gltf/package.json')), 'bin', platformDir, process.platform === 'win32' ? 'FBX2glTF.exe' : 'FBX2glTF');
 
 await MeshoptDecoder.ready;
 await MeshoptEncoder.ready;
-await MeshoptSimplifier.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
   'meshopt.decoder': MeshoptDecoder,
   'meshopt.encoder': MeshoptEncoder,
@@ -91,7 +89,7 @@ function describeClip(doc) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Character mesh
+// 1. Skeleton
 // ---------------------------------------------------------------------------
 const files = fs.readdirSync(SRC_DIR).filter((f) => /\.fbx$/i.test(f));
 const characterFile = files.find((f) => /^character\.fbx$/i.test(f)) ?? files.find((f) => /^character/i.test(f));
@@ -105,44 +103,33 @@ const buffer = root.listBuffers()[0];
 for (const anim of root.listAnimations()) anim.dispose();
 for (const node of root.listNodes()) node.setName(boneName(node.getName()));
 
-const meshes = root.listMeshes();
-const shell = meshes.find((m) => /Surface/i.test(m.getName()));
-const joints = meshes.find((m) => /Joints/i.test(m.getName()));
-if (!shell || !joints) {
-  console.error(`Expected the Mixamo "Y Bot" (meshes named *_Surface and *_Joints); found: ${meshes.map((m) => m.getName())}`);
-  process.exit(1);
-}
-shell.setName('shell');
-joints.setName('joints');
-for (const node of root.listNodes()) {
-  if (node.getMesh() === shell) node.setName('shell');
-  if (node.getMesh() === joints) node.setName('joints');
-}
-
-const tris = (mesh) => mesh.listPrimitives().reduce((n, p) => n + p.getIndices().getCount() / 3, 0);
-const sourceTris = tris(shell) + tris(joints);
-
-await doc.transform(dedup(), weld());
-for (const [mesh, budget] of [
-  [shell, SHELL_TRIS],
-  [joints, JOINT_TRIS],
-]) {
-  const ratio = Math.min(1, budget / tris(mesh));
+// Drop the character's body and everything that belongs to it: the nodes
+// that carry the meshes, the mesh data, materials and skin bindings. What is
+// left is a plain tree of named bones.
+for (const node of root.listNodes()) if (node.getMesh()) node.dispose();
+for (const mesh of root.listMeshes()) {
   for (const prim of mesh.listPrimitives()) {
-    simplifyPrimitive(prim, { simplifier: MeshoptSimplifier, ratio, error: 0.004, lockBorder: false });
+    for (const attribute of prim.listAttributes()) attribute.dispose();
+    prim.getIndices()?.dispose();
+  }
+  mesh.dispose();
+}
+for (const material of root.listMaterials()) material.dispose();
+for (const skin of root.listSkins()) {
+  skin.getInverseBindMatrices()?.dispose();
+  skin.dispose();
+}
+
+// Robot hands are rigid claws, so the finger bones (and Mixamo's unused
+// "_End" marker bones) are dropped.
+let dropped = 0;
+for (const node of root.listNodes()) {
+  if (isFinger(node.getName()) || /_End$/.test(node.getName())) {
+    node.dispose();
+    dropped++;
   }
 }
-
-// The Mixamo mannequin has no usable texture layout, so give both meshes
-// box-projected UVs for the tiling worn-metal textures.
-addBoxUvs(doc, shell, 0.55);
-addBoxUvs(doc, joints, 0.4);
-
-// One simple material per part; the game replaces these with its own.
-for (const mesh of root.listMeshes()) {
-  const material = doc.createMaterial(mesh.getName()).setRoughnessFactor(0.6).setMetallicFactor(0.8);
-  for (const prim of mesh.listPrimitives()) prim.setMaterial(material);
-}
+const bones = root.listNodes().filter((n) => n.getName() !== 'RootNode');
 
 // ---------------------------------------------------------------------------
 // 2. Animation clips
@@ -213,9 +200,12 @@ for (const clip of CLIPS) {
 // ---------------------------------------------------------------------------
 // 3. Compress and write
 // ---------------------------------------------------------------------------
-await doc.transform(resample({ tolerance: 0.0005 }), prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+// Prune only leftover data. Bones must survive even though nothing in the
+// file is attached to them.
+const leftovers = [PropertyType.ACCESSOR, PropertyType.TEXTURE, PropertyType.MATERIAL, PropertyType.MESH];
+await doc.transform(resample({ tolerance: 0.0005 }), prune({ propertyTypes: leftovers }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
 await io.write(OUT_FILE, doc);
 
-console.log(`Robot: ${sourceTris} -> shell ${tris(shell)} + joints ${tris(joints)} tris, ${root.listSkins()[0].listJoints().length} bones`);
+console.log(`Robot: skeleton of ${bones.length} bones (${dropped} finger and marker bones dropped), no character mesh`);
 for (const line of clipReport) console.log(`  clip ${line}`);
 console.log(`  ${OUT_FILE} ${(fs.statSync(OUT_FILE).size / 1024).toFixed(0)} KB`);

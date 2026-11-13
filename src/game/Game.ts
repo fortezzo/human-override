@@ -13,6 +13,7 @@ import { damp, rand } from '../core/math';
 import { settings } from '../core/settings';
 import { Player } from '../entities/Player';
 import { Gibs } from '../entities/robot/Gibs';
+import { DRUDGE } from '../entities/robot/designs/drudge';
 import { Robot } from '../entities/robot/Robot';
 import { RobotModel } from '../entities/robot/RobotModel';
 import { RifleController, type ShotEvent } from '../entities/weapon/RifleController';
@@ -156,7 +157,7 @@ export class Game {
 
     this.nav = createNavGrid(NAV_BOUNDS, 0.3, this.lobby.colliders, ROBOT.radius + 0.06, 0.3, 1.8);
 
-    this.robotModel = new RobotModel(this.assets, this.materials);
+    this.robotModel = new RobotModel(this.assets, DRUDGE);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
 

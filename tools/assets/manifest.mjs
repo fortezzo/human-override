@@ -26,8 +26,7 @@ export const POLYHAVEN_TEXTURES = [
 
 /** Surface materials and decals from ambientCG (CC0). `decal` keeps the opacity map as alpha. */
 export const AMBIENTCG = [
-  { id: 'PaintedMetal013', res: '1K', out: 1024, use: 'robot shell (chipped paint over steel)' },
-  { id: 'Metal046B', res: '1K', out: 1024, use: 'robot joints (dark worn steel)' },
+  { id: 'Metal046B', res: '1K', out: 1024, use: 'robot body, dark steel trim and cables' },
   { id: 'PaintedMetal016', res: '1K', out: 1024, use: 'hazard stripes' },
   { id: 'Leaking003', res: '1K', out: 1024, decal: true, use: 'wall leak stains (decal)' },
   { id: 'Leaking004', res: '1K', out: 1024, decal: true, use: 'wall leak stains (decal)' },

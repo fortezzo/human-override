@@ -12,7 +12,6 @@ export const SURFACES = [
   'green_metal_rust',
   'rusty_metal_04',
   'metal_plate',
-  'PaintedMetal013',
   'Metal046B',
   'PaintedMetal016',
 ] as const;

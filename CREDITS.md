@@ -74,7 +74,6 @@ Used under the Adobe Mixamo terms. The game ships only a converted, simplified a
 | [Green Metal Rust](https://polyhaven.com/a/green_metal_rust) | Rob Tuytel | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Rusty Metal 04](https://polyhaven.com/a/rusty_metal_04) | Amal Kumar | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Metal Plate](https://polyhaven.com/a/metal_plate) | Rob Tuytel | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| [Painted Metal 013](https://ambientcg.com/a/PaintedMetal013) | ambientCG (Lennart Demes) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Metal 046B](https://ambientcg.com/a/Metal046B) | ambientCG (Lennart Demes) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Painted Metal 016](https://ambientcg.com/a/PaintedMetal016) | ambientCG (Lennart Demes) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Leaking 003](https://ambientcg.com/a/Leaking003) | ambientCG (Lennart Demes) | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |

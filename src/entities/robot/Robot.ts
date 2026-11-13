@@ -29,14 +29,14 @@ export interface RobotEventsOut {
 
 /** Capsules that follow the limbs: [bone at one end, bone at the other, radius]. */
 const LIMBS: Array<[string, string, number]> = [
-  ['LeftArm', 'LeftForeArm', 0.065],
-  ['LeftForeArm', 'LeftHand', 0.055],
-  ['RightArm', 'RightForeArm', 0.065],
-  ['RightForeArm', 'RightHand', 0.055],
-  ['LeftUpLeg', 'LeftLeg', 0.09],
-  ['LeftLeg', 'LeftFoot', 0.07],
-  ['RightUpLeg', 'RightLeg', 0.09],
-  ['RightLeg', 'RightFoot', 0.07],
+  ['LeftArm', 'LeftForeArm', 0.07],
+  ['LeftForeArm', 'LeftHand', 0.075],
+  ['RightArm', 'RightForeArm', 0.07],
+  ['RightForeArm', 'RightHand', 0.075],
+  ['LeftUpLeg', 'LeftLeg', 0.085],
+  ['LeftLeg', 'LeftFoot', 0.075],
+  ['RightUpLeg', 'RightLeg', 0.085],
+  ['RightLeg', 'RightFoot', 0.075],
 ];
 
 /** Seconds a destroyed robot staggers before it comes apart. */
@@ -63,6 +63,8 @@ export class Robot {
   private readonly eyeMaterial: THREE.MeshBasicMaterial;
   private readonly glow: THREE.Sprite;
   private readonly eyeColor = new THREE.Color(ROBOT.eyeColor);
+  /** The bones the hunch is applied to, paired with their extra rotation. */
+  private readonly posture: Array<{ bone: THREE.Bone; rotation: THREE.Quaternion }>;
 
   private heading = 0;
   private speed = 0;
@@ -75,7 +77,12 @@ export class Robot {
   private time = rand(0, 10);
   private readonly body: CircleBody = { x: 0, z: 0, radius: ROBOT.radius, feet: 0, head: 1.8 };
 
-  constructor(model: RobotModel, x: number, z: number, heading: number) {
+  constructor(
+    private readonly model: RobotModel,
+    x: number,
+    z: number,
+    heading: number,
+  ) {
     this.root = model.instantiate();
     this.root.position.set(x, 0, z);
     this.heading = heading;
@@ -100,23 +107,21 @@ export class Robot {
     // marches in step.
     this.actions.get('walk')!.time = rand(0, 4);
 
-    // Eyes: two small bright lenses and a soft glow that reads at range.
-    const head = this.bones.get('Head')!;
-    this.eyeMaterial = new THREE.MeshBasicMaterial({ toneMapped: false, fog: false });
-    const lens = new THREE.SphereGeometry(0.0125, 10, 8);
-    for (const offset of model.eyeOffsets) {
-      const eye = new THREE.Mesh(lens, this.eyeMaterial);
-      eye.position.copy(offset);
-      head.add(eye);
-    }
+    this.posture = model.posture.map(({ bone, rotation }) => ({ bone: this.bones.get(bone)!, rotation }));
+
+    // The visor and sensor lights are part of the model. This robot gets its
+    // own copy of their material so it can flicker and go dark on its own,
+    // plus a soft flare over the visor that reads from across the room.
+    const lights = this.root.getObjectByName('glow') as THREE.SkinnedMesh;
+    this.eyeMaterial = (lights.material as THREE.MeshBasicMaterial).clone();
+    lights.material = this.eyeMaterial;
     this.glow = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: model.glowTexture, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false, toneMapped: false }),
     );
-    const centre = model.eyeOffsets[0]!.clone().add(model.eyeOffsets[1]!).multiplyScalar(0.5);
-    this.glow.position.copy(centre).add(new THREE.Vector3(0, 0, 0.02));
-    this.glow.scale.setScalar(0.24);
+    this.glow.position.copy(model.glow.at);
+    this.glow.scale.set(model.glow.size.x, model.glow.size.y, 1);
     this.glow.renderOrder = 9;
-    head.add(this.glow);
+    this.bones.get('Head')!.add(this.glow);
     this.setEyes(1);
   }
 
@@ -145,6 +150,7 @@ export class Robot {
       this.play('idle', 0.3);
       this.setEyes(0.85 + 0.15 * Math.sin(this.time * 3));
       this.mixer.update(dt);
+      this.applyPosture();
       this.root.updateMatrixWorld(true);
       return out;
     }
@@ -210,6 +216,7 @@ export class Robot {
     }
 
     this.mixer.update(dt);
+    this.applyPosture();
 
     // Layer the flinch on top of whatever animation is playing.
     this.flinchLean = damp(this.flinchLean, 0, 9, dt);
@@ -223,6 +230,15 @@ export class Robot {
     }
     this.root.updateMatrixWorld(true);
     return out;
+  }
+
+  /**
+   * The animations were recorded for an upright figure. This adds the
+   * design's hunch on top of whatever pose the animation just set. (The
+   * animation overwrites these bones every frame, so it never accumulates.)
+   */
+  private applyPosture(): void {
+    for (const { bone, rotation } of this.posture) bone.quaternion.multiply(rotation);
   }
 
   /**
@@ -240,8 +256,8 @@ export class Robot {
     let zone: HitZone | null = null;
 
     const head = this.bones.get('Head')!;
-    _headCentre.set(0, 0.085, 0.01).applyMatrix4(head.matrixWorld);
-    const headHit = raySphere(origin, direction, _headCentre, 0.125);
+    _headCentre.copy(this.model.weakPoint.centre).applyMatrix4(head.matrixWorld);
+    const headHit = raySphere(origin, direction, _headCentre, this.model.weakPoint.radius);
     if (headHit >= 0 && headHit < best) {
       best = headHit;
       zone = 'head';
@@ -249,7 +265,7 @@ export class Robot {
 
     _a.setFromMatrixPosition(this.bones.get('Hips')!.matrixWorld);
     _b.setFromMatrixPosition(this.bones.get('Neck')!.matrixWorld);
-    const torsoHit = rayCapsule(origin, direction, _a, _b, 0.19);
+    const torsoHit = rayCapsule(origin, direction, _a, _b, 0.2);
     // The head wins a near-tie so shots at the neckline count as weak-point hits.
     if (torsoHit >= 0 && torsoHit < best - (zone === 'head' ? 0.08 : 0)) {
       best = torsoHit;
@@ -321,8 +337,8 @@ export class Robot {
 
   private setEyes(level: number): void {
     const l = Math.max(0, level);
-    // Far above 1 so the lenses bloom; the red channel leads.
-    this.eyeMaterial.color.copy(this.eyeColor).multiplyScalar(9 * l);
-    this.glow.material.color.copy(this.eyeColor).multiplyScalar(1.1 * l);
+    // Far above 1 so the visor blooms.
+    this.eyeMaterial.color.copy(this.eyeColor).multiplyScalar(11 * l);
+    this.glow.material.color.copy(this.eyeColor).multiplyScalar(0.9 * l);
   }
 }

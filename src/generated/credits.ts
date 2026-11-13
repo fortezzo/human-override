@@ -270,11 +270,6 @@ export const CREDITS: CreditGroup[] = [
         "license": "CC0"
       },
       {
-        "title": "Painted Metal 013",
-        "author": "ambientCG (Lennart Demes)",
-        "license": "CC0"
-      },
-      {
         "title": "Metal 046B",
         "author": "ambientCG (Lennart Demes)",
         "license": "CC0"

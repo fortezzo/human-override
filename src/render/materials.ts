@@ -42,8 +42,6 @@ const DEFS = {
   hazard: { surface: 'PaintedMetal016', tile: 1.3, kind: 'metal', tint: 0xece6d6, roughness: 1.0 },
   darkSteel: { surface: 'Metal046B', tile: 1.0, kind: 'metal', tint: 0xcfd4d9, roughness: 1.0 },
   cable: { surface: 'Metal046B', tile: 0.5, kind: 'soft', tint: 0x3a3d42, roughness: 1.0, metalness: 0.1 },
-  robotShell: { surface: 'PaintedMetal013', tile: 1.0, kind: 'metal', tint: 0xe4e6e2, roughness: 1.0, normalScale: 1.2, envIntensity: 1.2 },
-  robotJoints: { surface: 'Metal046B', tile: 1.0, kind: 'metal', tint: 0xa9afb6, roughness: 0.9, envIntensity: 1.2 },
 } satisfies Record<string, MaterialDef>;
 
 export type MaterialKey = keyof typeof DEFS;
