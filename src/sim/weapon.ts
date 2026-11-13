@@ -29,16 +29,19 @@ export function createWeapon(spec: WeaponSpec): WeaponState {
   return { ammo: spec.magazine, reserve: spec.reserve, cooldown: 0, reloading: false, reloadTimer: 0, reloadCommitted: false };
 }
 
+/** Tolerance for floating-point drift when counting down the cooldown. */
+const READY = 1e-9;
+
 export function canFire(state: WeaponState): boolean {
-  return !state.reloading && state.cooldown <= 0 && state.ammo > 0;
+  return !state.reloading && state.cooldown <= READY && state.ammo > 0;
 }
 
 /** Fire one round if allowed. Returns true if a shot left the barrel. */
 export function fire(state: WeaponState, spec: WeaponSpec): boolean {
   if (!canFire(state)) return false;
   state.ammo -= 1;
-  // Carry over any time already "owed" so the fire rate stays exact even
-  // when frames are long.
+  // Adding to (rather than resetting) the cooldown carries over any time
+  // already "owed", so the fire rate stays exact at any frame rate.
   state.cooldown += spec.fireInterval;
   return true;
 }
@@ -70,7 +73,9 @@ export interface WeaponTick {
 
 export function updateWeapon(state: WeaponState, spec: WeaponSpec, dt: number): WeaponTick {
   const tick: WeaponTick = { loaded: false, finished: false };
-  state.cooldown = Math.max(0, state.cooldown - dt);
+  // The cooldown may dip below zero by at most this frame's length: that
+  // is the part of the frame the gun was already ready for.
+  state.cooldown = Math.max(-dt, state.cooldown - dt);
 
   if (state.reloading) {
     state.reloadTimer += dt;

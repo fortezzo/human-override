@@ -171,7 +171,9 @@ export function floodFrom(grid: NavGrid, goalX: number, goalZ: number): boolean 
       if (blocked[next]) continue;
       // Never cut across the corner of an obstacle.
       if (k >= 4 && (blocked[r * cols + nc] || blocked[nr * cols + c])) continue;
-      const nd = dist + COST[k]!;
+      // Rounded to the precision the grid stores, so the "is this heap entry
+      // stale?" check above compares like with like.
+      const nd = Math.fround(dist + COST[k]!);
       if (nd < distance[next]!) {
         distance[next] = nd;
         push(next, nd);

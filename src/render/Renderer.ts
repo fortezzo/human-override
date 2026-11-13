@@ -29,6 +29,8 @@ export class Renderer {
   private preset!: QualityPreset;
   private width = 1;
   private height = 1;
+  /** Extra resolution reduction applied on top of the preset (1 = none). */
+  private extraScale = 1;
 
   constructor(
     private readonly scene: THREE.Scene,
@@ -127,12 +129,23 @@ export class Renderer {
   resize(width: number, height: number): void {
     this.width = Math.max(1, width);
     this.height = Math.max(1, height);
-    const ratio = Math.min(window.devicePixelRatio || 1, this.preset?.pixelRatioCap ?? 1) * (this.preset?.renderScale ?? 1);
+    const ratio = Math.min(window.devicePixelRatio || 1, this.preset?.pixelRatioCap ?? 1) * (this.preset?.renderScale ?? 1) * this.extraScale;
     this.three.setPixelRatio(ratio);
     this.three.setSize(this.width, this.height);
     this.composer?.setSize(this.width, this.height);
     this.camera.aspect = this.width / this.height;
     this.camera.updateProjectionMatrix();
+  }
+
+  /** Render fewer pixels (the browser stretches them to fit) to gain speed. */
+  setExtraScale(scale: number): void {
+    if (scale === this.extraScale) return;
+    this.extraScale = scale;
+    this.resize(this.width, this.height);
+  }
+
+  get resolutionScale(): number {
+    return this.extraScale;
   }
 
   render(dt: number, time: number): void {

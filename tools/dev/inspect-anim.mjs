@@ -1,7 +1,7 @@
 // Prints, for each GLB given, every animation clip with its duration and how
 // far the hips travel (to tell "in place" clips from root-motion clips).
 //
-//   node tools/inspect-anim.mjs a.glb b.glb ...
+//   node tools/dev/inspect-anim.mjs a.glb b.glb ...
 
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';

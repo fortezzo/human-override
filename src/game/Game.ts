@@ -24,7 +24,7 @@ import { Particles } from '../fx/Particles';
 import { DustMotes, updateShaftTime } from '../render/atmosphere';
 import { LightRig } from '../render/lighting';
 import { MaterialLibrary, type SurfaceKind } from '../render/materials';
-import { bakeReflectionProbe } from '../render/reflectionProbe';
+import { bakeReflectionProbe, blankEnvironment } from '../render/reflectionProbe';
 import { Renderer } from '../render/Renderer';
 import { createNavGrid, floodFrom, type NavGrid } from '../sim/navGrid';
 import { damageForZone } from '../sim/robotMind';
@@ -59,6 +59,8 @@ export class Game {
   debugCamera: { position: THREE.Vector3; yaw: number; pitch: number; fov?: number } | null = null;
   /** Debug only: the player takes no damage. */
   godMode = false;
+  /** Debug only: hide the rifle (for photographs of the room). */
+  hideWeapon = false;
 
   private materials!: MaterialLibrary;
   private lobby!: Lobby;
@@ -84,6 +86,10 @@ export class Game {
   private fadeTarget = 1;
   private bedsStarted = false;
   private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2 };
+  private nextDrip = 2;
+
+  /** How long each part of start-up took, in milliseconds (for the performance report). */
+  readonly loadTimings: Record<string, number> = {};
 
   /** Smoothed frames per second, for the counter and the quality governor. */
   fps = 60;
@@ -121,8 +127,16 @@ export class Game {
 
   /** Download assets and build the world. `onProgress` gets 0..1. */
   async load(onProgress: (fraction: number) => void): Promise<void> {
+    let mark = performance.now();
+    const lap = (name: string) => {
+      const now = performance.now();
+      this.loadTimings[name] = Math.round(now - mark);
+      mark = now;
+    };
+
     await this.assets.load((data) => this.audio.decode(data), (f) => onProgress(f * 0.92));
     this.audio.attach(this.assets);
+    lap('download and decode');
 
     this.materials = new MaterialLibrary(this.assets);
     this.lobby = buildLobby(this.assets, this.materials);
@@ -158,11 +172,33 @@ export class Game {
     this.resize();
     window.addEventListener('resize', () => this.resize());
 
-    // Compile every shader up front so the first seconds of play are smooth.
+    lap('build world');
+
+    // Compile every shader up front, in the background, so neither the first
+    // frame nor the first gunshot or destroyed robot causes a stutter. A
+    // blank stand-in environment is in place first: shaders are built
+    // differently with and without reflections, and this way they are only
+    // ever built once.
     onProgress(0.96);
-    await this.renderer.three.compileAsync(this.scene, this.camera);
+    this.scene.environment = blankEnvironment(this.renderer.three);
+    this.scene.environmentIntensity = 0;
+    const hidden = this.revealForCompile();
+    // The scene is always drawn into an off-screen HDR buffer (never
+    // straight to the screen), and shaders differ between the two, so
+    // compile with a buffer of that kind bound.
+    const three = this.renderer.three;
+    const offscreen = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+    three.setRenderTarget(offscreen);
+    await three.compileAsync(this.scene, this.camera);
+    three.setRenderTarget(null);
+    offscreen.dispose();
+    for (const object of hidden) object.visible = false;
+    lap('compile shaders');
+
     this.bakeReflections();
+    lap('bake reflections');
     this.frame(0);
+    lap('first frame');
     onProgress(1);
   }
 
@@ -185,14 +221,27 @@ export class Game {
     };
   }
 
+  /** Briefly show everything that starts hidden, so its shaders get compiled too. */
+  private revealForCompile(): THREE.Object3D[] {
+    const revealed: THREE.Object3D[] = [];
+    this.scene.traverse((object) => {
+      if (!object.visible) {
+        object.visible = true;
+        revealed.push(object);
+      }
+    });
+    return revealed;
+  }
+
   /** Re-photograph the room for reflections and bounce light. */
   private bakeReflections(): void {
     const preset = QUALITY[this.quality];
     const hidden = [this.dust.points, this.particles.group, this.gibs.group, this.casings.mesh, this.rifleView.root, ...this.robots.map((r) => r.root)];
     const centre = new THREE.Vector3(0, 1.7, 0.5);
-    this.scene.environment = null;
-    // Two passes: the second sees the first's bounce light, so shadowed
-    // corners pick up a little colour from the lit parts of the room.
+    // Two passes: the first captures direct light only; the second sees the
+    // first's bounce light, so shadowed corners pick up a little colour
+    // from the lit parts of the room.
+    this.scene.environmentIntensity = 0;
     for (let pass = 0; pass < 2; pass++) {
       const previous = this.scene.environment;
       this.scene.environment = bakeReflectionProbe(this.renderer.three, this.scene, centre, preset.reflectionProbeSize, hidden);
@@ -216,6 +265,7 @@ export class Game {
     const changed = level !== this.quality;
     this.quality = level;
     const preset = QUALITY[level];
+    this.renderer.setExtraScale(1);
     this.renderer.applyQuality(preset);
     this.materials.setAnisotropy(Math.min(preset.anisotropy, this.renderer.maxAnisotropy));
     this.lights.applyQuality(preset);
@@ -315,6 +365,11 @@ export class Game {
 
     if (simulate) {
       this.updateRobots(step);
+      // The jammed shutter's torn wiring spits sparks now and then.
+      if (this.time > this.nextDrip) {
+        this.nextDrip = this.time + rand(1.8, 6);
+        this.effects.drip(this.tmpA.set(rand(1.2, 1.75) * (Math.random() < 0.75 ? 1 : -1), 2.02, ROOM.z0 - 0.28));
+      }
       this.gibs.update(step, this.lobby.colliders);
       this.casings.update(step);
       this.particles.update(step);
@@ -346,7 +401,7 @@ export class Game {
     player.update(dt, this.lobby.colliders, wantAim, look);
     this.camera.updateMatrixWorld(true);
     rifle.update(dt, player);
-    this.rifleView.root.visible = true;
+    this.rifleView.root.visible = !this.hideWeapon;
     this.rifleView.update(dt, player, look, rifle.reload);
 
     // Stage 0: keep one robot coming. The next is sent in a few seconds
@@ -517,7 +572,16 @@ export class Game {
     this.lowFpsTime = this.fps < GOVERNOR.minFps ? this.lowFpsTime + dt : 0;
     if (this.lowFpsTime > GOVERNOR.window) {
       const index = QUALITY_ORDER.indexOf(this.quality);
-      if (index > 0) this.setQuality(QUALITY_ORDER[index - 1]!, true);
+      if (index > 0) {
+        this.setQuality(QUALITY_ORDER[index - 1]!, true);
+      } else {
+        // Already on the lowest preset: render fewer pixels instead.
+        const next = GOVERNOR.resolutionSteps.find((s) => s < this.renderer.resolutionScale);
+        if (next) {
+          this.renderer.setExtraScale(next);
+          this.settleUntil = this.time + GOVERNOR.settle;
+        }
+      }
       this.lowFpsTime = 0;
     }
   }

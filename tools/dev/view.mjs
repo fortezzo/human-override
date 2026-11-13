@@ -20,7 +20,7 @@ page.on('pageerror', (e) => console.log('[page exception]', e.message));
 
 const shots = [];
 for (const view of views.length ? views : ['az=30&el=15']) {
-  await page.goto(`${base}/tools/viewer/index.html?m=${encodeURIComponent(model)}&${view}`);
+  await page.goto(`${base}/tools/dev/viewer/index.html?m=${encodeURIComponent(model)}&${view}`);
   await page.waitForFunction(() => window.__viewer?.ready, null, { timeout: 30000 });
   const info = await page.evaluate(() => window.__viewer);
   if (info.error) console.log('viewer error:', info.error);

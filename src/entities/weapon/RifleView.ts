@@ -22,10 +22,13 @@ import type { Player } from '../Player';
 const SCALE = 0.25;
 /** The gun's own lens, in degrees (the world camera is wider). */
 const VIEW_FOV = 48;
+/** While aiming, the gun fades to shadow between these distances from the eye (real metres). */
+const SHADE_FROM = 0.1 * SCALE;
+const SHADE_TO = 0.3 * SCALE;
 
 /** Where the gun sits relative to the eye, in real metres (before SCALE). */
-const HIP = { x: 0.19, y: -0.215, z: -0.69, yaw: 0.055, pitch: 0.012, roll: 0 };
-const AIM = { x: 0, y: -0.171, z: -0.2, yaw: 0, pitch: 0, roll: 0 };
+const HIP = { x: 0.2, y: -0.25, z: -0.7, yaw: 0.075, pitch: 0.02, roll: 0 };
+const AIM = { x: 0, y: -0.1735, z: -0.23, yaw: 0, pitch: 0.004, roll: 0 };
 const SPRINT = { x: 0.12, y: -0.27, z: -0.5, yaw: 0.6, pitch: -0.14, roll: 0.14 };
 
 /** Points on the rifle model, in its own coordinates. */
@@ -85,15 +88,26 @@ const RELOAD_BACK: Array<[number, number]> = [
   [1, 0],
 ];
 
-/** Make a material draw through the gun's lens instead of the world camera's. */
-function useViewLens(material: THREE.Material, lens: { value: THREE.Matrix4 }): void {
+/**
+ * Make a material draw through the gun's lens instead of the world camera's.
+ * With `shade`, the part of the gun nearest the eye also fades to shadow
+ * while aiming, the way the rear of a shouldered rifle sits dark and out of
+ * focus under your eye instead of filling the view.
+ */
+function useViewLens(material: THREE.Material, lens: { value: THREE.Matrix4 }, shade?: { value: number }): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uViewLens = lens;
     const header = 'uniform mat4 uViewLens;\n';
     const project = '#include <project_vertex>\ngl_Position = uViewLens * mvPosition;';
     shader.vertexShader = header + shader.vertexShader.replace('#include <project_vertex>', project);
+    if (shade) {
+      shader.uniforms.uAimShade = shade;
+      const fade = `smoothstep(${SHADE_FROM.toFixed(4)}, ${SHADE_TO.toFixed(4)}, vViewPosition.z)`;
+      const darken = `gl_FragColor.rgb *= mix(1.0, 0.06 + 0.94 * ${fade}, uAimShade);\n#include <dithering_fragment>`;
+      shader.fragmentShader = 'uniform float uAimShade;\n' + shader.fragmentShader.replace('#include <dithering_fragment>', darken);
+    }
   };
-  material.customProgramCacheKey = () => 'view-lens';
+  material.customProgramCacheKey = () => (shade ? 'view-lens-shaded' : 'view-lens');
 }
 
 function flashTexture(): THREE.Texture {
@@ -146,6 +160,7 @@ export class RifleView {
   private time = 0;
 
   private readonly lens = { value: new THREE.Matrix4() };
+  private readonly aimShade = { value: 0 };
   private readonly toView = new THREE.Matrix4();
   private readonly worldMuzzle = new THREE.Vector3();
   private readonly worldPort = new THREE.Vector3();
@@ -160,7 +175,7 @@ export class RifleView {
       mesh.frustumCulled = false;
       const material = mesh.material as THREE.MeshStandardMaterial;
       material.envMapIntensity = 1.35;
-      useViewLens(material, this.lens);
+      useViewLens(material, this.lens, this.aimShade);
     });
     this.gun.add(model);
 
@@ -222,6 +237,7 @@ export class RifleView {
     const top = camera.near * Math.tan(THREE.MathUtils.degToRad(VIEW_FOV) / 2);
     const right = top * camera.aspect;
     this.lens.value.makePerspective(-right, right, top, -top, camera.near, camera.far, camera.coordinateSystem);
+    this.aimShade.value = aim * (1 - Math.min(1, reload * 8));
 
     // Recoil eases back to rest.
     this.kickBack = damp(this.kickBack, 0, RIFLE.kickRecovery, dt);

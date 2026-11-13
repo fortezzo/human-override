@@ -95,11 +95,24 @@ export class Input {
     on(window as unknown as Document, 'blur' as keyof DocumentEventMap, () => this.held.clear());
   }
 
-  /** Ask the browser to capture the mouse. Must be called from a click. */
-  lock(): void {
-    const request = this.element.requestPointerLock() as unknown;
-    // Newer browsers return a promise that rejects if the user declines.
-    if (request instanceof Promise) request.catch(() => {});
+  /**
+   * Ask the browser to capture the mouse. Must be called from a click.
+   * Browsers refuse to re-capture for about a second after the player
+   * presses Esc, so a refused request is retried a few times.
+   */
+  lock(attempt = 0): void {
+    if (this.locked) return;
+    const retry = () => {
+      if (!this.locked && attempt < 8) window.setTimeout(() => this.lock(attempt + 1), 250);
+    };
+    try {
+      const request = this.element.requestPointerLock() as unknown;
+      // Newer browsers return a promise that rejects when refused.
+      if (request instanceof Promise) request.catch(retry);
+      else window.setTimeout(retry, 250);
+    } catch {
+      retry();
+    }
   }
 
   unlock(): void {

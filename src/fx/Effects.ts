@@ -10,7 +10,7 @@ import type { BulletDecals } from './BulletDecals';
 import type { Particles } from './Particles';
 
 // Colors are linear and deliberately far above 1 where something should glow.
-const SPARK = { r: 9, g: 4.6, b: 1.3 };
+const SPARK = { r: 6.5, g: 2.7, b: 0.55 };
 const SPARK_HOT = { r: 10, g: 8.5, b: 5.5 };
 const ARC = { r: 3.5, g: 6.5, b: 11 };
 
@@ -111,10 +111,9 @@ export class Effects {
   robotDestroyed(centre: THREE.Vector3): void {
     const p = this.particles;
     const up = new THREE.Vector3(0, 1, 0);
-    p.emitGlow({ x: centre.x, y: centre.y, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.1, size: 1.5, sizeEnd: 0.3, ...SPARK_HOT, alpha: 0.85 });
-    p.emitGlow({ x: centre.x, y: centre.y, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.22, size: 0.5, sizeEnd: 1.4, ...ARC, alpha: 0.35 });
-    this.sparks(centre, up, p.scaled(34), 1.6, 2.5, 9, SPARK);
-    this.sparks(centre, up, p.scaled(12), 1.6, 1, 5, ARC);
+    p.emitGlow({ x: centre.x, y: centre.y, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.075, size: 1.0, sizeEnd: 0.2, ...SPARK_HOT, alpha: 0.7 });
+    this.sparks(centre, up, p.scaled(46), 1.6, 2.5, 10, SPARK, 1.3);
+    this.sparks(centre, up, p.scaled(14), 1.6, 1, 5, ARC, 1.1);
     for (let i = 0; i < p.scaled(9); i++) {
       scatter(up, 1.3, _dir);
       const speed = rand(0.4, 1.8);
@@ -211,7 +210,7 @@ export class Effects {
     });
   }
 
-  private sparks(point: THREE.Vector3, normal: THREE.Vector3, count: number, spread: number, minSpeed: number, maxSpeed: number, color: { r: number; g: number; b: number }): void {
+  private sparks(point: THREE.Vector3, normal: THREE.Vector3, count: number, spread: number, minSpeed: number, maxSpeed: number, color: { r: number; g: number; b: number }, scale = 1): void {
     for (let i = 0; i < count; i++) {
       scatter(normal, spread, _dir);
       const speed = rand(minSpeed, maxSpeed);
@@ -222,8 +221,8 @@ export class Effects {
         vx: _dir.x * speed,
         vy: _dir.y * speed,
         vz: _dir.z * speed,
-        life: rand(0.22, 0.6),
-        size: rand(0.008, 0.016),
+        life: rand(0.22, 0.6) * scale,
+        size: rand(0.008, 0.014) * scale,
         ...color,
         alpha: 1,
         gravity: FX.sparkGravity,

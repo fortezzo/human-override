@@ -91,7 +91,7 @@ export const ROBOT = {
   staggerTime: 0.75,
   flinchTime: 0.22,
   /** Stage 0 only: how long after a kill the next robot walks in. */
-  respawnDelay: 3.2,
+  respawnDelay: 2.0,
   separation: 0.85,
   eyeColor: 0xff3a1a,
 };
@@ -234,6 +234,11 @@ export const GOVERNOR = {
   window: 3.0,
   /** Ignore the first seconds after a change while shaders compile. */
   settle: 4.0,
+  /**
+   * If even the lowest preset is too slow, drop the rendering resolution
+   * through these steps. The game plays the same; the picture gets softer.
+   */
+  resolutionSteps: [0.85, 0.7, 0.58, 0.5],
 };
 
 /** The overall look. Changing these re-grades the whole game. */
@@ -243,8 +248,8 @@ export const LOOKDEV = {
   fogDensity: 0.034,
   ambientSky: 0x3a4d66,
   ambientGround: 0x0e0b08,
-  ambientIntensity: 0.6,
-  environmentIntensity: 1.0,
+  ambientIntensity: 0.38,
+  environmentIntensity: 0.9,
   bloomThreshold: 0.92,
   bloomIntensity: 0.75,
   bloomRadius: 0.72,

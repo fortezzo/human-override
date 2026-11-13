@@ -1,10 +1,14 @@
-// Shared helper for the screenshot, viewer and end-to-end scripts: launches
-// the Playwright test browser with the real GPU enabled so the game renders
-// the same way it does for a player.
+// Shared helper for the screenshot, performance and end-to-end scripts:
+// launches the Playwright test browser with the real GPU enabled, so the
+// game renders the same way it does for a player.
+//
+// The test browser lives inside node_modules (not in a system folder). To
+// install it:  PLAYWRIGHT_BROWSERS_PATH=0 npx playwright install chromium
 
-import { chromium } from 'playwright';
-
+// Playwright decides where to look for its browser when it is first loaded,
+// so this must be set before the import below.
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= '0';
+const { chromium } = await import('playwright');
 
 export async function launch({ width = 1600, height = 900, headless = true } = {}) {
   const browser = await chromium.launch({

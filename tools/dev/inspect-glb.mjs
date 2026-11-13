@@ -2,7 +2,7 @@
 // textures, skeleton and animation clips. Used while building the asset
 // pipeline to see what a downloaded model actually contains.
 //
-//   node tools/inspect-glb.mjs path/to/a.glb [path/to/b.glb ...]
+//   node tools/dev/inspect-glb.mjs path/to/a.glb [path/to/b.glb ...]
 
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';

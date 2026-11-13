@@ -48,7 +48,7 @@ export const COLUMN_SIZE = 0.7;
 export const PLAYER_START = { x: 0, z: 4.6, yaw: 0 } as const;
 
 /** Where robots appear, out in the fog beyond the vestibule. */
-export const ROBOT_SPAWN = { x: 0, z: -17.5 } as const;
+export const ROBOT_SPAWN = { x: 0, z: -14.8 } as const;
 
 /** Area robots are allowed to walk in (used to size the navigation grid). */
 export const NAV_BOUNDS = { x0: -10, x1: 10, z0: -20, z1: 8 } as const;

@@ -58,7 +58,14 @@ async function boot(): Promise<void> {
     game.audio.play('uiClick');
   };
   screens.onHover = () => game.audio.play('uiHover');
-  settings.onChange((s) => hud.showFps(s.showFps));
+  let wasMuted = settings.value.muted;
+  settings.onChange((s) => {
+    hud.showFps(s.showFps);
+    if (s.muted !== wasMuted) {
+      wasMuted = s.muted;
+      hud.showToast(s.muted ? 'Sound off (press M to turn it back on)' : 'Sound on', 2.5);
+    }
+  });
   hud.showFps(settings.value.showFps);
 
   await game.load((fraction) => screens.setProgress(fraction));

@@ -20,6 +20,14 @@ const MOON = 0x8fb2ff;
 const RED = 0xff2a12;
 const AMBER = 0xff9a2e;
 
+/**
+ * The parts of a lamp model that should light up: anything with a glow map,
+ * plus glass covers and bulbs. Brackets, arms and housings stay dark.
+ */
+function glowParts(materials: THREE.MeshStandardMaterial[]): THREE.MeshStandardMaterial[] {
+  return materials.filter((m) => m.emissiveMap || /glass|light$/i.test(m.name));
+}
+
 export interface LobbyLighting {
   lights: LightDef[];
   /** Haze effects, each tied to the light whose flicker it follows. */
@@ -39,7 +47,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     name: 'yard',
     kind: 'spot',
     color: COLD,
-    intensity: 1900,
+    intensity: 1350,
     position: yardLamp,
     target: [0, 0.9, -4],
     angle: 0.2,
@@ -65,7 +73,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     name: 'moon',
     kind: 'spot',
     color: MOON,
-    intensity: 1500,
+    intensity: 2600,
     position: moonFrom,
     target: moonTo,
     angle: 0.2,
@@ -86,15 +94,15 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       name,
       kind: 'spot',
       color: WARM,
-      intensity: i === 0 ? 150 : 125,
+      intensity: i === 0 ? 190 : 165,
       position: [0, lampY, pendant.z],
       target: [0, 0, pendant.z],
-      angle: 1.02,
-      penumbra: 0.75,
+      angle: 0.9,
+      penumbra: 0.85,
       distance: 10,
       shadow: i === 1 ? 2 : i === 0 ? 4 : undefined,
       flicker: faulty ? 'faulty' : undefined,
-      glow: { materials: pendant.materials, color: 0xffd9a8, intensity: 5.5 },
+      glow: { materials: glowParts(pendant.materials), color: 0xffd9a8, intensity: 5.5 },
     });
     const cone = createConeShaft([0, lampY - 0.05, pendant.z], [0, 0.1, pendant.z], 0.22, 2.5, WARM, 0.085);
     haze.push({ effect: cone, follows: faulty ? name : undefined });
@@ -113,7 +121,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     penumbra: 0.7,
     distance: 15,
     extra: true,
-    glow: { materials: work.flood.materials, color: 0xdfe8ff, intensity: 7 },
+    glow: { materials: glowParts(work.flood.materials), color: 0xdfe8ff, intensity: 7 },
   });
 
   // ---- Emergency lamps: red at the breach, amber over the blast door.
@@ -156,23 +164,24 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     position: work.deskLamp.at,
     distance: 4.5,
     extra: true,
-    glow: { materials: work.deskLamp.materials, color: 0xffc890, intensity: 4 },
+    glow: { materials: glowParts(work.deskLamp.materials), color: 0xffc890, intensity: 4 },
   });
   lights.push({ name: 'monitors', kind: 'point', color: 0xff7a5c, intensity: 1.6, position: [x1 - 1.0, 1.75, -4.8], distance: 4, extra: true });
 
-  // ---- Strip lights: one alive over the desk, the others dead.
+  // ---- Strip lights: the desk one stutters, the west one is dim but
+  // steady (it keeps that side readable), the third is dead.
   fixtures.strips.forEach((strip, i) => {
-    const alive = i === 0;
+    const level = [14, 9, 0][i] ?? 0;
     lights.push({
       name: `strip${i}`,
       kind: 'point',
       color: 0xd6e4ff,
-      intensity: alive ? 14 : 0,
+      intensity: level,
       position: strip.at,
-      distance: alive ? 7.5 : 0.1,
-      extra: true,
-      flicker: alive ? 'faulty' : undefined,
-      glow: { materials: strip.materials, color: 0xdce8ff, intensity: alive ? 5 : 0 },
+      distance: level > 0 ? 8.5 : 0.1,
+      extra: i !== 1,
+      flicker: i === 0 ? 'faulty' : undefined,
+      glow: { materials: glowParts(strip.materials), color: 0xdce8ff, intensity: level > 0 ? 3 + level * 0.15 : 0 },
     });
   });
 

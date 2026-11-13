@@ -1,7 +1,7 @@
 // Dev-only model viewer. Not part of the game build.
 // Used by tools/dev/view.mjs to photograph converted assets from set angles.
 //
-//   /tools/viewer/index.html?m=/assets/models/robot.glb&az=30&el=10&anim=walk&t=0.5
+//   /tools/dev/viewer/index.html?m=/assets/models/robot.glb&az=30&el=10&anim=walk&t=0.5
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';

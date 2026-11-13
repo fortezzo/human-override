@@ -70,10 +70,20 @@ for (let i = 0; i < rgb.length; i += 3 * 7) luminances.push(0.2126 * rgb[i] + 0.
 luminances.sort((a, b) => a - b);
 const exposure = 1.1 / Math.max(luminances[Math.floor(luminances.length * 0.98)], 1e-6);
 
+// Below the horizon the photo shows a floodlit lawn. The facility stands on
+// dark ground, so everything under the horizon fades to the fog color.
+const HAZE = [0.045, 0.06, 0.08];
 const pixels = Buffer.alloc(width * height * 3);
-for (let i = 0; i < rgb.length; i++) {
-  const v = 1 - Math.exp(-rgb[i] * exposure); // soft roll-off for bright lights
-  pixels[i] = Math.round(255 * Math.pow(v, 1 / 2.2));
+for (let y = 0; y < height; y++) {
+  const below = Math.min(1, Math.max(0, (y / height - 0.47) / 0.05));
+  for (let x = 0; x < width; x++) {
+    for (let k = 0; k < 3; k++) {
+      const i = (y * width + x) * 3 + k;
+      const sky = 1 - Math.exp(-rgb[i] * exposure); // soft roll-off for bright lights
+      const v = sky + (HAZE[k] - sky) * below;
+      pixels[i] = Math.round(255 * Math.pow(v, 1 / 2.2));
+    }
+  }
 }
 
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

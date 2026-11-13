@@ -59,7 +59,9 @@ void main() {
     // Use on-screen speed, so a streak flying straight away from the camera
     // foreshortens to a dot instead of smearing across the view.
     float len = max(iShape.x, speed * iShape.z);
-    centre.xy += dir * position.y * len + vec2(-dir.y, dir.x) * position.x * iShape.x;
+    // (dir.y, -dir.x) keeps the quad facing the camera; the opposite
+    // perpendicular would mirror it and it would be culled as a back face.
+    centre.xy += dir * position.y * len + vec2(dir.y, -dir.x) * position.x * iShape.x;
   } else {
     float c = cos(iShape.y);
     float s = sin(iShape.y);
@@ -189,6 +191,7 @@ class Layer {
       transparent: true,
       depthWrite: false,
       blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      side: THREE.DoubleSide,
       fog: false,
     });
     this.mesh = new THREE.Mesh(this.geometry, material);
