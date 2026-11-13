@@ -14,7 +14,7 @@
 
 import * as THREE from 'three';
 import type { Rig } from './Rig';
-import type { Vec } from './shapes';
+import type { Vec } from '../../../render/shapes';
 
 /** A surface finish. Colors are the actual base color, in linear light. */
 export interface Paint {

@@ -63,6 +63,53 @@ function readObj(file) {
 }
 
 /**
+ * Removes whole pieces of a model. A downloaded model is usually made of
+ * many separate shells (the body, each screw, each lever ...); this finds
+ * them by following shared corners, and drops every shell whose bounding
+ * box passes `unwanted(min, max)`. Returns how many triangles went.
+ */
+function removeShells(mesh, unwanted) {
+  const { positions, indices } = mesh;
+  // Corners at the same place count as one, even where the texture splits them.
+  const welded = new Map();
+  const point = new Uint32Array(positions.length / 3);
+  for (let i = 0; i < point.length; i++) {
+    const key = `${positions[i * 3].toFixed(5)},${positions[i * 3 + 1].toFixed(5)},${positions[i * 3 + 2].toFixed(5)}`;
+    let id = welded.get(key);
+    if (id === undefined) welded.set(key, (id = welded.size));
+    point[i] = id;
+  }
+  const parent = Uint32Array.from({ length: welded.size }, (_, i) => i);
+  const find = (n) => {
+    while (parent[n] !== n) n = parent[n] = parent[parent[n]];
+    return n;
+  };
+  for (let i = 0; i < indices.length; i += 3) {
+    const root = find(point[indices[i]]);
+    parent[find(point[indices[i + 1]])] = root;
+    parent[find(point[indices[i + 2]])] = root;
+  }
+  const boxes = new Map();
+  for (const index of indices) {
+    const root = find(point[index]);
+    let box = boxes.get(root);
+    if (!box) boxes.set(root, (box = { min: [Infinity, Infinity, Infinity], max: [-Infinity, -Infinity, -Infinity] }));
+    for (let k = 0; k < 3; k++) {
+      box.min[k] = Math.min(box.min[k], positions[index * 3 + k]);
+      box.max[k] = Math.max(box.max[k], positions[index * 3 + k]);
+    }
+  }
+  const kept = [];
+  for (let i = 0; i < indices.length; i += 3) {
+    const box = boxes.get(find(point[indices[i]]));
+    if (!unwanted(box.min, box.max)) kept.push(indices[i], indices[i + 1], indices[i + 2]);
+  }
+  const removed = (indices.length - kept.length) / 3;
+  mesh.indices = kept;
+  return removed;
+}
+
+/**
  * Re-centre, scale and orient a gun so that it is `length` metres long,
  * centred on the origin, pointing down -Z with +Y up.
  * `forward` names the source axis that the muzzle points along.
@@ -102,6 +149,11 @@ async function buildRifle() {
   }
   const mesh = readObj(path.join(src, 'source/rar/Rifle20k.OBJ'));
   normalise(mesh, { length: 0.92, forward: '+z' });
+  // The model's own sight is a small folding ring that sits too low to aim
+  // through comfortably. Its eight little pieces are taken off here, leaving
+  // the block they stood on; the game mounts its own raised reflex sight on
+  // that block (see src/entities/weapon/ReflexSight.ts).
+  const removed = removeShells(mesh, (min, max) => min[1] > 0.15 && min[2] > 0.03 && max[2] < 0.09 && min[0] > -0.02 && max[0] < 0.02);
 
   const tex = path.join(src, 'textures');
   const SIZE = 2048;
@@ -159,7 +211,7 @@ async function buildRifle() {
   await doc.transform(weld(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = path.join(OUT_DIR, 'rifle.glb');
   await io.write(out, doc);
-  console.log(`  rifle: ${mesh.indices.length / 3} tris, ${(fs.statSync(out).size / 1024).toFixed(0)} KB`);
+  console.log(`  rifle: ${mesh.indices.length / 3} tris (${removed} removed with the old sight), ${(fs.statSync(out).size / 1024).toFixed(0)} KB`);
   return true;
 }
 

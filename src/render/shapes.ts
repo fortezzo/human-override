@@ -1,10 +1,10 @@
-// Hard-surface shapes for building robots.
+// Hard-surface shapes: the building blocks for machinery made in code.
 //
-// Everything a robot is made of comes from a handful of generators here:
-// lofted hulls with chamfered edges (armor plates, housings, limbs), tubes
-// and ribbed tubes (joints, pistons, bellows), balls, and cables. Each
-// returns plain triangles in the robot's rest-pose space; the builder adds
-// normals, texture coordinates, paint and bone bindings afterwards.
+// The robots and the rifle's sight are assembled from a handful of
+// generators here: lofted hulls with chamfered edges (armor plates,
+// housings, limbs), tubes and ribbed tubes (joints, pistons, bellows),
+// balls, and cables. Each returns plain triangles; whoever uses them adds
+// normals, texture coordinates and materials afterwards.
 
 import * as THREE from 'three';
 

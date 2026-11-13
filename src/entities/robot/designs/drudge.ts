@@ -15,7 +15,7 @@ import * as THREE from 'three';
 import { PAINT, type RobotDesign } from '../kit/design';
 import type { PartOptions, RobotBuilder } from '../kit/RobotBuilder';
 import type { Rig } from '../kit/Rig';
-import { ball, beam, box, cable, hull, rect, ribbed, row, tube, vec, type Vec } from '../kit/shapes';
+import { ball, beam, box, cable, hull, rect, ribbed, row, tube, vec, type Vec } from '../../../render/shapes';
 
 const UP = vec(0, 1, 0);
 const FRONT = vec(0, 0, 1);

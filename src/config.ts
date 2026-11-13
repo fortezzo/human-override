@@ -102,8 +102,11 @@ export const FX = {
   maxGibs: 72,
   gibLifetime: 9,
   sparkGravity: 9.8,
-  muzzleFlashTime: 0.055,
+  /** How long the flash at the barrel is drawn, in seconds (about two frames). */
+  muzzleFlashTime: 0.034,
   muzzleLightIntensity: 22,
+  /** How fast the flash's light on the room dies away (higher is shorter). */
+  muzzleLightFade: 46,
 };
 
 export const AUDIO = {

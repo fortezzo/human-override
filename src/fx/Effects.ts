@@ -98,11 +98,13 @@ export class Effects {
       vx: 0,
       vy: 0,
       vz: 0,
-      life: 0.07,
-      size: weakPoint ? 0.42 : 0.26,
-      sizeEnd: 0.06,
+      // Small and brief: a hard glint at the point of impact, not a ball
+      // of light that hides the target being shot at.
+      life: 0.045,
+      size: weakPoint ? 0.2 : 0.12,
+      sizeEnd: 0.03,
       ...(weakPoint ? ARC : SPARK_HOT),
-      alpha: 0.9,
+      alpha: 0.75,
     });
     this.puff(point, _dir, 1, 0.6, 0.25, 0.2, 0.2, 0.2);
   }
