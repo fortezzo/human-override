@@ -3,6 +3,7 @@
 // turns, plays animations, glows, and reports what a bullet hit.
 
 import * as THREE from 'three';
+import { addsLightOnly } from '../../render/glow';
 import { ROBOT } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
@@ -121,6 +122,7 @@ export class Robot {
     this.glow.position.copy(model.glow.at);
     this.glow.scale.set(model.glow.size.x, model.glow.size.y, 1);
     this.glow.renderOrder = 9;
+    addsLightOnly(this.glow);
     this.bones.get('Head')!.add(this.glow);
     this.setEyes(1);
   }

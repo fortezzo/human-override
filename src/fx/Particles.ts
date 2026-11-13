@@ -7,6 +7,7 @@
 // which is plenty fast at these counts and keeps the code easy to follow.
 
 import * as THREE from 'three';
+import { addsLightOnly } from '../render/glow';
 
 export interface ParticleSpec {
   x: number;
@@ -195,6 +196,7 @@ class Layer {
       fog: false,
     });
     this.mesh = new THREE.Mesh(this.geometry, material);
+    if (additive) addsLightOnly(this.mesh);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = additive ? 8 : 7;
   }

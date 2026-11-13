@@ -63,7 +63,10 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
   haze.push({ effect: createFogCard([0, 1.7, -10.3], [0, 0, 1], 5.6, 3.6, COLD, 0.16, [1, 1.1]) });
   haze.push({ effect: createFogCard([0, 1.6, z0 - 0.9], [0, 0, 1], 4.4, 3.4, COLD, 0.1, [1.05, 1.1]) });
   haze.push({ effect: createFogCard([yardLamp[0], yardLamp[1], yardLamp[2] + 0.4], [0, 0, 1], 4.5, 4.5, COLD, 1.1, [1, 1]) });
-  haze.push({ effect: createConeShaft([0, 2.4, z0 - 0.6], [0, 0.4, z0 + 5.5], 1.5, 2.6, COLD, 0.03) });
+  // The shaft of that light inside the room. It starts just inside the
+  // doorway and small enough to pass under the half-open shutter, so it
+  // never cuts through the shutter or the door frame.
+  haze.push({ effect: createConeShaft([0, 0.95, z0 + 0.35], [0, 0.35, z0 + 5.8], 0.75, 2.2, COLD, 0.04) });
 
   // ---- Moonlight through the open west window.
   const open = WINDOWS.find((w) => w.open)!;
@@ -104,7 +107,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       flicker: faulty ? 'faulty' : undefined,
       glow: { materials: glowParts(pendant.materials), color: 0xffd9a8, intensity: 5.5 },
     });
-    const cone = createConeShaft([0, lampY - 0.05, pendant.z], [0, 0.1, pendant.z], 0.22, 2.5, WARM, 0.085);
+    const cone = createConeShaft([0, lampY - 0.05, pendant.z], [0, 0.1, pendant.z], 0.22, 2.5, WARM, 0.12);
     haze.push({ effect: cone, follows: faulty ? name : undefined });
     dustBeams.push({ position: [0, lampY, pendant.z], target: [0, 0, pendant.z], angle: 0.72, color: WARM, strength: 0.5 });
   });

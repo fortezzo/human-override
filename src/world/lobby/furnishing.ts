@@ -70,13 +70,16 @@ function buildDefences(b: LevelBuilder): WorkLights['flood'] {
   const flood = b.prop('flood_lights', { part: 'standing', at: floodAt, rotY: yaw, collide: false, unique: true });
   b.blocker([floodAt[0] - 0.22, 0, floodAt[2] - 0.22], [floodAt[0] + 0.22, 1.8, floodAt[2] + 0.22]);
 
-  // Ammunition on a crate by the player's starting spot.
+  // Ammunition on a crate by the player's starting spot. The two cans on
+  // top sit well inside the lid, one along the crate and one across it.
   b.prop('wooden_military_crate', { at: [1.75, 0, 3.2], rotY: 0.45, kind: 'wood' });
-  b.prop('ammo_box', { at: [1.55, 0.46, 3.1], rotY: 1.2, collide: false });
-  b.prop('ammo_box', { at: [1.98, 0.46, 3.32], rotY: 0.2, collide: false });
-  b.prop('ammo_box', { at: [2.45, 0, 2.6], rotY: -0.5, collide: false });
-  b.prop('medical_box', { at: [1.3, 0, 3.95], rotY: -0.3, collide: false });
-  b.prop('metal_tool_chest', { at: [3.05, 0, 3.75], rotY: -0.6 });
+  b.prop('ammo_box', { at: [1.47, 0.46, 3.27], rotY: 1.9, collide: false });
+  b.prop('ammo_box', { at: [1.97, 0.46, 3.15], rotY: 0.6, collide: false });
+  b.prop('ammo_box', { at: [2.5, 0, 2.55], rotY: -0.5, collide: false });
+  b.prop('medical_box', { at: [1.25, 0, 4.05], rotY: -0.3, collide: false });
+  // The tool chest stands open against the wall by the blast door, lid
+  // toward the wall, clear of the crate so the two never read as one heap.
+  b.prop('metal_tool_chest', { at: [3.45, 0, ROOM.z1 - 0.32], rotY: Math.PI + 0.06 });
   b.prop('WetFloorSign_01', { at: [3.3, 0, -0.9], rotY: 0.5, collide: false, kind: 'soft' });
 
   return { at: [floodAt[0] + Math.sin(yaw) * 0.15, 1.62, floodAt[2] + Math.cos(yaw) * 0.15], aim, materials: flood };

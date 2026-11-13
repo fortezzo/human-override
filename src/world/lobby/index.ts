@@ -25,6 +25,8 @@ export interface Lobby {
   haze: LobbyLighting['haze'];
   dustBeams: DustBeam[];
   screens: ScreenBank;
+  /** The painted signs, kept so they can be inspected as one picture. */
+  signs: SignAtlas;
 }
 
 export function buildLobby(assets: Assets, materials: MaterialLibrary): Lobby {
@@ -44,5 +46,5 @@ export function buildLobby(assets: Assets, materials: MaterialLibrary): Lobby {
   for (const { effect } of lighting.haze) builder.addObject(effect.mesh);
 
   const built = builder.build();
-  return { ...built, lights: lighting.lights, haze: lighting.haze, dustBeams: lighting.dustBeams, screens };
+  return { ...built, lights: lighting.lights, haze: lighting.haze, dustBeams: lighting.dustBeams, screens, signs };
 }

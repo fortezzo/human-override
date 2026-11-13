@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { FX } from '../../config';
 import { rand } from '../../core/math';
 import { settings } from '../../core/settings';
+import { addsLightOnly } from '../../render/glow';
 
 /** The star seen from behind the gun: thin, sharp spikes of uneven length. */
 function starTexture(): THREE.Texture {
@@ -118,7 +119,7 @@ export class MuzzleFlash {
       tongue.rotation.set(roll, Math.PI / 2, 0, 'ZYX');
       this.tongues.add(tongue);
     }
-    for (const mesh of [this.star, ...this.tongues.children]) (mesh as THREE.Mesh).frustumCulled = false;
+    for (const mesh of [this.star, ...this.tongues.children]) addsLightOnly(mesh).frustumCulled = false;
     this.group.add(this.star, this.tongues);
     this.group.visible = false;
   }

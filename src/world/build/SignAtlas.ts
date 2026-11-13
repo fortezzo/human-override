@@ -91,7 +91,8 @@ export class SignAtlas {
       g.lineWidth = Math.max(4, size * 0.07);
       g.strokeRect(x + g.lineWidth, y + g.lineWidth, width - g.lineWidth * 2, height - g.lineWidth * 2);
     }
-    this.wear(x, y, width, height, options.wear ?? 0.35);
+    // The stems of this bold face are about an eighth of the letter size.
+    this.wear(x, y, width, height, options.wear ?? 0.35, size * (options.font === 'mono' ? 0.08 : 0.125));
     g.restore();
     return this.finish(x, y, width, height);
   }
@@ -120,7 +121,7 @@ export class SignAtlas {
     g.beginPath();
     g.rect(x, y, size, size);
     g.clip();
-    this.wear(x, y, size, size, wear);
+    this.wear(x, y, size, size, wear, s * 0.6);
     g.restore();
     return this.finish(x, y, size, size);
   }
@@ -146,7 +147,7 @@ export class SignAtlas {
       g.closePath();
       g.fill();
     }
-    this.wear(x, y, width, height, wear);
+    this.wear(x, y, width, height, wear, step);
     g.restore();
     return this.finish(x, y, width, height);
   }
@@ -161,7 +162,7 @@ export class SignAtlas {
     g.clip();
     g.fillStyle = color;
     g.fillRect(x, y, width, height);
-    this.wear(x, y, width, height, wear);
+    this.wear(x, y, width, height, wear, height);
     g.restore();
     return this.finish(x, y, width, height);
   }
@@ -178,7 +179,8 @@ export class SignAtlas {
     g.beginPath();
     g.rect(x, y, size, size);
     g.clip();
-    this.wear(x, y, size, size, wear);
+    // The almond outline is the thinnest line in the mark.
+    this.wear(x, y, size, size, wear, size * 0.46 * 0.09);
     g.restore();
     return this.finish(x, y, size, size);
   }
@@ -213,31 +215,44 @@ export class SignAtlas {
     return spot;
   }
 
-  /** Erase specks, chips and scratches from the paint. */
-  private wear(x: number, y: number, width: number, height: number, amount: number): void {
+  /**
+   * Erase specks, chips and scratches from the paint.
+   *
+   * Every mark is sized against `stroke`, the thickness in pixels of the
+   * thinnest painted line in the sign (the stem of a letter, the ring of the
+   * eye). A chip can take a bite out of a line but never cut it through, so
+   * however worn a sign is, its lettering still reads correctly.
+   */
+  private wear(x: number, y: number, width: number, height: number, amount: number, stroke: number): void {
     if (amount <= 0) return;
     const g = this.g;
     const r = this.random;
     g.globalCompositeOperation = 'destination-out';
     const area = width * height;
     // Fine speckle.
+    const speck = Math.min(3.5, stroke * 0.3);
     for (let i = 0; i < area * 0.012 * amount; i++) {
       g.globalAlpha = 0.25 + r() * 0.6;
-      const s = 1 + r() * 3.5;
+      const s = 1 + r() * speck;
       g.fillRect(x + r() * width, y + r() * height, s, s);
     }
-    // Larger chips.
-    for (let i = 0; i < area * 0.00035 * amount; i++) {
+    // Chips: at most about two thirds of a line's thickness across. There
+    // are more of them on fine lettering, so the same share of paint is lost.
+    const chipX = Math.min(19, stroke * 0.34);
+    const chipY = Math.min(11, stroke * 0.22);
+    const chips = Math.min(4000, (0.075 * amount * area) / (Math.PI * chipX * 0.6 * chipY * 0.6));
+    for (let i = 0; i < chips; i++) {
       g.globalAlpha = 0.5 + r() * 0.5;
       g.beginPath();
-      g.ellipse(x + r() * width, y + r() * height, 3 + r() * 16, 2 + r() * 9, r() * Math.PI, 0, Math.PI * 2);
+      g.ellipse(x + r() * width, y + r() * height, chipX * (0.2 + r() * 0.8), chipY * (0.2 + r() * 0.8), r() * Math.PI, 0, Math.PI * 2);
       g.fill();
     }
-    // Scuffs dragged across the paint.
+    // Scuffs dragged across the paint: long, but thin next to the lettering.
     g.lineCap = 'round';
+    const scuff = Math.min(5, stroke * 0.22);
     for (let i = 0; i < 6 + area * 0.00004 * amount; i++) {
       g.globalAlpha = 0.2 + r() * 0.5 * amount;
-      g.lineWidth = 1 + r() * 5;
+      g.lineWidth = 1 + r() * scuff;
       const sx = x + r() * width;
       const sy = y + r() * height;
       const angle = r() * Math.PI;

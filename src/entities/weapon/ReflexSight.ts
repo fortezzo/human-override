@@ -14,6 +14,7 @@
 // of the view) and the window only decides how much of it can be seen.
 
 import * as THREE from 'three';
+import { addsLightOnly } from '../../render/glow';
 import { box, hull, merge, rect, row, tube, vec } from '../../render/shapes';
 
 /** Height of the line of sight above the rifle model's origin, in metres. */
@@ -186,6 +187,7 @@ export class ReflexSight {
     pane.position.set(0, SIGHT_HEIGHT, WINDOW_Z);
     pane.frustumCulled = false;
     pane.renderOrder = 2;
+    addsLightOnly(pane);
 
     this.group.add(body, pane);
   }

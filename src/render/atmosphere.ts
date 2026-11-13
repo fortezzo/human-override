@@ -6,6 +6,7 @@
 // specks that only light up while they drift through a beam.
 
 import * as THREE from 'three';
+import { addsLightOnly } from './glow';
 
 type Vec3 = THREE.Vector3Tuple;
 
@@ -44,13 +45,16 @@ float noise(vec3 p) {
 }
 
 void main() {
-  // Fade the cone's silhouette edges so it reads as a volume, not a shell.
+  // Fade the cone toward its silhouette, so it reads as a soft column of
+  // haze, thick in the middle and gone by the edge, not as a shell.
   float facing = abs(dot(normalize(vNormalView), normalize(-vPositionView)));
-  float body = pow(facing, 2.2);
-  // Brightest near the lamp, dying away toward the floor.
-  float along = smoothstep(1.0, 0.86, vAlong) * pow(vAlong, 1.6);
-  // Slow drifting unevenness, as if the haze were moving.
-  float drift = 0.72 + 0.28 * noise(vWorld * 1.3 + vec3(0.0, -uTime * 0.12, uTime * 0.05));
+  // Slow drifting unevenness, as if the haze were moving. It also eats
+  // into the edges, so they wander instead of running dead straight.
+  float drift = noise(vWorld * 1.3 + vec3(0.0, -uTime * 0.12, uTime * 0.05));
+  float body = pow(clamp(facing - (1.0 - drift) * 0.12, 0.0, 1.0), 3.0);
+  // Brightest below the lamp, dying away toward the floor.
+  float along = smoothstep(1.0, 0.84, vAlong) * pow(vAlong, 1.5);
+  drift = 0.72 + 0.28 * drift;
   // Do not flash in the player's face when they walk through it.
   float near = smoothstep(0.35, 1.6, -vPositionView.z);
   gl_FragColor = vec4(uColor * uOpacity * uLevel * body * along * drift * near, 1.0);
@@ -87,7 +91,7 @@ export function createConeShaft(from: Vec3, to: Vec3, startRadius: number, endRa
     side: THREE.DoubleSide,
     fog: false,
   });
-  const mesh = new THREE.Mesh(geometry, material);
+  const mesh = addsLightOnly(new THREE.Mesh(geometry, material));
   mesh.matrixAutoUpdate = false;
   mesh.renderOrder = 5;
   return { mesh, setLevel: (level) => (material.uniforms.uLevel!.value = level) };
@@ -162,7 +166,7 @@ export function createFogCard(centre: Vec3, normal: Vec3, width: number, height:
     side: THREE.DoubleSide,
     fog: false,
   });
-  const mesh = new THREE.Mesh(geometry, material);
+  const mesh = addsLightOnly(new THREE.Mesh(geometry, material));
   mesh.matrixAutoUpdate = false;
   mesh.renderOrder = 4;
   return { mesh, setLevel: (level) => (material.uniforms.uLevel!.value = level) };
@@ -276,7 +280,7 @@ export class DustMotes {
       depthWrite: false,
       fog: false,
     });
-    this.points = new THREE.Points(new THREE.BufferGeometry(), this.material);
+    this.points = addsLightOnly(new THREE.Points(new THREE.BufferGeometry(), this.material));
     this.points.frustumCulled = false;
     this.points.renderOrder = 6;
     this.min = min;
