@@ -17,7 +17,7 @@ Used under the Adobe Mixamo terms. The game ships only a converted, simplified a
 
 | Asset | Author | License |
 | --- | --- | --- |
-| [Sci-Fi Rifle](https://sketchfab.com/3d-models/sci-fi-rifle-648a72a0046a4d059cd850f32f30f4ce) — Re-centred, scaled, and its textures re-packed and compressed. | ul1tka | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| [Sci-Fi Rifle](https://sketchfab.com/3d-models/sci-fi-rifle-a78881c37ceb4303814279c0807f2f0f) — Re-centred, scaled, and its textures re-packed and compressed. | Slayver | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Props and fixtures
 

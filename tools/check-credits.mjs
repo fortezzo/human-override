@@ -37,6 +37,20 @@ for (const file of models) {
 }
 for (const gun of shippedGuns) needCredit(gun.page, `weapon ${gun.title}`);
 
+// The project owner keeps the gun pages in assets-source/guns/links.txt.
+// That folder is not in the repository, so this only runs where it exists.
+const ownerLinks = 'assets-source/guns/links.txt';
+if (fs.existsSync(ownerLinks)) {
+  const links = fs.readFileSync(ownerLinks, 'utf8').match(/https?:\/\/\S+/g) ?? [];
+  const pages = new Set(SKETCHFAB.map((g) => g.page));
+  for (const link of links) {
+    if (!pages.has(link)) problems.push(`links.txt has a page the manifest does not credit: ${link}`);
+  }
+  for (const gun of SKETCHFAB) {
+    if (!links.includes(gun.page)) problems.push(`The manifest credits a page that is not in links.txt: ${gun.page}`);
+  }
+}
+
 // ---- Surface textures, decals and sky
 const textureIds = new Set([...POLYHAVEN_TEXTURES.map((t) => t.id), ...AMBIENTCG.map((t) => t.id)]);
 for (const file of list('public/assets/textures')) {

@@ -26,7 +26,7 @@ export const CREDITS: CreditGroup[] = [
     "items": [
       {
         "title": "Sci-Fi Rifle",
-        "author": "ul1tka",
+        "author": "Slayver",
         "license": "CC-BY 4.0"
       }
     ]
