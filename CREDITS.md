@@ -66,7 +66,7 @@ Used under the Adobe Mixamo terms. The game ships only a converted, simplified a
 | Asset | Author | License |
 | --- | --- | --- |
 | [Concrete Floor Worn 001](https://polyhaven.com/a/concrete_floor_worn_001) | Dimitrios Savva, Rico Cilliers | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
-| [Preconcrete Wall 001](https://polyhaven.com/a/preconcrete_wall_001) | Dimitrios Savva, Rico Cilliers | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| [Painted Plaster Wall](https://polyhaven.com/a/painted_plaster_wall) | Amal Kumar | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Painted Concrete](https://polyhaven.com/a/painted_concrete) | Dario Barresi, Dimitrios Savva | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Dirty Concrete](https://polyhaven.com/a/dirty_concrete) | Rob Tuytel | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Corrugated Iron 02](https://polyhaven.com/a/corrugated_iron_02) | Jenelle van Heerden, Sergej Majboroda | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |

@@ -37,6 +37,22 @@ export const BLAST_DOOR = { x0: -1.8, x1: 1.8, top: 3.1 } as const;
 /** Door to the power room, in the east wall. */
 export const POWER_DOOR = { z0: 2.7, z1: 4.5, top: 2.45 } as const;
 
+/** Concrete beam running round the top of the walls. */
+export const RING_BEAM = { depth: 0.5, proud: 0.1 } as const;
+
+/**
+ * Shallow piers that divide the long walls into bays. Each list gives
+ * positions along that wall (x for north and south, z for east and west),
+ * chosen to fall between the signs, lamps and openings.
+ */
+export const PIER = { width: 0.3, proud: 0.07 } as const;
+export const PIERS = {
+  north: [-7.5, -3.75, 6.5],
+  south: [-6.7, -3.25, 5.75],
+  east: [-6.45, -3.6, 6.7],
+  west: [-5.9, -2.2, 3.2, 5.9],
+} as const;
+
 export const COLUMNS: ReadonlyArray<readonly [number, number]> = [
   [-4.5, -2.5],
   [4.5, -2.5],

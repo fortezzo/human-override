@@ -14,7 +14,7 @@
  */
 export const POLYHAVEN_TEXTURES = [
   { id: 'concrete_floor_worn_001', res: '2k', out: 2048, use: 'floors' },
-  { id: 'preconcrete_wall_001', res: '2k', out: 2048, use: 'upper walls' },
+  { id: 'painted_plaster_wall', res: '1k', out: 1024, use: 'upper walls' },
   { id: 'painted_concrete', res: '1k', out: 1024, use: 'painted lower wall band' },
   { id: 'dirty_concrete', res: '1k', out: 1024, use: 'columns and ceiling slab' },
   { id: 'corrugated_iron_02', res: '1k', out: 1024, use: 'ceiling deck' },

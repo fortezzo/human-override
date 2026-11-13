@@ -4,7 +4,7 @@
 /** Tiling PBR surfaces: <id>_color / _normal / _orm .webp */
 export const SURFACES = [
   'concrete_floor_worn_001',
-  'preconcrete_wall_001',
+  'painted_plaster_wall',
   'painted_concrete',
   'dirty_concrete',
   'corrugated_iron_02',

@@ -24,6 +24,8 @@ interface MaterialDef {
   gain?: number;
   /** Adds darker, shinier damp patches driven by world-space noise. */
   wetPatches?: boolean;
+  /** Adds stains, water runs and grime that never repeat (heights in metres). */
+  weathering?: { rail: number; ceiling: number };
 }
 
 // Tints are multiplied into the texture. They are kept close to white: the
@@ -31,7 +33,7 @@ interface MaterialDef {
 // from the lighting rather than from darkened surfaces.
 const DEFS = {
   floor: { surface: 'concrete_floor_worn_001', tile: 3.2, kind: 'concrete', tint: 0xf2f3f4, gain: 1.7, roughness: 0.95, normalScale: 1.1, wetPatches: true },
-  wall: { surface: 'preconcrete_wall_001', tile: 3.0, kind: 'concrete', tint: 0xd4d8d8, roughness: 1.0, normalScale: 0.8 },
+  wall: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xded6c2, roughness: 0.82, normalScale: 0.9, weathering: { rail: 1.25, ceiling: 4.3 } },
   wallPaint: { surface: 'painted_concrete', tile: 2.4, kind: 'concrete', tint: 0xbfcbc6, roughness: 0.9 },
   concreteDark: { surface: 'dirty_concrete', tile: 2.2, kind: 'concrete', tint: 0xd2d5d6, roughness: 1.0 },
   ceilingDeck: { surface: 'corrugated_iron_02', tile: 1.6, kind: 'metal', tint: 0xb9bec3, roughness: 0.9 },
@@ -78,6 +80,7 @@ export class MaterialLibrary {
       if (def.gain) material.color.multiplyScalar(def.gain);
       if (def.normalScale) material.normalScale.setScalar(def.normalScale);
       if (def.wetPatches) addWetPatches(material);
+      if (def.weathering) addWallWeathering(material, def.weathering.rail, def.weathering.ceiling);
       this.textures.push(maps.color, maps.normal, maps.orm);
       entry = { material, tile: def.tile, kind: def.kind };
       this.cache.set(key, entry);
@@ -141,4 +144,72 @@ function addWetPatches(material: THREE.MeshStandardMaterial): void {
       );
   };
   material.customProgramCacheKey = () => 'wet-patches';
+}
+
+/**
+ * Patches a wall material so that no two metres of it look the same.
+ *
+ * The plaster texture itself is calm and repeats every few metres. On top
+ * of it, worked out from each point's position in the room so that it
+ * never repeats: broad patches of old damp, streaks where water has run
+ * down from the ceiling, soot under the ceiling and scuffed grime along
+ * the rail at the bottom.
+ *
+ * @param rail height of the bottom of the wall (top of the painted band)
+ * @param ceiling height the streaks run down from
+ */
+function addWallWeathering(material: THREE.MeshStandardMaterial, rail: number, ceiling: number): void {
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWallPos;\nvarying vec3 vWallFacing;')
+      .replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\nvWallPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWallFacing = mat3(modelMatrix) * objectNormal;',
+      );
+
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        /* glsl */ `#include <common>
+        varying vec3 vWallPos;
+        varying vec3 vWallFacing;
+        float wallHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float wallNoise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(wallHash(i), wallHash(i + vec2(1.0, 0.0)), f.x),
+                     mix(wallHash(i + vec2(0.0, 1.0)), wallHash(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
+        float wallClouds(vec2 p) {
+          return wallNoise(p) * 0.52 + wallNoise(p * 2.13 + 11.7) * 0.3 + wallNoise(p * 4.7 + 3.1) * 0.18;
+        }`,
+      )
+      .replace(
+        '#include <map_fragment>',
+        /* glsl */ `#include <map_fragment>
+        // Distance along the wall, whichever way it faces, shifted so that
+        // every wall gets its own stretch of the pattern.
+        vec3 wallSide = abs(vWallFacing);
+        float wallAlong = wallSide.z > wallSide.x ? vWallPos.x + vWallPos.z * 3.7 : vWallPos.z + vWallPos.x * 5.3;
+        float wallUp = vWallPos.y;
+        // Old damp: broad, soft patches.
+        float wallDamp = smoothstep(0.46, 0.74, wallClouds(vec2(wallAlong * 0.31, wallUp * 0.4)));
+        // Water runs: where they are across the wall, and how far each one reaches down it.
+        float wallRun = wallNoise(vec2(wallAlong * 1.7, 3.7)) * 0.62 + wallNoise(vec2(wallAlong * 4.9, 9.1)) * 0.38;
+        float wallReach = 0.5 + 2.9 * wallNoise(vec2(wallAlong * 1.7 + 40.0, 1.3));
+        float wallFall = (${ceiling.toFixed(2)} - wallUp) / wallReach;
+        float wallStreak = smoothstep(0.5, 0.72, wallRun) * (1.0 - smoothstep(0.3, 1.0, wallFall));
+        wallStreak *= 0.55 + 0.45 * wallNoise(vec2(wallAlong * 11.0, wallUp * 1.3));
+        // Soot under the ceiling, scuffs and dust above the rail.
+        float wallSoot = smoothstep(${(ceiling - 0.9).toFixed(2)}, ${ceiling.toFixed(2)}, wallUp) * (0.55 + 0.45 * wallNoise(vec2(wallAlong * 0.9, 5.5)));
+        float wallScuff = (1.0 - smoothstep(0.0, 0.55, wallUp - ${rail.toFixed(2)})) * (0.35 + 0.65 * wallClouds(vec2(wallAlong * 1.3, wallUp * 2.0)));
+        float wallDirt = clamp(wallDamp * 0.42 + wallStreak * 0.7 + wallSoot * 0.4 + wallScuff * 0.4, 0.0, 1.0);
+        diffuseColor.rgb *= mix(vec3(1.0), vec3(0.47, 0.45, 0.41), wallDirt);`,
+      )
+      .replace(
+        '#include <roughnessmap_fragment>',
+        /* glsl */ `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.62, wallStreak * 0.6);`,
+      );
+  };
+  material.customProgramCacheKey = () => `wall-weathering-${rail}-${ceiling}`;
 }

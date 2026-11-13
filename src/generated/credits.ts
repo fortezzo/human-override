@@ -230,8 +230,8 @@ export const CREDITS: CreditGroup[] = [
         "license": "CC0"
       },
       {
-        "title": "Preconcrete Wall 001",
-        "author": "Dimitrios Savva, Rico Cilliers",
+        "title": "Painted Plaster Wall",
+        "author": "Amal Kumar",
         "license": "CC0"
       },
       {

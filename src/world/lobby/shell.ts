@@ -1,14 +1,15 @@
-// The lobby's structure: floor, two-tone walls with their openings,
-// columns, ceiling and steel beams.
+// The lobby's structure: floor, two-tone walls with their openings, the
+// ring beam and piers that divide them into bays, columns, ceiling and
+// steel beams.
 
 import type { LevelBuilder } from '../build/LevelBuilder';
-import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, POWER_DOOR, ROOM, WINDOW, WINDOWS } from './plan';
+import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, PIER, PIERS, POWER_DOOR, RING_BEAM, ROOM, WINDOW, WINDOWS } from './plan';
 
 type Vec3 = [number, number, number];
 
 /**
  * One stretch of wall from floor (or `y0`) to ceiling (or `y1`): painted
- * concrete below the paint line, bare precast concrete above it.
+ * concrete below the paint line, painted plaster above it.
  */
 function wall(b: LevelBuilder, min: [number, number], max: [number, number], y0 = 0, y1: number = ROOM.height): void {
   const line = ROOM.paintLine;
@@ -32,6 +33,7 @@ function beam(b: LevelBuilder, along: 'x' | 'z', from: number, to: number, at: n
 
 export function buildShell(b: LevelBuilder): void {
   const { x0, x1, z0, z1, height: h, wall: t } = ROOM;
+  const line = ROOM.paintLine;
 
   // Floor slab. Walking height is always y = 0, so it needs no collision box.
   b.box('floor', [x0 - t, -0.4, z0 - t], [x1 + t, 0, z1 + t], { collide: false, cast: false });
@@ -64,10 +66,36 @@ export function buildShell(b: LevelBuilder): void {
   }
   wall(b, [x0 - t, from], [x0, z1]);
 
+  // A concrete ring beam runs round the top of the walls, and shallow piers
+  // stand under it between the signs and openings. Together with the rail
+  // below they divide each long wall into bays, the way a real frame does.
+  const beamY = h - RING_BEAM.depth;
+  b.box('concreteDark', [x0, beamY, z0], [x1, h, z0 + RING_BEAM.proud], { collide: false, cast: false });
+  b.box('concreteDark', [x0, beamY, z1 - RING_BEAM.proud], [x1, h, z1], { collide: false, cast: false });
+  b.box('concreteDark', [x0, beamY, z0 + RING_BEAM.proud], [x0 + RING_BEAM.proud, h, z1 - RING_BEAM.proud], { collide: false, cast: false });
+  b.box('concreteDark', [x1 - RING_BEAM.proud, beamY, z0 + RING_BEAM.proud], [x1, h, z1 - RING_BEAM.proud], { collide: false, cast: false });
+  const pier = (side: 'n' | 's' | 'e' | 'w', at: number) => {
+    const half = PIER.width / 2;
+    const d = PIER.proud;
+    const [min, max]: [[number, number], [number, number]] =
+      side === 'n'
+        ? [[at - half, z0], [at + half, z0 + d]]
+        : side === 's'
+          ? [[at - half, z1 - d], [at + half, z1]]
+          : side === 'w'
+            ? [[x0, at - half], [x0 + d, at + half]]
+            : [[x1 - d, at - half], [x1, at + half]];
+    b.box('wallPaint', [min[0], 0, min[1]], [max[0], line, max[1]], { collide: false, cast: false });
+    b.box('wall', [min[0], line, min[1]], [max[0], beamY, max[1]], { collide: false, cast: false });
+  };
+  for (const x of PIERS.north) pier('n', x);
+  for (const x of PIERS.south) pier('s', x);
+  for (const z of PIERS.east) pier('e', z);
+  for (const z of PIERS.west) pier('w', z);
+
   // A steel rail caps the painted band, and a kick plate runs along the floor.
   const rail = (min: Vec3, max: Vec3) => b.box('darkSteel', min, max, { collide: false, cast: false });
   const kick = (min: Vec3, max: Vec3) => b.box('steelPlate', min, max, { collide: false, cast: false });
-  const line = ROOM.paintLine;
   const runs: Array<{ axis: 'x' | 'z'; at: number; from: number; to: number; inward: 1 | -1 }> = [
     { axis: 'x', at: z0, from: x0, to: BREACH.x0 - 0.3, inward: 1 },
     { axis: 'x', at: z0, from: BREACH.x1 + 0.3, to: x1, inward: 1 },
