@@ -1,0 +1,19 @@
+# Dependencies and build output
+node_modules/
+dist/
+
+# Raw source downloads (Mixamo FBX files must never be redistributed;
+# the game ships only converted, compressed assets from public/assets)
+assets-source/
+
+# Local tooling output
+.cache/
+test-results/
+playwright-report/
+*.log
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

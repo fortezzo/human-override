@@ -1,0 +1,44 @@
+{
+  "name": "human-override",
+  "version": "0.0.1",
+  "private": true,
+  "description": "HUMAN OVERRIDE - a round-based survival shooter for the browser. Don't let the AI win.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "assets": "node tools/build-assets.mjs",
+    "shots": "node tools/screenshots.mjs",
+    "e2e": "node tools/e2e.mjs"
+  },
+  "dependencies": {
+    "n8ao": "^2.0.2",
+    "postprocessing": "^6.39.6",
+    "three": "^0.187.0",
+    "three-mesh-bvh": "^0.9.18"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "^4.5.1",
+    "@gltf-transform/extensions": "^4.5.1",
+    "@gltf-transform/functions": "^4.5.1",
+    "@types/node": "^26.6.6",
+    "@types/three": "^0.187.0",
+    "7zip-bin": "^5.2.0",
+    "fbx2gltf": "^0.9.7-p1",
+    "fflate": "^0.8.3",
+    "ffmpeg-static": "^5.3.0",
+    "meshoptimizer": "^1.3.0",
+    "obj2gltf": "^3.2.0",
+    "playwright": "^1.65.0",
+    "sharp": "^0.35.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  },
+  "allowScripts": {
+    "ffmpeg-static@5.3.0": true
+  }
+}

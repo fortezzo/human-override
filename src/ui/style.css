@@ -1,0 +1,63 @@
+/* Interface fonts: self-hosted, SIL Open Font License (see CREDITS.md). */
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 500;
+  font-display: swap;
+  src: url('/assets/fonts/BarlowCondensed-500.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 600;
+  font-display: swap;
+  src: url('/assets/fonts/BarlowCondensed-600.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Barlow Condensed';
+  font-weight: 700;
+  font-display: swap;
+  src: url('/assets/fonts/BarlowCondensed-700.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Share Tech Mono';
+  font-weight: 400;
+  font-display: swap;
+  src: url('/assets/fonts/ShareTechMono-400.woff2') format('woff2');
+}
+
+:root {
+  --ink: #e9e6de;
+  --ink-dim: #9aa0a6;
+  --amber: #ffb347;
+  --red: #ff4326;
+  --panel: rgba(8, 10, 12, 0.82);
+  --line: rgba(233, 230, 222, 0.18);
+  --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --mono: 'Share Tech Mono', ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #050607;
+  color: var(--ink);
+  font-family: var(--display);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
