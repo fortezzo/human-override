@@ -33,7 +33,9 @@ export function buildMarkings(b: LevelBuilder, atlas: SignAtlas): void {
   put(serverHall, [0, BLAST_DOOR.top + 0.18, z1 - 0.165], S, 2.2, { emissive: 2.6, tint: 0xffb060 });
   put(atlas.text('B', { size: 300, wear: 0.5 }), [1.05, 2.42, z1 + 0.158], S, 0.36, { opacity: 0.85 });
   put(atlas.text('02', { size: 300, wear: 0.5 }), [-1.05, 2.42, z1 + 0.158], S, 0.66, { opacity: 0.85 });
-  put(atlas.text(['NO NETWORKED DEVICES', 'BEYOND THIS POINT'], { size: 58, color: PAINT.red, box: true, wear: 0.35 }), [4.15, 2.25, z1], S, 2.3, { opacity: 0.9 });
+  // Red paint is darker than the wall in this light, so the two warning
+  // signs are painted on a pale panel, the way real hazard signs are.
+  put(atlas.text(['NO NETWORKED DEVICES', 'BEYOND THIS POINT'], { size: 58, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.35 }), [4.15, 2.25, z1], S, 2.3, { opacity: 0.9 });
   put(atlas.text(['AIR-GAPPED ZONE', 'AUTHORITY: SITE DIRECTOR'], { size: 40, wear: 0.5 }), [4.15, 1.7, z1], S, 1.9, { opacity: 0.75 });
   put(atlas.text('SECTOR A', { size: 120, wear: 0.5 }), [-4.6, 3.3, z1], S, 2.0, { opacity: 0.7 });
   put(atlas.text('SECURITY LOBBY', { size: 60, wear: 0.5 }), [-4.6, 2.85, z1], S, 2.0, { opacity: 0.7 });
@@ -41,7 +43,7 @@ export function buildMarkings(b: LevelBuilder, atlas: SignAtlas): void {
   // ---- East wall: power room.
   const doorZ = (POWER_DOOR.z0 + POWER_DOOR.z1) / 2;
   put(atlas.text('POWER', { size: 120, color: PAINT.yellow, wear: 0.4 }), [x1, POWER_DOOR.top + 0.5, doorZ], E, 1.35, { opacity: 0.9 });
-  put(atlas.text(['DANGER', 'HIGH VOLTAGE'], { size: 60, color: PAINT.red, box: true, wear: 0.4 }), [x1, 2.0, 5.75], E, 1.2, { opacity: 0.9 });
+  put(atlas.text(['DANGER', 'HIGH VOLTAGE'], { size: 60, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.4 }), [x1, 2.0, 5.75], E, 1.2, { opacity: 0.9 });
   put(atlas.text('CCTV 01-06', { size: 46, wear: 0.5 }), [x1, 2.75, -4.8], E, 1.1, { opacity: 0.7 });
 
   // ---- West wall, between the windows.

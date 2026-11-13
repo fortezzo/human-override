@@ -107,6 +107,10 @@ export class Renderer {
       );
     }
     this.grade.grain = preset.filmGrain;
+    // Ambient occlusion darkens creases and corners. Without it the same
+    // room comes out a touch brighter, so the exposure is trimmed to match:
+    // the picture should be equally bright whatever the quality level.
+    this.grade.exposure = LOOKDEV.exposure * (preset.ambientOcclusion === 'off' ? LOOKDEV.exposureWithoutAo : 1);
     effects.push(this.grade);
     composer.addPass(new EffectPass(this.camera, ...effects));
 

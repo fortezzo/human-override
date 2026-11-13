@@ -30,7 +30,7 @@ const SCALE = 0.25;
 const VIEW_FOV = 48;
 /** Strength of the gun's own fill light at the hip and when aiming. */
 const FILL_HIP = 1.6;
-const FILL_AIM = 2.6;
+const FILL_AIM = 2.2;
 /** The rifle's paint is close to black; this lifts it to a dark gunmetal that can hold light. */
 const PAINT_LIFT = 1.9;
 
@@ -99,7 +99,8 @@ const RELOAD_BACK: Array<[number, number]> = [
 
 /**
  * The gun's own fill light, worked out in the shader so that it touches
- * nothing else in the room. Two parts, both fixed to the player's view:
+ * nothing else in the room. It only tops up what the room's lamps leave
+ * dark. Two parts, both fixed to the player's view:
  * a soft lamp above and a little behind the left shoulder, and a pale glow
  * overhead that flat surfaces mirror when seen at a shallow angle (which is
  * what makes dark metal look like metal instead of a hole in the picture).
@@ -114,9 +115,17 @@ const FILL_LIGHT = /* glsl */ `
   float fillSky = smoothstep(-0.25, 0.9, fillBounce.y);
   float fillGraze = pow(1.0 - saturate(dot(normal, fillToEye)), 4.0);
   vec3 fillMirror = mix(vec3(0.04), diffuseColor.rgb, metalnessFactor);
-  vec3 fillShine = (fillMirror + (1.0 - fillMirror) * fillGraze) * fillSky * (1.0 - roughnessFactor * 0.72);
-  vec3 fillColor = vec3(0.8, 0.88, 1.0) * uWeaponFill;
-  reflectedLight.indirectDiffuse += fillColor * (diffuseColor.rgb * fillWrap * 0.6 + fillShine * 0.5);
+  // Rough metal does not turn into a mirror at shallow angles, so the
+  // grazing boost is scaled back by roughness (else the top of the rifle,
+  // seen end-on when aiming, washes out to pale grey).
+  vec3 fillShine = (fillMirror + (1.0 - fillMirror) * fillGraze * (1.0 - roughnessFactor)) * fillSky * (1.0 - roughnessFactor * 0.72);
+  vec3 fillLight = vec3(0.8, 0.88, 1.0) * uWeaponFill * (diffuseColor.rgb * fillWrap * 0.6 + fillShine * 0.5);
+  // A fill light tops up what the room leaves dark. Where a lamp already
+  // lights this part of the gun well, it adds little or nothing, so the
+  // rifle is never black in a dark corner and never bleached under a lamp.
+  vec3 fillAlready = reflectedLight.directDiffuse + reflectedLight.directSpecular;
+  float fillNeed = clamp(1.0 - dot(fillAlready, vec3(0.3333)) / (dot(fillLight, vec3(0.3333)) * 1.6 + 0.0001), 0.0, 1.0);
+  reflectedLight.indirectDiffuse += fillLight * fillNeed;
 }
 `;
 
@@ -191,6 +200,11 @@ export class RifleView {
     this.root.add(this.gun);
     this.root.scale.setScalar(SCALE);
     this.root.name = 'rifle-view';
+  }
+
+  /** How brightly the sight's reticle is showing (0..1), and whether the muzzle flash is on screen. */
+  get status(): { reticle: number; flash: boolean } {
+    return { reticle: this.sight.level, flash: this.flash.showing };
   }
 
   /** Call when a shot is fired. */

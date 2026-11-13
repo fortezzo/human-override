@@ -28,7 +28,7 @@ export interface DebugApi {
   step(dt: number, frames?: number): void;
   /** Stop or resume the automatic frame loop. */
   freeze(frozen: boolean): void;
-  /** Remove every robot, then optionally add one at a spot facing `headingDeg`. */
+  /** Remove every robot (the game sends a new one after its usual delay), or add one at a spot facing `headingDeg`. */
   clearRobots(): void;
   spawnRobot(x: number, z: number, headingDeg?: number, hold?: boolean): void;
   setQuality(level: QualityLevel): void;
@@ -39,7 +39,7 @@ export interface DebugApi {
   steadyLights(on: boolean): void;
   /** Leave a bullet scar and sparks on a surface. */
   scar(x: number, y: number, z: number, nx: number, ny: number, nz: number, kind: SurfaceKind): void;
-  stats(): { fps: number; calls: number; triangles: number; quality: string; gpu: string; robots: number; particles: number; gibs: number; state: string; health: number; ammo: number };
+  stats(): { fps: number; calls: number; triangles: number; quality: string; gpu: string; robots: number; particles: number; gibs: number; state: string; health: number; ammo: number; aim: number; reticle: number; flash: boolean };
 }
 
 declare global {
@@ -104,8 +104,7 @@ export function installDebugApi(game: Game): void {
       else game.start();
     },
     clearRobots() {
-      for (const robot of game.robots) robot.dispose();
-      game.robots.length = 0;
+      game.clearRobots();
     },
     spawnRobot(x, z, headingDeg = 0, hold = false) {
       const robot = game.spawnRobot(x, z, hold);

@@ -192,6 +192,11 @@ export class ReflexSight {
     this.group.add(body, pane);
   }
 
+  /** How brightly the reticle is showing, 0..1. */
+  get level(): number {
+    return this.glass.uniforms.uGain!.value as number;
+  }
+
   /**
    * @param aim 0 at the hip, 1 with the rifle fully raised
    * @param tilt how far the rifle points away from the line of sight, in radians

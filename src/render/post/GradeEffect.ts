@@ -36,8 +36,14 @@ const mat3 ACES_OUT = mat3(
   -0.53108,  1.10813, -0.07276,
   -0.07367, -0.00605,  1.07602);
 
+// On its own, this curve maps the faintest third of a percent of its range
+// to pure black, which is what used to turn dim ceilings and corners into
+// solid black shapes. Starting just past that point keeps some gradation
+// all the way down, and changes nothing that is brighter.
+const float TOE = 0.003253;
+
 vec3 filmic(vec3 color) {
-  color = ACES_IN * color;
+  color = ACES_IN * color + TOE;
   vec3 a = color * (color + 0.0245786) - 0.000090537;
   vec3 b = color * (0.983729 * color + 0.4329510) + 0.238081;
   return clamp(ACES_OUT * (a / b), 0.0, 1.0);

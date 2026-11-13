@@ -4,13 +4,17 @@
 //
 // It serves dist/ from a sub-folder address, loads the game, and drives it
 // through the debug API the way a player would: start, shoot, kill a robot,
-// get hit, go down, pause and resume, and switch every quality level. Any
-// console error or failed expectation fails the run.
+// get hit, go down, pause and resume, and switch every quality level. It
+// also measures the picture itself: that the room is equally bright at
+// every quality level, that the shadows are not solid black, and that the
+// brightness setting works. Any console error or failed expectation fails
+// the run.
 //
 // Stage 0 covers what exists so far; later stages add rounds, purchases and
 // the mission to this script.
 
 import fs from 'node:fs';
+import sharp from 'sharp';
 import { gpuName, launch } from './lib/browser.mjs';
 import { serve } from './lib/static-server.mjs';
 
@@ -34,6 +38,32 @@ page.on('response', (r) => r.status() >= 400 && problems.push(`HTTP ${r.status()
 
 const step = (dt, frames) => page.evaluate(([dt, frames]) => window.__HO.step(dt, frames), [dt, frames]);
 const stats = () => page.evaluate(() => window.__HO.stats());
+
+/** Photographs the page and measures it: average brightness (0-255) and the share of it that is near black. */
+async function measurePicture() {
+  const { data } = await sharp(await page.screenshot()).greyscale().raw().toBuffer({ resolveWithObject: true });
+  let sum = 0;
+  let black = 0;
+  for (const value of data) {
+    sum += value;
+    if (value < 8) black++;
+  }
+  return { mean: sum / data.length, black: (black / data.length) * 100 };
+}
+
+/** Moves a slider on the settings panel, the way dragging it would. */
+const setSlider = (label, value) =>
+  page.evaluate(
+    ([label, value]) => {
+      const row = [...document.querySelectorAll('.setting')].find((r) => r.textContent.trim().startsWith(label));
+      const input = row?.querySelector('input[type=range]');
+      if (!input) return false;
+      input.value = String(value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      return true;
+    },
+    [label, value],
+  );
 
 try {
   // ---- Loading
@@ -62,6 +92,55 @@ try {
   await step(1 / 60, 30);
   check('enters play and shows the HUD', (await stats()).state === 'playing' && (await page.locator('.hud').isVisible()));
 
+  // ---- The picture: the same view of the room at every quality level,
+  // with the lamps held steady so only the quality level differs.
+  await page.evaluate(() => {
+    const ho = window.__HO;
+    ho.photoMode(true);
+    ho.steadyLights(true);
+    ho.view(0, 1.7, 4.6, 0, 0, 74);
+  });
+  const pictures = {};
+  for (const level of ['low', 'medium', 'high', 'ultra']) {
+    await page.evaluate((level) => {
+      window.__HO.setQuality(level);
+      window.__HO.clearRobots();
+      window.__HO.step(1 / 60, 30);
+    }, level);
+    pictures[level] = await measurePicture();
+  }
+  const means = Object.values(pictures).map((p) => p.mean);
+  const spread = Math.max(...means) - Math.min(...means);
+  const summary = Object.entries(pictures).map(([level, p]) => `${level} ${p.mean.toFixed(1)}`).join(', ');
+  check('the room is equally bright at every quality level', spread < 2.5, `average brightness out of 255: ${summary}`);
+  const blackest = Math.max(...Object.values(pictures).map((p) => p.black));
+  check('shadows keep their detail', blackest < 12, `at most ${blackest.toFixed(1)}% of the picture is near black`);
+
+  // The brightness slider on the settings panel.
+  await page.evaluate(() => window.__HO.setQuality('high'));
+  await step(1 / 60, 20);
+  const normal = await measurePicture();
+  const moved = await setSlider('Brightness', 1.5);
+  await step(1 / 60, 2);
+  const brighter = await measurePicture();
+  await setSlider('Brightness', 1);
+  await step(1 / 60, 2);
+  const restored = await measurePicture();
+  check(
+    'the brightness setting brightens the picture',
+    moved && brighter.mean > normal.mean + 8 && Math.abs(restored.mean - normal.mean) < 1.5,
+    `${normal.mean.toFixed(1)} -> ${brighter.mean.toFixed(1)} at 150% -> ${restored.mean.toFixed(1)} back at 100%`,
+  );
+  await page.evaluate(() => {
+    const ho = window.__HO;
+    ho.photoMode(false);
+    ho.steadyLights(false);
+    ho.releaseView();
+    ho.clearRobots();
+    ho.spawnRobot(0, -14.8, 0, false);
+  });
+  await step(1 / 60, 5);
+
   // The robot walks in from the breach on its own.
   const before = await page.evaluate(() => window.__HO.game.robots[0].position.z);
   await step(1 / 60, 180);
@@ -83,6 +162,23 @@ try {
   await step(1 / 60, 60);
   const debris = await stats();
   check('destroyed robot breaks into scrap', debris.gibs >= 8 && debris.robots === 0, `${debris.gibs} pieces`);
+
+  // The muzzle flash is over almost as soon as it starts.
+  await page.evaluate(() => window.__HO.press('fire', true));
+  await step(1 / 60, 1);
+  await page.evaluate(() => window.__HO.press('fire', false));
+  const flashOn = (await stats()).flash;
+  await step(1 / 60, 3);
+  check('the muzzle flash lasts only an instant', flashOn && !(await stats()).flash, 'gone within 4 frames');
+
+  // Raising the rifle brings the sight's reticle up; lowering it puts it out.
+  await page.evaluate(() => window.__HO.press('aim', true));
+  await step(1 / 60, 40);
+  const raised = await stats();
+  await page.evaluate(() => window.__HO.press('aim', false));
+  await step(1 / 60, 40);
+  const lowered = await stats();
+  check('aiming brings up the sight and its reticle', raised.aim > 0.95 && raised.reticle > 0.95 && lowered.reticle === 0, `reticle ${raised.reticle.toFixed(2)} raised, ${lowered.reticle.toFixed(2)} lowered`);
 
   // Reload.
   await page.evaluate(() => window.__HO.press('reload', true));

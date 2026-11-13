@@ -40,7 +40,12 @@ const shoot = async (name) => {
 };
 
 // ---- 1. Title screen, as a visitor first sees it
-await run(() => window.__HO.freeze(true));
+// The lamps are held steady for the whole run (in the game one of them
+// stutters), so that pictures taken on different days can be compared.
+await run(() => {
+  window.__HO.freeze(true);
+  window.__HO.steadyLights(true);
+});
 await step(240);
 await shoot('01-title');
 
@@ -61,8 +66,8 @@ await run(() => {
   const ho = window.__HO;
   ho.photoMode(true);
   ho.clearRobots();
-  ho.spawnRobot(0.35, -2.3, 0, true);
-  ho.view(0.95, 1.5, -0.95, 14, -1, 38);
+  ho.spawnRobot(0.35, -3.6, 0, true);
+  ho.view(1.2, 1.5, -1.7, 24, -2.5, 40);
 });
 await step(50);
 await shoot('03-robot-close');

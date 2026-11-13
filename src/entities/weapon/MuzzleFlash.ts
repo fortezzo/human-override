@@ -136,6 +136,11 @@ export class MuzzleFlash {
     this.timer = FX.muzzleFlashTime;
   }
 
+  /** True while the flash is being drawn. */
+  get showing(): boolean {
+    return this.group.visible;
+  }
+
   update(dt: number): void {
     if (this.timer <= 0) return;
     this.timer -= dt;

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { addsLightOnly } from '../../render/glow';
+import { PoseLayers } from './kit/PoseLayers';
 import { ROBOT } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
@@ -64,8 +65,8 @@ export class Robot {
   private readonly eyeMaterial: THREE.MeshBasicMaterial;
   private readonly glow: THREE.Sprite;
   private readonly eyeColor = new THREE.Color(ROBOT.eyeColor);
-  /** The bones the hunch is applied to, paired with their extra rotation. */
-  private readonly posture: Array<{ bone: THREE.Bone; rotation: THREE.Quaternion }>;
+  /** The design's hunch and the bullet flinch, layered over the animation. */
+  private readonly pose: PoseLayers;
 
   private heading = 0;
   private speed = 0;
@@ -108,7 +109,7 @@ export class Robot {
     // marches in step.
     this.actions.get('walk')!.time = rand(0, 4);
 
-    this.posture = model.posture.map(({ bone, rotation }) => ({ bone: this.bones.get(bone)!, rotation }));
+    this.pose = new PoseLayers(this.bones, model.posture, ['Spine1', 'Neck']);
 
     // The visor and sensor lights are part of the model. This robot gets its
     // own copy of their material so it can flicker and go dark on its own,
@@ -152,7 +153,7 @@ export class Robot {
       this.play('idle', 0.3);
       this.setEyes(0.85 + 0.15 * Math.sin(this.time * 3));
       this.mixer.update(dt);
-      this.applyPosture();
+      this.pose.apply();
       this.root.updateMatrixWorld(true);
       return out;
     }
@@ -218,29 +219,21 @@ export class Robot {
     }
 
     this.mixer.update(dt);
-    this.applyPosture();
 
-    // Layer the flinch on top of whatever animation is playing.
+    // The animations were recorded for an upright figure. Layer the
+    // design's hunch on top, and a quick lean away from any bullet.
     this.flinchLean = damp(this.flinchLean, 0, 9, dt);
     this.flinchTwist = damp(this.flinchTwist, 0, 9, dt);
     if (Math.abs(this.flinchLean) > 0.002 || Math.abs(this.flinchTwist) > 0.002) {
-      const spine = this.bones.get('Spine1')!;
-      const neck = this.bones.get('Neck')!;
-      spine.rotation.x += this.flinchLean;
-      spine.rotation.y += this.flinchTwist;
-      neck.rotation.x += this.flinchLean * 0.8;
+      this.pose.apply([
+        { bone: 'Spine1', pitch: this.flinchLean, twist: this.flinchTwist },
+        { bone: 'Neck', pitch: this.flinchLean * 0.8, twist: 0 },
+      ]);
+    } else {
+      this.pose.apply();
     }
     this.root.updateMatrixWorld(true);
     return out;
-  }
-
-  /**
-   * The animations were recorded for an upright figure. This adds the
-   * design's hunch on top of whatever pose the animation just set. (The
-   * animation overwrites these bones every frame, so it never accumulates.)
-   */
-  private applyPosture(): void {
-    for (const { bone, rotation } of this.posture) bone.quaternion.multiply(rotation);
   }
 
   /**

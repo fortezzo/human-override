@@ -116,9 +116,10 @@ function buildClutter(b: LevelBuilder): void {
   b.prop('industrial_storage_cart', { at: [x0 + 3.3, 0, 3.9], rotY: 0.25 });
 
   // South-east: steel shelving beside the blast door.
-  b.prop('steel_frame_shelves_03', { at: [5.6, 0, z1 - 0.4], rotY: Math.PI });
+  // (Far enough east that they do not stand in front of the warning sign.)
+  b.prop('steel_frame_shelves_03', { at: [6.85, 0, z1 - 0.4], rotY: Math.PI });
   b.prop('cardboard_box_01', { at: [4.4, 0, z1 - 1.2], rotY: 0.8, kind: 'soft' });
-  b.prop('Barrel_01', { at: [7.9, 0, z1 - 0.8], rotY: 1.2 });
+  b.prop('Barrel_01', { at: [8.4, 0, z1 - 1.3], rotY: 1.2 });
 
   // Watching from the corners.
   b.prop('security_camera_01', { at: [8.72, 3.95, z0 + 0.3], rotY: -Math.PI / 4 - 0.25, collide: false });

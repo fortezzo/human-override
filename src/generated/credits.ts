@@ -7,10 +7,10 @@ export interface CreditGroup {
 
 export const CREDITS: CreditGroup[] = [
   {
-    "title": "Robot character and animations",
+    "title": "Robot skeleton and animations",
     "items": [
       {
-        "title": "Y Bot character",
+        "title": "Y Bot skeleton (22 bones; the character model itself is not used)",
         "author": "Adobe Mixamo",
         "license": "Mixamo"
       },

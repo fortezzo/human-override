@@ -433,6 +433,13 @@ export class Game {
 
   // ----------------------------------------------------------------- robots
 
+  /** Remove every robot at once (for tests and screenshots). The next one is sent after the usual delay. */
+  clearRobots(): void {
+    for (const robot of this.robots) robot.dispose();
+    this.robots.length = 0;
+    this.respawnTimer = ROBOT.respawnDelay;
+  }
+
   spawnRobot(x: number, z: number, hold: boolean): Robot {
     const robot = new Robot(this.robotModel, x, z, 0);
     robot.hold = hold;
@@ -592,8 +599,8 @@ export class Game {
   // -------------------------------------------------------------- debugging
 
   /** Counts used by the performance report. */
-  get counts(): { robots: number; particles: number; gibs: number } {
-    return { robots: this.robots.length, particles: this.particles.active, gibs: this.gibs.active };
+  get counts(): { robots: number; particles: number; gibs: number; aim: number; reticle: number; flash: boolean } {
+    return { robots: this.robots.length, particles: this.particles.active, gibs: this.gibs.active, aim: this.player.aim, ...this.rifleView.status };
   }
 
   /** Debug only: a spark shower and bullet scars, for screenshots. */

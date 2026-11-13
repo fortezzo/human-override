@@ -254,11 +254,13 @@ export const LOOKDEV = {
   // the pools of lamplight still carry the mood, but high enough that
   // columns and corners read as dark concrete instead of holes.
   ambientSky: 0x4a5c7a,
-  ambientGround: 0x1c1814,
-  ambientIntensity: 0.6,
+  ambientGround: 0x3a3128,
+  ambientIntensity: 0.7,
   environmentIntensity: 1.0,
+  /** Exposure trim on quality levels with no ambient occlusion, measured so they match the others. */
+  exposureWithoutAo: 0.93,
   /** Brightens only the deepest shadows in the final grade (0 = off). */
-  shadowLift: 0.7,
+  shadowLift: 0.9,
   bloomThreshold: 0.92,
   bloomIntensity: 0.75,
   bloomRadius: 0.72,

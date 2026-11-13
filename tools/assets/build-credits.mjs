@@ -28,10 +28,10 @@ const usedPacks = new Set(AUDIO_SPEC.flatMap((s) => s.layers.map((l) => l.pack))
 /** @type {{ title: string, note?: string, items: { title: string, author: string, url: string, license: string, note?: string }[] }[]} */
 const groups = [
   {
-    title: 'Robot character and animations',
-    note: 'Used under the Adobe Mixamo terms. The game ships only a converted, simplified and re-skinned version; the original files are not redistributed.',
+    title: 'Robot skeleton and animations',
+    note: "Used under the Adobe Mixamo terms. Only the skeleton and the recorded movements are used. The robot's body is original, built by the game's own code; the Mixamo character's body is not in the game, and the original files are not redistributed.",
     items: [
-      { title: 'Y Bot character', author: 'Adobe Mixamo', url: 'https://www.mixamo.com/', license: 'Mixamo' },
+      { title: 'Y Bot skeleton (22 bones; the character model itself is not used)', author: 'Adobe Mixamo', url: 'https://www.mixamo.com/', license: 'Mixamo' },
       { title: 'Animations: Zombie Idle, Zombie Walk, Zombie Running, Zombie Punching, Zombie Reaction Hit, Death, Death From The Front', author: 'Adobe Mixamo', url: 'https://www.mixamo.com/', license: 'Mixamo' },
     ],
   },
@@ -95,7 +95,7 @@ lines.push(
   '## License notes',
   '',
   '- **CC-BY** items require credit, which this file and the in-game credits screen provide. Changes made to them are noted above.',
-  '- **Mixamo**: characters and animations may be used in games, but the raw files may not be redistributed. The `assets-source` folder that holds them is excluded from this repository.',
+  '- **Mixamo**: characters and animations may be used in games, but the raw files may not be redistributed. The `assets-source` folder that holds them is excluded from this repository; the game ships one converted file holding a skeleton and its movements.',
   '',
 );
 fs.writeFileSync('CREDITS.md', lines.join('\n'));

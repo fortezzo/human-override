@@ -5,8 +5,9 @@
 // compressed files in public/assets (committed), and build-credits.mjs turns
 // this same list into CREDITS.md and the in-game credits screen.
 //
-// Rule for this file: only CC0 or CC-BY sources (plus the Mixamo character,
-// which the project owner downloaded under Adobe's Mixamo terms).
+// Rule for this file: only CC0 or CC-BY sources (plus the Mixamo skeleton
+// and animations, which the project owner downloaded under Adobe's Mixamo
+// terms).
 
 /**
  * Surface materials from Poly Haven (CC0).
@@ -216,7 +217,7 @@ export const SKETCHFAB = [
   {
     key: 'rifle',
     shipped: true,
-    changes: 'Re-centred, scaled, and its textures re-packed and compressed.',
+    changes: 'Changes: re-centred and scaled; its folding sight removed and replaced with a reflex sight made for the game; textures re-packed and compressed; paint lightened in the game.',
     title: 'Sci-Fi Rifle',
     author: 'Slayver',
     license: 'CC-BY 4.0',

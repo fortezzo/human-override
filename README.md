@@ -44,10 +44,10 @@ Graphics quality is chosen automatically and steps down by itself if the frame r
 
 - **The security lobby**, built from real-world surfaces: worn concrete, steel plate, rusted beams, ducts, pipe runs, hazard paint, a monitor wall ARGUS has taken over, and the breached entrance robots come through.
 - **Lighting and atmosphere**: warm pools from the old pendant lamps against a hard cold floodlight from the yard, red emergency lamps, moonlight through a torn-open window, fog, light shafts, drifting dust, real-time shadows, reflections baked from the room itself, ambient occlusion, bloom, a filmic grade and film grain.
-- **One robot**: a worn-metal humanoid with glowing eyes that walks in, finds its way around obstacles, attacks, flinches and staggers when hit, takes extra damage to the head, and breaks apart into scrap and sparks.
-- **One rifle**: recoil, spread, tracers, muzzle flash that lights the room, ejected casings, aim-down-sights, reload, bullet holes and sparks on whatever it hits.
+- **One robot**: a hunched, armor-plated machine with a glowing visor, built in code on a motion-captured skeleton. It walks in, finds its way around obstacles, attacks, flinches and staggers when hit, takes extra damage to the head, and breaks apart into scrap and sparks.
+- **One rifle**: recoil, spread, tracers, muzzle flash that lights the room, ejected casings, a raised reflex sight whose reticle stays on the point of aim, reload, bullet holes and sparks on whatever it hits.
 - **Sound**: layered recorded gunshots, impacts, robot footsteps and servos placed in 3D, a room reverb, and a low ambient and music bed.
-- **Four quality levels** from integrated graphics to a gaming GPU, an FPS counter, a pause menu with settings, and credits.
+- **Four quality levels** from integrated graphics to a gaming GPU, equally bright at every level, plus an FPS counter, a pause menu with settings (including brightness), and credits.
 
 ## What is coming
 
@@ -66,7 +66,7 @@ Built stage by stage, each one played and approved before the next begins:
 | `src/config.ts` | Every tuning number in the game, in one file |
 | `src/sim/` | The rules, with no graphics in them: weapon timing, robot decisions, path-finding, collision, hit tests. Unit-tested. |
 | `src/game/` | The frame loop that ties everything together |
-| `src/entities/` | The player, the rifle, the robot |
+| `src/entities/` | The player, the rifle and its sight, the robot and the kit its body is built from |
 | `src/world/` | The level: a small kit for building rooms, and the security lobby itself |
 | `src/render/` | Renderer, materials, lights, atmosphere, post-processing |
 | `src/fx/` | Particles, bullet decals, shell casings |
@@ -95,7 +95,7 @@ Add `?debug=1` to the address to expose the debug hooks those scripts use.
 
 ## Credits
 
-Every third-party asset, with its author, source and license, is listed in [CREDITS.md](CREDITS.md) and in the game's pause menu. Everything is CC0, CC-BY or under the SIL Open Font License, plus the robot character and animations from Adobe Mixamo, which ship only in converted, re-skinned form.
+Every third-party asset, with its author, source and license, is listed in [CREDITS.md](CREDITS.md) and in the game's pause menu. Everything is CC0, CC-BY or under the SIL Open Font License, plus the robot's skeleton and movements from Adobe Mixamo. The robot's body itself is original, built by the game's own code; no Mixamo character model is in the game.
 
 Rebuilding the assets from source (`npm run assets:fetch`, then `npm run assets:build`) needs the Mixamo and Sketchfab downloads placed in `assets-source/`, which is deliberately kept out of this repository. The converted game files in `public/assets` are committed, so this is not needed to play or to work on the code.
 
