@@ -137,6 +137,11 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
   }
 
+  /** The player's brightness setting (1 = as designed). */
+  set brightness(value: number) {
+    this.grade.brightness = value;
+  }
+
   /** Render fewer pixels (the browser stretches them to fit) to gain speed. */
   setExtraScale(scale: number): void {
     if (scale === this.extraScale) return;

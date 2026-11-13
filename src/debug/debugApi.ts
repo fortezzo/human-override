@@ -35,6 +35,8 @@ export interface DebugApi {
   god(on: boolean): void;
   /** Hide the rifle and HUD for clean photographs of the room. */
   photoMode(on: boolean): void;
+  /** Hold every lamp at full brightness, so pictures can be compared. */
+  steadyLights(on: boolean): void;
   /** Leave a bullet scar and sparks on a surface. */
   scar(x: number, y: number, z: number, nx: number, ny: number, nz: number, kind: SurfaceKind): void;
   stats(): { fps: number; calls: number; triangles: number; quality: string; gpu: string; robots: number; particles: number; gibs: number; state: string; health: number; ammo: number };
@@ -118,6 +120,9 @@ export function installDebugApi(game: Game): void {
     photoMode(on) {
       game.hideWeapon = on;
       document.querySelector('.hud')?.classList.toggle('photo', on);
+    },
+    steadyLights(on) {
+      game.lights.steady = on;
     },
     scar(x, y, z, nx, ny, nz, kind) {
       game.debugScar(new THREE.Vector3(x, y, z), new THREE.Vector3(nx, ny, nz).normalize(), kind);

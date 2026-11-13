@@ -65,7 +65,7 @@ export class Game {
 
   private materials!: MaterialLibrary;
   private lobby!: Lobby;
-  private lights!: LightRig;
+  lights!: LightRig;
   private dust!: DustMotes;
   private nav!: NavGrid;
   private rifleView!: RifleView;
@@ -119,7 +119,9 @@ export class Game {
     settings.onChange((s) => {
       this.audio.setVolume(s.volume);
       this.audio.setMuted(s.muted);
+      this.renderer.brightness = s.brightness;
     });
+    this.renderer.brightness = settings.value.brightness;
     this.audio.setVolume(settings.value.volume);
     this.audio.setMuted(settings.value.muted);
   }

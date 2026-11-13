@@ -1,7 +1,8 @@
 // The final "film look" step, done in a single shader pass:
 //
 //   exposure -> filmic tone mapping -> cold/warm split toning ->
-//   selective desaturation -> contrast -> vignette -> damage flash -> grain
+//   selective desaturation -> contrast -> shadow lift -> vignette ->
+//   damage flash -> the player's brightness setting -> grain
 //
 // The scene is rendered in HDR (lights can be much brighter than white);
 // this is where those values are squeezed into what a screen can show.
@@ -22,6 +23,8 @@ uniform float uGrain;
 uniform float uTime;
 uniform float uDamage;
 uniform float uFade;
+uniform float uShadowLift;
+uniform float uBrightness;
 
 // ACES filmic tone curve (fit by Stephen Hill).
 const mat3 ACES_IN = mat3(
@@ -61,7 +64,15 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 
   // Work in display (gamma) space for contrast, vignette and grain.
   color = pow(max(color, 0.0), vec3(1.0 / 2.2));
-  color = (color - 0.5) * uContrast + 0.5;
+  // Contrast as an S-curve through mid grey. Unlike a straight line it
+  // never pushes dark tones below zero, so shadows keep their detail
+  // instead of clipping to solid black.
+  color = clamp(color, 0.0, 1.0);
+  vec3 low = 0.5 * pow(2.0 * color, vec3(uContrast));
+  vec3 high = 1.0 - 0.5 * pow(2.0 * (1.0 - color), vec3(uContrast));
+  color = mix(low, high, step(0.5, color));
+  // Lift only the deepest shadows; anything brighter is left alone.
+  color *= 1.0 + uShadowLift * exp(-dot(color, vec3(0.2126, 0.7152, 0.0722)) / 0.055);
 
   vec2 centred = uv - 0.5;
   float edge = length(centred * vec2(1.0, 0.82));
@@ -70,6 +81,10 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   // Damage: red closes in from the screen edges.
   float hurt = uDamage * smoothstep(0.18, 0.75, edge);
   color = mix(color, vec3(0.55, 0.02, 0.0) + color * 0.35, clamp(hurt, 0.0, 0.85));
+
+  // The player's brightness setting: a gamma curve, so it opens up the
+  // dark end without washing out the lights.
+  color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / uBrightness));
 
   float grain = hash(uv * resolution + fract(uTime) * 917.0) - 0.5;
   color += grain * uGrain * (1.15 - luma * 0.7);
@@ -95,6 +110,8 @@ export class GradeEffect extends Effect {
         ['uTime', new Uniform(0)],
         ['uDamage', new Uniform(0)],
         ['uFade', new Uniform(1)],
+        ['uShadowLift', new Uniform(LOOKDEV.shadowLift)],
+        ['uBrightness', new Uniform(1)],
       ]),
     });
   }
@@ -123,5 +140,10 @@ export class GradeEffect extends Effect {
 
   set exposure(value: number) {
     this.set('uExposure', value);
+  }
+
+  /** The player's brightness setting: 1 = as designed, higher opens up the shadows. */
+  set brightness(value: number) {
+    this.set('uBrightness', Math.min(2, Math.max(0.5, value)));
   }
 }

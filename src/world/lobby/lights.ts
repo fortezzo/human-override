@@ -79,7 +79,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     angle: 0.2,
     penumbra: 0.3,
     distance: 30,
-    shadow: 3,
+    shadow: 2,
     needsShadow: true,
   });
   dustBeams.push({ position: moonFrom, target: moonTo, angle: 0.11, color: MOON, strength: 1.5 });
@@ -100,7 +100,7 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       angle: 0.9,
       penumbra: 0.85,
       distance: 10,
-      shadow: i === 1 ? 2 : i === 0 ? 4 : undefined,
+      shadow: i === 1 ? 3 : i === 0 ? 4 : undefined,
       flicker: faulty ? 'faulty' : undefined,
       glow: { materials: glowParts(pendant.materials), color: 0xffd9a8, intensity: 5.5 },
     });
@@ -108,6 +108,13 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     haze.push({ effect: cone, follows: faulty ? name : undefined });
     dustBeams.push({ position: [0, lampY, pendant.z], target: [0, 0, pendant.z], angle: 0.72, color: WARM, strength: 0.5 });
   });
+
+  // ---- Bounce: lamplight thrown back up off the floor of the aisle. Two
+  // soft, shadowless lights stand in for it, so the columns and walls that
+  // face the aisle read as dark concrete instead of falling to pure black.
+  for (const z of [-3.5, 3.5]) {
+    lights.push({ name: `bounce${z}`, kind: 'point', color: 0xffd2a0, intensity: 9, position: [0, 2.2, z], distance: 13 });
+  }
 
   // ---- The defenders' tripod flood, aimed at the breach.
   lights.push({
@@ -120,7 +127,6 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     angle: 0.34,
     penumbra: 0.7,
     distance: 15,
-    extra: true,
     glow: { materials: glowParts(work.flood.materials), color: 0xdfe8ff, intensity: 7 },
   });
 
@@ -136,7 +142,6 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       position: [at[0], at[1], at[2] + 0.35],
       distance: 6.5,
       flicker: 'pulse',
-      extra: side === 1,
       glow: { materials, color: RED, intensity: 9 },
     });
   }
@@ -150,7 +155,6 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       intensity: 5,
       position: [at[0], at[1], at[2] - 0.35],
       distance: 5.5,
-      extra: true,
       glow: { materials, color: AMBER, intensity: 6 },
     });
   }
@@ -163,10 +167,9 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
     intensity: 5,
     position: work.deskLamp.at,
     distance: 4.5,
-    extra: true,
     glow: { materials: glowParts(work.deskLamp.materials), color: 0xffc890, intensity: 4 },
   });
-  lights.push({ name: 'monitors', kind: 'point', color: 0xff7a5c, intensity: 1.6, position: [x1 - 1.0, 1.75, -4.8], distance: 4, extra: true });
+  lights.push({ name: 'monitors', kind: 'point', color: 0xff7a5c, intensity: 1.6, position: [x1 - 1.0, 1.75, -4.8], distance: 4 });
 
   // ---- Strip lights: the desk one stutters, the west one is dim but
   // steady (it keeps that side readable), the third is dead.
@@ -179,7 +182,6 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
       intensity: level,
       position: strip.at,
       distance: level > 0 ? 8.5 : 0.1,
-      extra: i !== 1,
       flicker: i === 0 ? 'faulty' : undefined,
       glow: { materials: glowParts(strip.materials), color: 0xdce8ff, intensity: level > 0 ? 3 + level * 0.15 : 0 },
     });

@@ -1,7 +1,7 @@
 // The full-screen overlays: loading, the start screen, pause with its
 // settings, the credits list, and the "use a computer" notice for phones.
 
-import { QUALITY, QUALITY_ORDER, type QualityLevel } from '../config';
+import { BRIGHTNESS, QUALITY, QUALITY_ORDER, type QualityLevel } from '../config';
 import { settings } from '../core/settings';
 import { CREDITS } from '../generated/credits';
 
@@ -93,6 +93,7 @@ export class Screens {
     panel.appendChild(quality);
 
     panel.appendChild(this.slider('Mouse sensitivity', 0.3, 2.5, 0.05, settings.value.sensitivity, (v) => settings.set({ sensitivity: v }), (v) => `${v.toFixed(2)}×`));
+    panel.appendChild(this.slider('Brightness', BRIGHTNESS.min, BRIGHTNESS.max, 0.02, settings.value.brightness, (v) => settings.set({ brightness: v }), (v) => `${Math.round(v * 100)}%`));
     panel.appendChild(this.slider('Volume', 0, 1, 0.01, settings.value.volume, (v) => settings.set({ volume: v }), (v) => `${Math.round(v * 100)}%`));
     panel.appendChild(this.toggle('Show frame rate', settings.value.showFps, (v) => settings.set({ showFps: v })));
     panel.appendChild(this.toggle('Reduce screen shake and flashing', settings.value.reducedMotion, (v) => settings.set({ reducedMotion: v })));

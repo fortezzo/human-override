@@ -6,6 +6,8 @@ export interface Settings {
   /** 'auto' lets the game pick a quality level and lower it if needed. */
   quality: QualityLevel | 'auto';
   sensitivity: number;
+  /** Picture brightness: 1 is as designed, higher opens up the shadows. */
+  brightness: number;
   volume: number;
   muted: boolean;
   showFps: boolean;
@@ -17,6 +19,7 @@ const KEY = 'human-override.settings.v1';
 const DEFAULTS: Settings = {
   quality: 'auto',
   sensitivity: 1,
+  brightness: 1,
   volume: 0.8,
   muted: false,
   showFps: true,

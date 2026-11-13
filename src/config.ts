@@ -118,6 +118,9 @@ export const AUDIO = {
   rolloff: 1.15,
 };
 
+/** Range of the brightness slider in the settings (1 = as designed). */
+export const BRIGHTNESS = { min: 0.7, max: 1.6 };
+
 export type QualityLevel = 'low' | 'medium' | 'high' | 'ultra';
 
 export interface QualityPreset {
@@ -126,7 +129,11 @@ export interface QualityPreset {
   pixelRatioCap: number;
   /** Fraction of the window resolution that is actually rendered. */
   renderScale: number;
-  /** How many lights cast real-time shadows, and their map size. */
+  /**
+   * How many lights cast real-time shadows, and their map size. Every light
+   * is switched on at every quality level, so the room is equally bright
+   * on all of them; quality only decides how many of them cast shadows.
+   */
   shadowLights: number;
   shadowMapSize: number;
   softShadows: boolean;
@@ -138,8 +145,6 @@ export interface QualityPreset {
   lightShafts: boolean;
   dustMotes: number;
   particleScale: number;
-  /** Secondary fill lights (the main ones are always on). */
-  extraLights: boolean;
   filmGrain: number;
   chromaticAberration: number;
   reflectionProbeSize: number;
@@ -150,7 +155,7 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     label: 'Low',
     pixelRatioCap: 1,
     renderScale: 0.75,
-    shadowLights: 1,
+    shadowLights: 2,
     shadowMapSize: 1024,
     softShadows: false,
     ambientOcclusion: 'off',
@@ -161,7 +166,6 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     dustMotes: 220,
     particleScale: 0.5,
-    extraLights: false,
     filmGrain: 0.05,
     chromaticAberration: 0,
     reflectionProbeSize: 128,
@@ -170,7 +174,7 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     label: 'Medium',
     pixelRatioCap: 1,
     renderScale: 1,
-    shadowLights: 2,
+    shadowLights: 3,
     shadowMapSize: 1024,
     softShadows: true,
     ambientOcclusion: 'half',
@@ -181,7 +185,6 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     dustMotes: 450,
     particleScale: 0.75,
-    extraLights: true,
     filmGrain: 0.055,
     chromaticAberration: 0.0006,
     reflectionProbeSize: 256,
@@ -201,7 +204,6 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     dustMotes: 700,
     particleScale: 1,
-    extraLights: true,
     filmGrain: 0.06,
     chromaticAberration: 0.0008,
     reflectionProbeSize: 256,
@@ -221,7 +223,6 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
     lightShafts: true,
     dustMotes: 1000,
     particleScale: 1.25,
-    extraLights: true,
     filmGrain: 0.06,
     chromaticAberration: 0.0008,
     reflectionProbeSize: 512,
@@ -249,10 +250,15 @@ export const LOOKDEV = {
   exposure: 1.05,
   fogColor: 0x0b0f14,
   fogDensity: 0.034,
-  ambientSky: 0x3a4d66,
-  ambientGround: 0x0e0b08,
-  ambientIntensity: 0.38,
-  environmentIntensity: 0.9,
+  // Fill light: what reaches the places no lamp shines on. Kept low so
+  // the pools of lamplight still carry the mood, but high enough that
+  // columns and corners read as dark concrete instead of holes.
+  ambientSky: 0x4a5c7a,
+  ambientGround: 0x1c1814,
+  ambientIntensity: 0.6,
+  environmentIntensity: 1.0,
+  /** Brightens only the deepest shadows in the final grade (0 = off). */
+  shadowLift: 0.7,
   bloomThreshold: 0.92,
   bloomIntensity: 0.75,
   bloomRadius: 0.72,

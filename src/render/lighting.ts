@@ -1,9 +1,10 @@
 // Turns a list of light descriptions into real lights.
 //
-// A level describes its lights as plain data (LightDef). The rig decides,
-// from the quality preset, which of them get shadow maps and which
-// secondary lights are skipped, and it runs the flicker animations and keeps
-// each lamp model's glow in step with the light it carries.
+// A level describes its lights as plain data (LightDef). Every light is
+// switched on at every quality level, so the room is equally bright on all
+// of them; the rig only decides, from the quality preset, which lights get
+// shadow maps. It also runs the flicker animations and keeps each lamp
+// model's glow in step with the light it carries.
 
 import * as THREE from 'three';
 import type { QualityPreset } from '../config';
@@ -25,10 +26,12 @@ export interface LightDef {
   distance: number;
   /** Shadow priority: 1 gets a shadow map first. Leave out for no shadow. */
   shadow?: number;
-  /** The light only looks right with a shadow (it would shine through walls). */
+  /**
+   * The light only looks right with a shadow (it would shine through
+   * walls). Give these the first shadow priorities: every quality level
+   * has at least as many shadow maps as there are lights like this.
+   */
   needsShadow?: boolean;
-  /** Secondary light, skipped on the lowest quality. */
-  extra?: boolean;
   flicker?: 'faulty' | 'pulse' | 'beacon';
   /** Parts of a lamp model that should glow with this light. */
   glow?: { materials: THREE.MeshStandardMaterial[]; color: number; intensity: number };
@@ -46,6 +49,8 @@ interface LiveLight {
 
 export class LightRig {
   readonly group = new THREE.Group();
+  /** Hold every lamp at full brightness (for repeatable screenshots and measurements). */
+  steady = false;
   private live: LiveLight[] = [];
 
   constructor(private readonly defs: LightDef[]) {
@@ -71,7 +76,7 @@ export class LightRig {
 
     this.live = this.defs.map((def) => {
       const hasShadow = shadowed.has(def);
-      const skip = (def.extra && !preset.extraLights) || (def.needsShadow && !hasShadow);
+      const skip = def.needsShadow && !hasShadow;
       let light: THREE.SpotLight | THREE.PointLight | null = null;
 
       if (!skip) {
@@ -109,7 +114,9 @@ export class LightRig {
     for (const entry of this.live) {
       const { def } = entry;
       let level = 1;
-      if (def.flicker === 'pulse') {
+      if (this.steady) {
+        // Leave every lamp fully on.
+      } else if (def.flicker === 'pulse') {
         level = 0.6 + 0.4 * Math.sin(time * 2.1);
       } else if (def.flicker === 'beacon') {
         // A rotating beacon: a sharp flash once per turn.
