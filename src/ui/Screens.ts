@@ -230,7 +230,7 @@ export class Screens {
   /** Reflect the current quality choice and what "Auto" resolved to. */
   setQuality(active: QualityLevel, choice: QualityLevel | 'auto'): void {
     for (const [key, button] of this.qualityButtons) button.classList.toggle('active', key === choice);
-    this.qualityNote.textContent = choice === 'auto' ? `Auto is using ${QUALITY[active].label}. It steps down by itself if the frame rate drops.` : '';
+    this.qualityNote.textContent = choice === 'auto' ? `Auto is using ${QUALITY[active].label}. It steps down by itself if the frame rate drops; press Auto again to let it choose afresh.` : '';
   }
 
   private slider(label: string, min: number, max: number, step: number, value: number, onChange: (value: number) => void, format: (value: number) => string): HTMLElement {

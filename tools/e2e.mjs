@@ -20,6 +20,9 @@
 //   - pause and resume; phones get a notice instead of a broken game
 //   - the real buttons, pressed with real clicks: the mouse is captured
 //     and released when it should be, and "Auto" quality means what it says
+//   - every key on the controls list, really pressed
+//   - with the browser slowed down to imitate a weak computer, the game
+//     lowers its own quality and says so
 //
 // The mission, ARGUS and the rest of the economy arrive in later stages and
 // are added to this script with them.
@@ -786,6 +789,31 @@ try {
   await until('playing');
   s = await at();
   check('Play Again starts a fresh run with the mouse captured', s.state === 'playing' && s.locked && s.round === 0 && s.health === 100 && s.scrap === 0 && s.robots.length === 0);
+
+  // A weak computer, imitated: the browser's processor is slowed sixteen
+  // times over, so frames take far too long. On Auto the game should notice
+  // within a few seconds, drop a quality level and say so.
+  await doing(() => {
+    window.__HO.god(true);
+    window.__HO.holdRounds(true);
+  });
+  const slow = await real.context().newCDPSession(real);
+  await slow.send('Emulation.setCPUThrottlingRate', { rate: 16 });
+  const lowered = await real
+    .waitForFunction((automatic) => window.__HO.stats().quality !== automatic || window.__HO.game.renderer.resolutionScale < 1, automatic, { timeout: 30000 })
+    .then(() => true, () => false);
+  await slow.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+  await real.waitForTimeout(300);
+  const after = await doing(() => ({ quality: window.__HO.stats().quality, scale: window.__HO.game.renderer.resolutionScale, notice: document.querySelector('.hud-toast')?.textContent ?? '', setting: JSON.parse(localStorage.getItem('human-override.settings.v1') ?? '{}').quality ?? 'auto' }));
+  check(
+    'on a computer too slow for the picture, Auto lowers the quality by itself and says so',
+    lowered && after.setting === 'auto' && (after.scale < 1 || /Graphics lowered/.test(after.notice)),
+    `${automatic} -> ${after.quality}${after.scale < 1 ? ` at ${Math.round(after.scale * 100)}% resolution` : ''}: "${after.notice}"`,
+  );
+  await doing(() => {
+    window.__HO.god(false);
+    window.__HO.holdRounds(false);
+  });
 
   await letGoOfMouse();
   await until('paused');

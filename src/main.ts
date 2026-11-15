@@ -86,8 +86,9 @@ async function boot(): Promise<void> {
   };
   screens.onQuit = () => game.toTitle();
   screens.onQuality = (choice) => {
-    // "Auto" goes back to the level chosen for this computer, not merely
-    // to whichever level happened to be in use when it was pressed.
+    // "Auto" starts again from the level guessed for this computer (and
+    // steps down from there if it has to), not merely from whichever
+    // level happened to be in use when it was pressed.
     game.setQuality(choice === 'auto' ? game.automaticQuality() : choice, false);
   };
   screens.onClick = () => {
