@@ -10,7 +10,7 @@ import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LedBank } from '../build/LedBank';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, column, ibeam, portal, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
+import { approach, column, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { DOCK, DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, WALL } from '../plan';
@@ -21,6 +21,8 @@ const COLD = 0xcfe0ff;
 const RED = 0xff2a12;
 const AMBER = 0xff9a2e;
 const HALF_PI = Math.PI / 2;
+/** Thickness of the facing laid over the back of the lobby's wall. */
+const SKIN = 0.03;
 
 /** Size of one server rack: width along the row, depth across it, height. */
 const RACK = { width: 0.62, depth: 1.0, height: 2.15 };
@@ -68,20 +70,32 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   // North: the lobby's own wall covers most of it; fill in beside and above it.
   wall(b, { ...walls, along: 'x', near: z0 - t, far: z0, from: x0 - t, to: LOBBY.x0 - t });
   b.box('wallHall', [LOBBY.x0 - t, LOBBY.height, z0 - t], [LOBBY.x1 + t, h, z0], { collide: false, cast: false });
-  // Steel cladding over the lobby wall's lower band on this side.
-  b.box('steelPlate', [LOBBY.x0 - t, 0, z0], [-2.2, paintLine, z0 + 0.03], { collide: false, cast: false });
-  b.box('steelPlate', [2.2, 0, z0], [x1, paintLine, z0 + 0.03], { collide: false, cast: false });
+  // A skin of this room's own over the back of the lobby's wall, steel
+  // below and plaster above, so the hall is closed on this side whether or
+  // not the lobby is being drawn.
+  const blast = DOOR_PLANS.find((d) => d.id === 'lobbyHall')!;
+  wall(b, { ...walls, height: LOBBY.height, along: 'x', near: z0, far: z0 + SKIN, from: LOBBY.x0 - t, to: x1, solid: false, openings: [{ from: blast.from, to: blast.to, top: blast.top }] });
   wall(b, { ...walls, along: 'z', near: x0 - t, far: x0, from: z0 - t, to: z1 + t, openings: [{ from: DOCK.z0, to: DOCK.z1, top: DOCK.top }] });
   wall(b, { ...walls, along: 'z', near: x1, far: x1 + t, from: z0, to: z1 + t, openings: [{ from: servicePlan.from, to: servicePlan.to, top: servicePlan.top }] });
   wall(b, { ...walls, along: 'x', near: z1, far: z1 + t, from: x0, to: x1, openings: [{ from: corePlan.from, to: corePlan.to, top: corePlan.top }] });
-  // A steel rail caps the cladding.
-  for (const [min, max] of [
-    [[x0, paintLine - 0.03, z0 + 0.03], [x1, paintLine + 0.03, z0 + 0.06]],
-    [[x0, paintLine - 0.03, z1 - 0.03], [x1, paintLine + 0.03, z1]],
-    [[x0, paintLine - 0.03, z0], [x0 + 0.03, paintLine + 0.03, z1]],
-    [[x1 - 0.03, paintLine - 0.03, z0], [x1, paintLine + 0.03, z1]],
-  ] as Array<[Vec3, Vec3]>) {
-    b.box('darkSteel', min, max, { collide: false, cast: false });
+  // A steel rail caps the cladding. It stops at the frame of each opening
+  // and starts again on the far side. (It once ran straight across all
+  // four, and showed through every open door as a dark bar at waist height.)
+  const rails: Array<{ along: 'x' | 'z'; near: number; far: number; from: number; to: number; gap: [number, number] }> = [
+    { along: 'x', near: z0 + 0.03, far: z0 + 0.06, from: x0, to: x1, gap: [blast.from - 0.34, blast.to + 0.34] },
+    { along: 'x', near: z1 - 0.03, far: z1, from: x0, to: x1, gap: [corePlan.from - 0.3, corePlan.to + 0.3] },
+    { along: 'z', near: x0, far: x0 + 0.03, from: z0, to: z1, gap: [DOCK.z0 - 0.28, DOCK.z1 + 0.28] },
+    { along: 'z', near: x1 - 0.03, far: x1, from: z0, to: z1, gap: [servicePlan.from - 0.3, servicePlan.to + 0.3] },
+  ];
+  for (const rail of rails) {
+    for (const [u0, u1] of [
+      [rail.from, rail.gap[0]],
+      [rail.gap[1], rail.to],
+    ]) {
+      const min: Vec3 = rail.along === 'x' ? [u0, paintLine - 0.03, rail.near] : [rail.near, paintLine - 0.03, u0];
+      const max: Vec3 = rail.along === 'x' ? [u1, paintLine + 0.03, rail.far] : [rail.far, paintLine + 0.03, u1];
+      b.box('darkSteel', min, max, { collide: false, cast: false });
+    }
   }
 
   for (const [cx, cz] of HALL_COLUMNS) column(b, cx, cz, h);
@@ -89,9 +103,8 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   ibeam(b, 'z', z0, z1, 1.6, h, 0.55, 0.32);
   for (const z of [9.6, 13.2, 16.8, 20.4, 24.0]) ibeam(b, 'x', x0, x1, z, h, 0.3, 0.18);
 
-  portal(b, 'z', x1, x1 + t, servicePlan);
-  portal(b, 'x', z1, z1 + t, corePlan, 'steelPlate');
-  // The lobby's blast door frame, continued on this side of the wall.
+  // (The door frames are built with the doors: see world/doorFrames.ts.)
+  // Hazard stripes on this side of the blast door's frame.
   b.box('hazard', [-2.14, 0, z0 + 0.08], [-1.74, 2.1, z0 + 0.095], { collide: false, cast: false });
   b.box('hazard', [1.74, 0, z0 + 0.08], [2.14, 2.1, z0 + 0.095], { collide: false, cast: false });
 
@@ -203,10 +216,10 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   const E: Vec3 = [-1, 0, 0];
   const W: Vec3 = [1, 0, 0];
   const FLOOR: Vec3 = [0, 1, 0];
-  put(atlas.text('SECTOR B', { size: 120, wear: 0.45 }), [5.6, 3.5, z0], N, 2.1, { opacity: 0.7 });
-  put(atlas.text('SERVER HALL', { size: 60, wear: 0.45 }), [5.6, 3.02, z0], N, 2.1, { opacity: 0.7 });
-  put(atlas.eye(300, PAINT.white, 0.45), [-6.3, 3.3, z0], N, 1.3, { opacity: 0.7 });
-  put(atlas.text(['ANTI-STATIC ZONE', 'NO OPEN FLAME'], { size: 50, box: true, wear: 0.45 }), [-6.3, 2.2, z0], N, 1.8, { opacity: 0.75 });
+  put(atlas.text('SECTOR B', { size: 120, wear: 0.45 }), [5.6, 3.5, z0 + SKIN], N, 2.1, { opacity: 0.7 });
+  put(atlas.text('SERVER HALL', { size: 60, wear: 0.45 }), [5.6, 3.02, z0 + SKIN], N, 2.1, { opacity: 0.7 });
+  put(atlas.eye(300, PAINT.white, 0.45), [-6.3, 3.3, z0 + SKIN], N, 1.3, { opacity: 0.7 });
+  put(atlas.text(['ANTI-STATIC ZONE', 'NO OPEN FLAME'], { size: 50, box: true, wear: 0.45 }), [-6.3, 2.2, z0 + SKIN], N, 1.8, { opacity: 0.75 });
   put(atlas.text('LOADING DOCK', { size: 70, color: PAINT.yellow, wear: 0.45 }), [x0, DOCK.top + 0.55, (DOCK.z0 + DOCK.z1) / 2], W, 1.9, { opacity: 0.9 });
   put(atlas.text('POWER ROOM', { size: 70, color: PAINT.yellow, wear: 0.4 }), [x1, servicePlan.top + 0.5, (servicePlan.from + servicePlan.to) / 2], E, 1.6, { opacity: 0.9 });
   const coreMid = (corePlan.from + corePlan.to) / 2;
@@ -229,7 +242,7 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   put(atlas.arrow('down', PAINT.yellow, 200, 0.6), [-1, 0, 21.8], FLOOR, 0.9, { opacity: 0.7 });
   // Stains.
   const stain = (id: 'Leaking003' | 'Leaking004', centre: Vec3, normal: Vec3, w: number, hgt: number, opacity = 0.7) => b.decalImage(id, centre, normal, w, hgt, { opacity, tint: 0x5b5a52 });
-  stain('Leaking003', [-8.3, 3.9, z0], N, 3.2, 3.2);
+  stain('Leaking003', [-8.3, 3.9, z0 + SKIN], N, 3.2, 3.2);
   stain('Leaking004', [x0, 3.9, 11.2], W, 3.0, 3.0);
   stain('Leaking003', [x0, 4.0, 22.4], W, 3.2, 3.0, 0.6);
   stain('Leaking004', [x1, 4.0, 18.8], E, 3.2, 3.0);

@@ -54,6 +54,7 @@ export class World {
       this.doors.push(door);
       this.group.add(door.group);
       this.solids.push(...door.solids);
+      this.fixed.push(...door.frame);
     }
     this.group.updateMatrixWorld(true);
 

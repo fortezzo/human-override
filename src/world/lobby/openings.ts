@@ -1,7 +1,9 @@
 // Everything that fills a hole in the lobby's walls: the breached main
-// entrance with its entry corridor and the yard outside, the two west
-// windows, and the frames of the blast door to the server hall and of the
-// power room door.
+// entrance with its entry corridor and the yard outside, and the two west
+// windows. The frames of the blast door to the server hall and of the power
+// room door are drawn here too, but they are built with the doors
+// themselves (see world/doorFrames.ts), so that they are there from
+// whichever side a door is seen.
 
 import type { LevelBuilder } from '../build/LevelBuilder';
 import { BLAST_DOOR, BREACH, POWER_DOOR, ROOM, VESTIBULE, WINDOW, WINDOWS } from './plan';
@@ -118,7 +120,7 @@ function buildWindows(b: LevelBuilder): void {
  * The steel portal the blast door to the server hall slides in. (The door's
  * two leaves are moving parts, built in world/Door.ts.)
  */
-function buildBlastDoorFrame(b: LevelBuilder): void {
+export function buildBlastDoorFrame(b: LevelBuilder): void {
   const { z1, wall: t } = ROOM;
   const { x0, x1, top } = BLAST_DOOR;
 
@@ -136,7 +138,7 @@ function buildBlastDoorFrame(b: LevelBuilder): void {
 }
 
 /** The frame of the personnel door to the power room. (The door itself is in world/Door.ts.) */
-function buildPowerDoorFrame(b: LevelBuilder): void {
+export function buildPowerDoorFrame(b: LevelBuilder): void {
   const { x1, wall: t } = ROOM;
   const { z0, z1, top } = POWER_DOOR;
   b.box('steelPlate', [x1 - 0.07, 0, z0 - 0.14], [x1 + t + 0.07, top, z0 + 0.04]);
@@ -149,6 +151,4 @@ export function buildOpenings(b: LevelBuilder): void {
   buildBreach(b);
   buildVestibule(b);
   buildWindows(b);
-  buildBlastDoorFrame(b);
-  buildPowerDoorFrame(b);
 }

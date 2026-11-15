@@ -846,6 +846,29 @@ try {
     dark.length ? dark.join(' | ') : `24 crossings (3 doors, both directions, 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
   );
 
+  // Each room is drawn only while it can be seen, so each must be closed
+  // off by walls of its own (and the doors, which are always drawn). Where
+  // a room used the back of its neighbour's wall, the night sky showed
+  // through whenever the neighbour was not being drawn.
+  const gaps = await ev(() => window.__HO.enclosureGaps());
+  const open = Object.entries(gaps).filter(([, count]) => count > 0);
+  check(
+    'every room is closed off by its own walls and the doors, with nothing to see through',
+    open.length === 0,
+    open.length ? open.map(([pair, count]) => `${pair}: ${count} lines of sight get through`).join(', ') : `${Object.keys(gaps).length} pairs of rooms, 2,420 lines of sight each`,
+  );
+
+  // Nothing may stand across a doorway. (A rail along the server hall's
+  // walls once carried on across all four of its openings, and showed
+  // through the open blast door as a dark bar at waist height.)
+  const across = await ev(() => window.__HO.doorwayObstructions());
+  const crossed = Object.entries(across).filter(([, count]) => count > 0);
+  check(
+    'nothing stands across any doorway or entrance',
+    crossed.length === 0,
+    crossed.length ? crossed.map(([way, count]) => `${way}: ${count} lines blocked`).join(', ') : `${Object.keys(across).join(', ')}: all clear`,
+  );
+
   // The reflections each room is lit by are made from a photograph of it.
   // One broken pixel in that photograph (a shader's "not a number") used to
   // spread through it and turn every surface in the room black.

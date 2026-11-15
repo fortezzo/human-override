@@ -98,9 +98,11 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   wall(b, { ...walls, along: 'z', near: x1, far: x1 + t, from: z0 - t, to: z1 + t });
   wall(b, { ...walls, along: 'x', near: z1, far: z1 + t, from: x0, to: x1 });
   // North: the server hall's wall stands here; clad its core side and build above it.
-  b.box('coreSteel', [x0, 0, z0], [door.from - 0.3, HALL.height, z0 + 0.04], { collide: false, cast: false });
-  b.box('coreSteel', [door.to + 0.3, 0, z0], [x1, HALL.height, z0 + 0.04], { collide: false, cast: false });
-  b.box('coreSteel', [door.from - 0.3, door.top + 0.3, z0], [door.to + 0.3, HALL.height, z0 + 0.04], { collide: false, cast: false });
+  // (Right up to the doorway: the door's steel frame belongs to the hall
+  // and hides the edges of this cladding, but only while the hall is drawn.)
+  b.box('coreSteel', [x0, 0, z0], [door.from, HALL.height, z0 + 0.04], { collide: false, cast: false });
+  b.box('coreSteel', [door.to, 0, z0], [x1, HALL.height, z0 + 0.04], { collide: false, cast: false });
+  b.box('coreSteel', [door.from, door.top, z0], [door.to, HALL.height, z0 + 0.04], { collide: false, cast: false });
   b.box('coreSteel', [x0 - t, HALL.height, z0 - t], [x1 + t, h, z0 + 0.04], { collide: false, cast: false });
   // Cut-off corners make the room eight-sided.
   for (const [px, pz, rot] of [

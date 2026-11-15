@@ -13,7 +13,8 @@ import type { Game } from '../game/Game';
 import type { SurfaceKind } from '../render/materials';
 import { remaining } from '../sim/rounds';
 import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
-import { ENTRY_PLANS, NAV_BOUNDS, WALKABLE, type DoorPlan } from '../world/plan';
+import { BREACH } from '../world/lobby/plan';
+import { AREA_IDS, DOCK, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
 
@@ -97,6 +98,24 @@ export interface DebugApi {
    * reach the deepest point is). There should be none.
    */
   safeSpots(): Array<{ x: number; z: number; squares: number; deepest: number }>;
+  /**
+   * Holes in the rooms. Each area is drawn only while it can be seen, so
+   * it has to be closed off by its own walls: if a stretch of its wall is
+   * really the back of a neighbour's, that stretch vanishes whenever the
+   * neighbour is not being drawn, and the sky shows through. This looks
+   * from the middle of each room toward points inside each other room,
+   * through that room's own walls and the doors only, and reports how many
+   * of those lines of sight get through. Every count should be zero.
+   */
+  enclosureGaps(): Record<string, number>;
+  /**
+   * Things standing across a doorway. Looks straight through each of the
+   * four doors (as if open) and each opening robots walk in by, along a
+   * fine grid of lines, and reports how many of them hit something. Every
+   * count should be zero: a rail along a wall once carried on across the
+   * doorways in it.
+   */
+  doorwayObstructions(): Record<string, number>;
   /** Broken pixels in each room's reflection photograph, at every size in use. All should be zero. */
   brokenReflections(): Record<string, number>;
   /**
@@ -259,6 +278,77 @@ export function installDebugApi(game: Game): DebugTools {
     },
     brokenReflections() {
       return game.brokenReflectionPixels();
+    },
+    enclosureGaps() {
+      const raycaster = new THREE.Raycaster();
+      raycaster.firstHitOnly = true;
+      // With every door shut, whatever state the run is in.
+      for (const door of game.world.doors) door.pose(0);
+      const doors = game.world.doors.flatMap((door) => door.solids);
+      const from = new THREE.Vector3();
+      const to = new THREE.Vector3();
+      const gaps: Record<string, number> = {};
+      for (const a of AREA_IDS) {
+        const own = [...game.world.areas.get(a)!.solids, ...doors];
+        const [ax0, az0, ax1, az1] = ROOM_RECTS[a];
+        for (const b of AREA_IDS) {
+          if (a === b) continue;
+          const [bx0, bz0, bx1, bz1] = ROOM_RECTS[b];
+          let through = 0;
+          // From a few spots inside this room, at eye height ...
+          for (const [fu, fv] of [[0.5, 0.5], [0.25, 0.3], [0.75, 0.7], [0.3, 0.75], [0.7, 0.25]] as const) {
+            from.set(ax0 + (ax1 - ax0) * fu, 1.6, az0 + (az1 - az0) * fv);
+            // ... toward a grid of points well inside the other room, low and high.
+            for (let i = 1; i < 12; i++) {
+              for (let j = 1; j < 12; j++) {
+                for (const y of [0.4, 1.6, 3.2, 4.4]) {
+                  to.set(bx0 + ((bx1 - bx0) * i) / 12, y, bz0 + ((bz1 - bz0) * j) / 12);
+                  const distance = from.distanceTo(to);
+                  raycaster.set(from, to.clone().sub(from).divideScalar(distance));
+                  raycaster.far = distance;
+                  if (!raycaster.intersectObjects(own, false).length) through++;
+                }
+              }
+            }
+          }
+          gaps[`${a} toward ${b}`] = through;
+        }
+      }
+      for (const door of game.world.doors) door.settle();
+      return gaps;
+    },
+    doorwayObstructions() {
+      const raycaster = new THREE.Raycaster();
+      raycaster.firstHitOnly = true;
+      // With every door open, whatever state the run is in.
+      for (const door of game.world.doors) door.pose(1);
+      const ways: Array<{ name: string; along: 'x' | 'z'; at: number; from: number; to: number; top: number }> = [
+        ...DOOR_PLANS.map((d) => ({ name: d.id as string, along: d.along, at: d.at, from: d.from, to: d.to, top: d.top - 0.15 })),
+        // The openings robots walk in through, up to head height (a jammed shutter hangs in the top of each).
+        { name: 'entrance', along: 'x', at: LOBBY.z0 - WALL / 2, from: BREACH.x0, to: BREACH.x1, top: 1.85 },
+        { name: 'dock', along: 'z', at: HALL.x0 - WALL / 2, from: DOCK.z0, to: DOCK.z1, top: 1.85 },
+        { name: 'breachEast', along: 'z', at: POWER.x1 + WALL / 2, from: EAST_BREACH.z0, to: EAST_BREACH.z1, top: 1.85 },
+      ];
+      const origin = new THREE.Vector3();
+      const blocked: Record<string, number> = {};
+      for (const way of ways) {
+        const through = way.along === 'x' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+        let count = 0;
+        // Straight through the wall, from just outside one face to just
+        // outside the other, on a grid fine enough to catch a 3 cm bar.
+        for (let u = way.from + 0.2; u <= way.to - 0.2 + 1e-6; u += 0.1) {
+          for (let y = 0.15; y <= way.top; y += 0.03) {
+            if (way.along === 'x') origin.set(u, y, way.at - 0.45);
+            else origin.set(way.at - 0.45, y, u);
+            raycaster.set(origin, through);
+            raycaster.far = 0.9;
+            if (raycaster.intersectObjects(game.world.solids, false).length) count++;
+          }
+        }
+        blocked[way.name] = count;
+      }
+      for (const door of game.world.doors) door.settle();
+      return blocked;
     },
     safeSpots() {
       const cell = 0.15;

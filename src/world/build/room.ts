@@ -55,6 +55,15 @@ export interface WallSpec {
   upper: MaterialKey;
   paintLine: number;
   openings?: Opening[];
+  /**
+   * False for a "skin": a thin facing laid over the back of a neighbouring
+   * room's wall. It can be seen and stops bullets, but the wall behind it
+   * is what stops people. Each room is drawn only while it can be seen, so
+   * each has to be closed off by surfaces of its own: where one borrowed
+   * the back of a neighbour's wall, that stretch vanished whenever the
+   * neighbour was not being drawn, and the night sky showed through.
+   */
+  solid?: boolean;
 }
 
 /** A straight wall, two-tone like the lobby's, with doorways cut in it. */
@@ -64,7 +73,7 @@ export function wall(b: LevelBuilder, spec: WallSpec): void {
     if (u1 - u0 < 0.001 || y1 - y0 < 0.001) return;
     const min: Vec3 = along === 'x' ? [u0, y0, near] : [near, y0, u0];
     const max: Vec3 = along === 'x' ? [u1, y1, far] : [far, y1, u1];
-    b.box(key, min, max, { cast: false });
+    b.box(key, min, max, { cast: false, collide: spec.solid ?? true });
   };
   const solid = (u0: number, u1: number, y0 = 0) => {
     if (y0 < paintLine) piece(lower, u0, u1, y0, paintLine);

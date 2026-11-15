@@ -2,8 +2,8 @@
 //
 // Each door is built from the same kit as the rooms, but kept as its own
 // moving pieces instead of being fused into the level: one or two leaves
-// that slide into the wall, a solid box that blocks the doorway while it is
-// shut, and a small status lamp on each side.
+// that slide into the wall, the fixed frame they slide in, a solid box that
+// blocks the doorway while it is shut, and a small status lamp on each side.
 
 import * as THREE from 'three';
 import { DOORS } from '../config';
@@ -12,6 +12,7 @@ import { smoothstep } from '../core/math';
 import type { MaterialLibrary } from '../render/materials';
 import { makeCollider, type Collider } from '../sim/collision';
 import { LevelBuilder } from './build/LevelBuilder';
+import { DOOR_FRAMES } from './doorFrames';
 import type { DoorPlan, Rect } from './plan';
 import { WALL } from './plan';
 
@@ -32,6 +33,8 @@ export class Door {
   readonly solids: THREE.Mesh[] = [];
   /** Blocks the doorway while the door is shut. */
   readonly collider: Collider;
+  /** The frame's own solid parts, which never move. */
+  readonly frame: Collider[];
   /** The doorway's footprint, for path-finding and for finding the door. */
   readonly rect: Rect;
   /** Middle of the doorway at chest height. */
@@ -63,12 +66,14 @@ export class Door {
 
     const h = LEAF / 2;
     /** One sliding leaf covering u0..u1, dressed on both faces. */
-    const leaf = (u0: number, u1: number, slide: number, heavy: boolean) => {
+    type Put = (key: Parameters<LevelBuilder['box']>[0], u0: number, v0: number, w0: number, u1: number, v1: number, w1: number, cast?: boolean) => void;
+    const leaf = (u0: number, u1: number, slide: number, heavy: boolean, extra?: (put: Put) => void) => {
       const b = new LevelBuilder(assets, materials);
-      const put = (key: Parameters<LevelBuilder['box']>[0], u0_: number, v0: number, w0: number, u1_: number, v1: number, w1: number, cast = false) => {
+      const put: Put = (key, u0_, v0, w0, u1_, v1, w1, cast = false) => {
         const [min, max] = box(u0_, v0, w0, u1_, v1, w1);
         b.box(key, min, max, { collide: false, cast });
       };
+      extra?.(put);
       put(heavy ? 'steelPlate' : 'paintedMetal', u0, 0, -h, u1, top, h, true);
       for (const side of [-1, 1]) {
         const face = side * h;
@@ -99,12 +104,23 @@ export class Door {
 
     const width = to - from;
     if (plan.id === 'lobbyHall' || plan.id === 'hallCore') {
-      // Two heavy leaves that part in the middle.
-      leaf(from, mid - 0.012, -(width / 2 - 0.04), true);
+      // Two heavy leaves that part in the middle. The first carries a seal
+      // set back in the gap between them, so the seam reads as a dark
+      // groove and nothing can be seen through it.
+      leaf(from, mid - 0.012, -(width / 2 - 0.04), true, (put) => put('darkSteel', mid - 0.012, 0, -h + 0.025, mid + 0.012, top, h - 0.025));
       leaf(mid + 0.012, to, width / 2 - 0.04, true);
     } else {
       leaf(from, to, width - 0.05, false);
     }
+
+    // The fixed frame the leaves slide in (see doorFrames.ts for why it is
+    // the door's and not either room's).
+    const frame = new LevelBuilder(assets, materials);
+    DOOR_FRAMES[plan.id](frame);
+    const fixed = frame.build();
+    this.group.add(fixed.group);
+    this.solids.push(...fixed.solids);
+    this.frame = fixed.colliders;
 
     // Status lamps: a small box beside the doorway on each side, red while shut.
     this.lamp = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xff2a12, emissiveIntensity: 3, roughness: 0.4 });
@@ -134,6 +150,23 @@ export class Door {
     this.open = false;
     this.progress = 0;
     this.lamp.emissive.set(0xff2a12);
+    this.place();
+  }
+
+  /**
+   * Stand the leaves where they would be this far through the slide, without
+   * opening or shutting the door (for checks that need to look at the map
+   * with every door shut, or every door open). Call `settle` afterwards.
+   */
+  pose(progress: number): void {
+    const actual = this.progress;
+    this.progress = progress;
+    this.place();
+    this.progress = actual;
+  }
+
+  /** Put the leaves back where the door really is, after `pose`. */
+  settle(): void {
     this.place();
   }
 
