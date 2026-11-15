@@ -29,7 +29,6 @@ export interface TextOptions {
   align?: 'left' | 'center';
 }
 
-const SIZE = 2048;
 const PAD = 10;
 
 export const PAINT = {
@@ -49,8 +48,13 @@ export class SignAtlas {
   private rowHeight = 0;
   private readonly random = seededRandom(404);
 
-  constructor() {
-    this.canvas.width = this.canvas.height = SIZE;
+  /** @param width, height size of the shared picture in pixels (signs are packed into it) */
+  constructor(
+    private readonly width = 2048,
+    private readonly height = 2048,
+  ) {
+    this.canvas.width = width;
+    this.canvas.height = height;
     this.g = this.canvas.getContext('2d')!;
     this.texture = new THREE.CanvasTexture(this.canvas);
     this.texture.colorSpace = THREE.SRGBColorSpace;
@@ -203,12 +207,12 @@ export class SignAtlas {
 
   /** Simple shelf packing: fill rows left to right, top to bottom. */
   private allocate(width: number, height: number): { x: number; y: number } {
-    if (this.cursorX + width + PAD > SIZE) {
+    if (this.cursorX + width + PAD > this.width) {
       this.cursorX = PAD;
       this.cursorY += this.rowHeight + PAD;
       this.rowHeight = 0;
     }
-    if (this.cursorY + height + PAD > SIZE) throw new Error('Sign atlas is full');
+    if (this.cursorY + height + PAD > this.height) throw new Error('Sign atlas is full');
     const spot = { x: this.cursorX, y: this.cursorY };
     this.cursorX += width + PAD;
     this.rowHeight = Math.max(this.rowHeight, height);
@@ -272,7 +276,7 @@ export class SignAtlas {
   private finish(x: number, y: number, width: number, height: number): Sign {
     this.texture.needsUpdate = true;
     return {
-      uv: [x / SIZE, 1 - (y + height) / SIZE, (x + width) / SIZE, 1 - y / SIZE],
+      uv: [x / this.width, 1 - (y + height) / this.height, (x + width) / this.width, 1 - y / this.height],
       aspect: width / height,
     };
   }

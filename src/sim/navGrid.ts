@@ -19,10 +19,16 @@ export interface NavGrid {
   rows: number;
   /** 1 where a robot cannot stand. */
   blocked: Uint8Array;
+  /** 1 where nothing may ever walk (outside the allowed regions), whatever the obstacles. */
+  mask: Uint8Array;
   /** Walking distance to the current goal, or Infinity if unreachable. */
   distance: Float32Array;
   /** Goal square of the last flood (-1 before the first). */
   goal: number;
+  /** The size of robot the grid was built for. */
+  agentRadius: number;
+  stepHeight: number;
+  agentHeight: number;
 }
 
 export interface NavBounds {
@@ -32,29 +38,103 @@ export interface NavBounds {
   z1: number;
 }
 
+/** A rectangle on the ground: [x0, z0, x1, z1]. */
+export type NavRect = readonly [number, number, number, number];
+
 /**
  * Build the grid. A square is blocked when its centre is within
- * `agentRadius` of any obstacle tall enough to stop a walking robot.
+ * `agentRadius` of any obstacle tall enough to stop a walking robot. With
+ * `walkable`, squares outside every one of those rectangles are blocked
+ * too, which keeps robots to the approaches built for them.
  */
-export function createNavGrid(bounds: NavBounds, cell: number, colliders: readonly Collider[], agentRadius: number, stepHeight: number, agentHeight: number): NavGrid {
+export function createNavGrid(
+  bounds: NavBounds,
+  cell: number,
+  colliders: readonly Collider[],
+  agentRadius: number,
+  stepHeight: number,
+  agentHeight: number,
+  walkable?: readonly NavRect[],
+): NavGrid {
   const cols = Math.ceil((bounds.x1 - bounds.x0) / cell);
   const rows = Math.ceil((bounds.z1 - bounds.z0) / cell);
-  const blocked = new Uint8Array(cols * rows);
-  const obstacles = colliders.filter((c) => c.y1 > stepHeight && c.y0 < agentHeight);
+  const mask = new Uint8Array(cols * rows);
+  if (walkable) {
+    mask.fill(1);
+    for (const [rx0, rz0, rx1, rz1] of walkable) {
+      const c0 = Math.max(0, Math.ceil((rx0 - bounds.x0) / cell - 0.5));
+      const c1 = Math.min(cols - 1, Math.floor((rx1 - bounds.x0) / cell - 0.5));
+      const r0 = Math.max(0, Math.ceil((rz0 - bounds.z0) / cell - 0.5));
+      const r1 = Math.min(rows - 1, Math.floor((rz1 - bounds.z0) / cell - 0.5));
+      for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) mask[r * cols + c] = 0;
+    }
+  }
+  const grid: NavGrid = {
+    x0: bounds.x0,
+    z0: bounds.z0,
+    cell,
+    cols,
+    rows,
+    blocked: mask.slice(),
+    mask,
+    distance: new Float32Array(cols * rows).fill(Infinity),
+    goal: -1,
+    agentRadius,
+    stepHeight,
+    agentHeight,
+  };
+  blockColliders(grid, colliders);
+  return grid;
+}
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = bounds.x0 + (c + 0.5) * cell;
-      const z = bounds.z0 + (r + 0.5) * cell;
-      for (const o of obstacles) {
-        if (colliderContains(o, x, z, agentRadius)) {
-          blocked[r * cols + c] = 1;
-          break;
-        }
+/** Mark the squares that each obstacle (grown by the robot's radius) covers. */
+export function blockColliders(grid: NavGrid, colliders: readonly Collider[], within?: NavRect): void {
+  const { cols, rows, cell, blocked, agentRadius } = grid;
+  for (const o of colliders) {
+    if (o.y1 <= grid.stepHeight || o.y0 >= grid.agentHeight) continue;
+    // The box's footprint as an axis-aligned rectangle, grown by the radius.
+    const ex = Math.abs(o.cos) * o.hx + Math.abs(o.sin) * o.hz + agentRadius;
+    const ez = Math.abs(o.sin) * o.hx + Math.abs(o.cos) * o.hz + agentRadius;
+    let x0 = o.x - ex;
+    let x1 = o.x + ex;
+    let z0 = o.z - ez;
+    let z1 = o.z + ez;
+    if (within) {
+      x0 = Math.max(x0, within[0]);
+      z0 = Math.max(z0, within[1]);
+      x1 = Math.min(x1, within[2]);
+      z1 = Math.min(z1, within[3]);
+      if (x0 > x1 || z0 > z1) continue;
+    }
+    const c0 = Math.max(0, Math.floor((x0 - grid.x0) / cell));
+    const c1 = Math.min(cols - 1, Math.floor((x1 - grid.x0) / cell));
+    const r0 = Math.max(0, Math.floor((z0 - grid.z0) / cell));
+    const r1 = Math.min(rows - 1, Math.floor((z1 - grid.z0) / cell));
+    for (let r = r0; r <= r1; r++) {
+      for (let c = c0; c <= c1; c++) {
+        const i = r * cols + c;
+        if (!blocked[i] && colliderContains(o, grid.x0 + (c + 0.5) * cell, grid.z0 + (r + 0.5) * cell, agentRadius)) blocked[i] = 1;
       }
     }
   }
-  return { x0: bounds.x0, z0: bounds.z0, cell, cols, rows, blocked, distance: new Float32Array(cols * rows).fill(Infinity), goal: -1 };
+}
+
+/**
+ * Work out one patch of the grid again from scratch, after something in it
+ * changed (a door opened or closed). `colliders` is everything solid now.
+ */
+export function refreshRegion(grid: NavGrid, region: NavRect, colliders: readonly Collider[]): void {
+  const { cols, rows, cell } = grid;
+  const pad = grid.agentRadius + cell;
+  const rect: NavRect = [region[0] - pad, region[1] - pad, region[2] + pad, region[3] + pad];
+  const c0 = Math.max(0, Math.floor((rect[0] - grid.x0) / cell));
+  const c1 = Math.min(cols - 1, Math.floor((rect[2] - grid.x0) / cell));
+  const r0 = Math.max(0, Math.floor((rect[1] - grid.z0) / cell));
+  const r1 = Math.min(rows - 1, Math.floor((rect[3] - grid.z0) / cell));
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) grid.blocked[r * cols + c] = grid.mask[r * cols + c]!;
+  blockColliders(grid, colliders, rect);
+  // Whatever was flooded before is out of date.
+  grid.goal = -1;
 }
 
 export function cellAt(grid: NavGrid, x: number, z: number): number {

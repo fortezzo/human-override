@@ -1,6 +1,7 @@
-// The rifle as the player sees it: held at the hip or raised to the eye,
-// swaying with movement, kicking when fired and dropping out of view to
-// reload. Purely visual; the rules live in sim/weapon.ts.
+// The weapon as the player sees it: held at the hip or raised to the eye,
+// swaying with movement, kicking when fired, dropping out of view to reload
+// or to be swapped, and jabbing forward for a melee strike. Purely visual;
+// the rules live in sim/ and WeaponController.
 //
 // Three tricks keep it looking right:
 //
@@ -18,13 +19,14 @@
 //    head and shoulders, so it stays darker than whatever is being aimed at.
 
 import * as THREE from 'three';
-import { FX, RIFLE } from '../../config';
+import { FX, type WeaponDef, type WeaponId } from '../../config';
 import type { Assets } from '../../core/assets';
 import { clamp, damp, lerp, rand, smoothstep } from '../../core/math';
 import { settings } from '../../core/settings';
 import type { Player } from '../Player';
 import { MuzzleFlash } from './MuzzleFlash';
-import { ReflexSight, SIGHT_HEIGHT } from './ReflexSight';
+import { ReflexSight } from './ReflexSight';
+import { VIEW_MODELS, type Pose, type ViewModelDef } from './viewModels';
 
 const SCALE = 0.25;
 /** The gun's own lens, in degrees (the world camera is wider). */
@@ -32,21 +34,11 @@ const VIEW_FOV = 48;
 /** Strength of the gun's own fill light at the hip and when aiming. */
 const FILL_HIP = 1.6;
 const FILL_AIM = 1.9;
-/** The rifle's paint is close to black; this lifts it to a dark gunmetal that can hold light. */
-const PAINT_LIFT = 1.9;
 
-/** Where the gun sits relative to the eye, in real metres (before SCALE). */
-const HIP = { x: 0.2, y: -0.25, z: -0.7, yaw: 0.075, pitch: 0.02, roll: 0 };
-// Aiming puts the eye exactly on the sight's line, a hand's width behind it.
-const AIM = { x: 0, y: -SIGHT_HEIGHT, z: -0.23, yaw: 0, pitch: 0, roll: 0 };
-const SPRINT = { x: 0.12, y: -0.27, z: -0.5, yaw: 0.6, pitch: -0.14, roll: 0.14 };
-
-/** Points on the rifle model, in its own coordinates. */
-const MUZZLE = new THREE.Vector3(0, 0.094, -0.475);
-const EJECTION_PORT = new THREE.Vector3(0.03, 0.1, 0.0);
+type Keys = Array<[number, number]>;
 
 /** Piecewise curve through [time, value] pairs with eased segments. */
-function track(keys: Array<[number, number]>, t: number): number {
+function track(keys: Keys, t: number): number {
   if (t <= keys[0]![0]) return keys[0]![1];
   for (let i = 1; i < keys.length; i++) {
     const [t1, v1] = keys[i]!;
@@ -60,7 +52,7 @@ function track(keys: Array<[number, number]>, t: number): number {
 
 // Reload motion: tip the gun over and drop it, two tugs for the magazine
 // change, bring it back up, then a sharp rack of the bolt.
-const RELOAD_DROP: Array<[number, number]> = [
+const RELOAD_DROP: Keys = [
   [0, 0],
   [0.14, 0.11],
   [0.26, 0.2],
@@ -71,7 +63,7 @@ const RELOAD_DROP: Array<[number, number]> = [
   [0.84, 0.02],
   [1, 0],
 ];
-const RELOAD_ROLL: Array<[number, number]> = [
+const RELOAD_ROLL: Keys = [
   [0, 0],
   [0.14, 0.55],
   [0.62, 0.62],
@@ -80,7 +72,7 @@ const RELOAD_ROLL: Array<[number, number]> = [
   [0.9, 0.05],
   [1, 0],
 ];
-const RELOAD_PITCH: Array<[number, number]> = [
+const RELOAD_PITCH: Keys = [
   [0, 0],
   [0.14, 0.3],
   [0.26, 0.38],
@@ -90,19 +82,27 @@ const RELOAD_PITCH: Array<[number, number]> = [
   [0.76, 0.06],
   [1, 0],
 ];
-const RELOAD_BACK: Array<[number, number]> = [
+const RELOAD_BACK: Keys = [
   [0, 0],
   [0.8, 0],
   [0.85, 0.05],
   [0.91, -0.012],
   [1, 0],
 ];
+// Melee: a fast jab forward and across, then a slower recovery.
+const STRIKE: Keys = [
+  [0, 0],
+  [0.19, 1],
+  [0.42, 0.55],
+  [0.78, 0],
+  [1, 0],
+];
 
-/** Uniforms shared by every lit part of the gun. */
+/** Uniforms shared by every lit part of every gun. */
 interface GunLight {
   /** Strength of the gun's own fill light. */
   fill: { value: number };
-  /** 0 at the hip, 1 with the rifle raised to the eye. */
+  /** 0 at the hip, 1 with the gun raised to the eye. */
   raised: { value: number };
 }
 
@@ -110,11 +110,11 @@ interface GunLight {
  * How the gun is lit, on top of the room's own lamps. Worked out in the
  * shader so that it touches nothing else in the room.
  *
- * 1. Its own shadow. Raised to the eye, the back half of a rifle sits in
- *    the shade of the shooter's head and shoulders, which are between it
- *    and every lamp. Without this, a lamp behind the player glares off the
- *    top of the gun and the sight, and the eye goes there instead of to
- *    the target.
+ * 1. Its own shadow. Raised to the eye, the back half of a gun sits in the
+ *    shade of the shooter's head and shoulders, which are between it and
+ *    every lamp. Without this, a lamp behind the player glares off the top
+ *    of the gun and the sight, and the eye goes there instead of to the
+ *    target.
  * 2. Its own fill light, which only tops up what is left dark: a soft lamp
  *    above and a little behind the left shoulder, and a pale glow overhead
  *    that flat surfaces mirror when seen at a shallow angle (which is what
@@ -136,12 +136,12 @@ const GUN_LIGHT = /* glsl */ `
   float fillGraze = pow(1.0 - saturate(dot(normal, fillToEye)), 4.0);
   vec3 fillMirror = mix(vec3(0.04), diffuseColor.rgb, metalnessFactor);
   // Rough metal does not turn into a mirror at shallow angles, so the
-  // grazing boost is scaled back by roughness (else the top of the rifle,
+  // grazing boost is scaled back by roughness (else the top of the gun,
   // seen end-on when aiming, washes out to pale grey).
   vec3 fillShine = (fillMirror + (1.0 - fillMirror) * fillGraze * (1.0 - roughnessFactor)) * fillSky * (1.0 - roughnessFactor * 0.72);
   vec3 fillLight = vec3(0.8, 0.88, 1.0) * uWeaponFill * (diffuseColor.rgb * fillWrap * 0.6 + fillShine * 0.5);
   // Where a lamp already lights this part of the gun well, the fill adds
-  // little or nothing, so the rifle is never black in a dark corner and
+  // little or nothing, so the gun is never black in a dark corner and
   // never bleached under a lamp.
   vec3 fillAlready = reflectedLight.directDiffuse + reflectedLight.directSpecular;
   float fillNeed = clamp(1.0 - dot(fillAlready, vec3(0.3333)) / (dot(fillLight, vec3(0.3333)) * 1.6 + 0.0001), 0.0, 1.0);
@@ -170,20 +170,35 @@ function useViewLens(material: THREE.Material, lens: { value: THREE.Matrix4 }, l
   material.customProgramCacheKey = () => (light ? 'view-lens-lit' : 'view-lens');
 }
 
-export class RifleView {
+/** One gun, ready to be shown in the player's hands. */
+interface ViewModel {
+  def: ViewModelDef;
+  group: THREE.Group;
+  flash: MuzzleFlash;
+  sight: ReflexSight | null;
+  muzzles: THREE.Vector3[];
+  port: THREE.Vector3 | null;
+  /** Which barrel fires next. */
+  barrel: number;
+}
+
+export class WeaponView {
   /** Attach this to the camera. */
   readonly root = new THREE.Group();
-  private readonly gun = new THREE.Group();
-  private readonly flash: MuzzleFlash;
-  private readonly sight: ReflexSight;
   /** Lights the room for an instant on every shot. Add to the scene. */
   readonly muzzleLight = new THREE.PointLight(0xffb060, 0, 14, 2);
+
+  private readonly gun = new THREE.Group();
+  private readonly models = new Map<WeaponId, ViewModel>();
+  private current!: ViewModel;
+  private currentId: WeaponId = 'pistol';
 
   // Recoil spring state.
   private kickBack = 0;
   private kickUp = 0;
   private kickTilt = 0;
   private kickRoll = 0;
+  private kickRecovery = 16;
   // Smoothed sway from turning the view.
   private swayYaw = 0;
   private swayPitch = 0;
@@ -197,56 +212,103 @@ export class RifleView {
   private readonly worldPort = new THREE.Vector3();
 
   constructor(assets: Assets) {
-    const model = assets.model('rifle').scene.clone(true);
-    model.traverse((node) => {
-      const mesh = node as THREE.Mesh;
-      if (!mesh.isMesh) return;
-      mesh.castShadow = false;
-      mesh.receiveShadow = true;
-      mesh.frustumCulled = false;
-      const material = mesh.material as THREE.MeshStandardMaterial;
-      material.envMapIntensity = 1.35;
-      material.color.setScalar(PAINT_LIFT);
-      material.roughness = 0.86;
-      useViewLens(material, this.lens, this.light);
-    });
-    this.gun.add(model);
+    for (const id of Object.keys(VIEW_MODELS) as WeaponId[]) {
+      const def = VIEW_MODELS[id];
+      const group = new THREE.Group();
+      const model = assets.model(def.model).scene.clone(true);
+      model.traverse((node) => {
+        const mesh = node as THREE.Mesh;
+        if (!mesh.isMesh) return;
+        mesh.castShadow = false;
+        mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        // Each view model gets its own copy, so the same download can also
+        // hang on a wall rack with ordinary materials.
+        const material = (mesh.material as THREE.MeshStandardMaterial).clone();
+        material.envMapIntensity = 1.35;
+        material.color.setScalar(def.paint);
+        material.roughness = def.roughness;
+        if (material.emissiveMap) material.emissiveIntensity = 2.4;
+        useViewLens(material, this.lens, this.light);
+        mesh.material = material;
+      });
+      group.add(model);
 
-    this.sight = new ReflexSight(assets, this.lens, (material) => useViewLens(material, this.lens, this.light));
-    this.gun.add(this.sight.group);
+      let sight: ReflexSight | null = null;
+      if (def.reflexSight) {
+        sight = new ReflexSight(assets, this.lens, (material) => useViewLens(material, this.lens, this.light));
+        group.add(sight.group);
+      }
+      const flash = new MuzzleFlash((material) => useViewLens(material, this.lens), def.flashSize);
+      group.add(flash.group);
 
-    this.flash = new MuzzleFlash((material) => useViewLens(material, this.lens));
-    this.flash.group.position.copy(MUZZLE);
-    this.gun.add(this.flash.group);
+      group.visible = false;
+      this.gun.add(group);
+      this.models.set(id, {
+        def,
+        group,
+        flash,
+        sight,
+        muzzles: def.muzzles.map((p) => new THREE.Vector3(...p)),
+        port: def.ejectionPort ? new THREE.Vector3(...def.ejectionPort) : null,
+        barrel: 0,
+      });
+    }
+    this.show('pistol');
 
     this.root.add(this.gun);
     this.root.scale.setScalar(SCALE);
-    this.root.name = 'rifle-view';
+    this.root.name = 'weapon-view';
+  }
+
+  /** Put a different gun in the player's hands. */
+  show(id: WeaponId): void {
+    if (this.current) this.current.group.visible = false;
+    this.current = this.models.get(id)!;
+    this.currentId = id;
+    this.current.group.visible = true;
+    this.kickBack = this.kickUp = this.kickTilt = this.kickRoll = 0;
+  }
+
+  get shown(): WeaponId {
+    return this.currentId;
   }
 
   /** How brightly the sight's reticle is showing (0..1), and whether the muzzle flash is on screen. */
   get status(): { reticle: number; flash: boolean } {
-    return { reticle: this.sight.level, flash: this.flash.showing };
+    return { reticle: this.current.sight?.level ?? 0, flash: this.current.flash.showing };
+  }
+
+  /** Every object that starts hidden but needs its shaders compiled at load. */
+  get hiddenParts(): THREE.Object3D[] {
+    return [...this.models.values()].map((m) => m.group);
   }
 
   /** Call when a shot is fired. */
-  kick(aim: number): void {
+  kick(aim: number, weapon: WeaponDef): void {
     const calm = 1 - aim * 0.45;
-    this.kickBack += RIFLE.kickBack * calm;
-    this.kickUp += RIFLE.kickUp * calm;
-    this.kickTilt += RIFLE.kickTilt * calm;
+    this.kickBack += weapon.kickBack * calm;
+    this.kickUp += weapon.kickUp * calm;
+    this.kickTilt += weapon.kickTilt * calm;
     this.kickRoll += rand(-0.03, 0.03);
-    this.flash.fire(aim);
-    this.muzzleLight.intensity = FX.muzzleLightIntensity * (settings.value.reducedMotion ? 0.5 : 1);
+    this.kickRecovery = weapon.kickRecovery;
+    const model = this.current;
+    model.barrel = (model.barrel + 1) % model.muzzles.length;
+    model.flash.group.position.copy(model.muzzles[model.barrel]!);
+    model.flash.fire(aim);
+    this.muzzleLight.intensity = FX.muzzleLightIntensity * weapon.flash * (settings.value.reducedMotion ? 0.5 : 1);
   }
 
   /**
    * @param look mouse movement this frame, in pixels (for sway)
-   * @param reload 0..1 through the reload, 0 when not reloading
+   * @param hands what the player's hands are doing, each 0..1 through the action (0 = not doing it)
    */
-  update(dt: number, player: Player, look: { x: number; y: number }, reload: number): void {
+  update(dt: number, player: Player, look: { x: number; y: number }, hands: { reload: number; swap: number; strike: number }): void {
     this.time += dt;
     const aim = player.aim;
+    const model = this.current;
+    const def = model.def;
+    const { reload, swap, strike } = hands;
 
     // Keep the gun's lens matched to the window shape and depth range.
     const camera = this.root.parent as THREE.PerspectiveCamera;
@@ -258,21 +320,21 @@ export class RifleView {
     this.light.raised.value = aim * (1 - Math.min(1, reload * 6));
 
     // Recoil eases back to rest.
-    this.kickBack = damp(this.kickBack, 0, RIFLE.kickRecovery, dt);
-    this.kickUp = damp(this.kickUp, 0, RIFLE.kickRecovery, dt);
-    this.kickTilt = damp(this.kickTilt, 0, RIFLE.kickRecovery, dt);
-    this.kickRoll = damp(this.kickRoll, 0, RIFLE.kickRecovery, dt);
+    this.kickBack = damp(this.kickBack, 0, this.kickRecovery, dt);
+    this.kickUp = damp(this.kickUp, 0, this.kickRecovery, dt);
+    this.kickTilt = damp(this.kickTilt, 0, this.kickRecovery, dt);
+    this.kickRoll = damp(this.kickRoll, 0, this.kickRecovery, dt);
 
     // The gun lags a little behind quick turns.
     const lag = 1 - aim * 0.75;
     this.swayYaw = damp(this.swayYaw, clamp(look.x * 0.0011, -0.07, 0.07) * lag, 9, dt);
     this.swayPitch = damp(this.swayPitch, clamp(look.y * 0.0011, -0.05, 0.05) * lag, 9, dt);
 
-    this.sprintBlend = damp(this.sprintBlend, player.sprinting && reload === 0 ? 1 : 0, 9, dt);
+    this.sprintBlend = damp(this.sprintBlend, player.sprinting && reload === 0 && strike === 0 ? 1 : 0, 9, dt);
 
     // Blend hip -> aim -> sprint poses.
     const s = this.sprintBlend;
-    const pose = (key: keyof typeof HIP) => lerp(lerp(HIP[key], AIM[key], aim), SPRINT[key], s);
+    const pose = (key: keyof Pose) => lerp(lerp(def.hip[key], def.aim[key], aim), def.sprint[key], s);
 
     // Walking bob and idle breathing.
     const bob = Math.min(player.speedFraction, 1.5) * (player.onGround ? 1 : 0.3) * (1 - aim * 0.85);
@@ -280,20 +342,31 @@ export class RifleView {
     const bobY = -Math.abs(Math.sin(player.bobPhase)) * 0.012 * bob;
     const breathe = Math.sin(this.time * 1.5) * 0.0025 * (1 - aim * 0.6);
 
-    const drop = track(RELOAD_DROP, reload);
+    // Reloading: drop, tip, tug, rack.
+    const r = def.reloadMotion;
+    const drop = track(RELOAD_DROP, reload) * r;
+    // Swapping: the old gun sinks out of view, the new one comes up.
+    const lowered = swap > 0 ? smoothstep(0, 1, swap < 0.5 ? swap * 2 : (1 - swap) * 2) : 0;
+    // Striking: a jab forward and toward the middle of the view.
+    const jab = strike > 0 ? track(STRIKE, strike) : 0;
+
     const gun = this.gun;
-    gun.position.set(pose('x') + bobX + this.swayYaw * 0.25, pose('y') + bobY + breathe + this.kickUp - drop + this.swayPitch * 0.2, pose('z') + this.kickBack + track(RELOAD_BACK, reload));
+    gun.position.set(
+      pose('x') + bobX + this.swayYaw * 0.25 - jab * 0.12,
+      pose('y') + bobY + breathe + this.kickUp - drop + this.swayPitch * 0.2 - lowered * 0.34 + jab * 0.06,
+      pose('z') + this.kickBack + track(RELOAD_BACK, reload) - jab * 0.26,
+    );
     gun.rotation.set(
-      pose('pitch') + this.kickTilt + track(RELOAD_PITCH, reload) + this.swayPitch,
-      pose('yaw') + this.swayYaw + track(RELOAD_ROLL, reload) * 0.35,
-      pose('roll') + this.kickRoll - this.swayYaw * 0.6 + track(RELOAD_ROLL, reload),
+      pose('pitch') + this.kickTilt + track(RELOAD_PITCH, reload) * r + this.swayPitch - lowered * 0.75 + jab * 0.12,
+      pose('yaw') + this.swayYaw + track(RELOAD_ROLL, reload) * 0.35 * r + jab * 0.55,
+      pose('roll') + this.kickRoll - this.swayYaw * 0.6 + track(RELOAD_ROLL, reload) * r + lowered * 0.3 - jab * 0.5,
     );
 
-    // The reticle shows only with the rifle raised and roughly level.
-    this.sight.update(aim, Math.hypot(gun.rotation.x, gun.rotation.y, gun.rotation.z));
+    // The reticle shows only with the gun raised and roughly level.
+    model.sight?.update(aim, Math.hypot(gun.rotation.x, gun.rotation.y, gun.rotation.z));
 
     // Flash and its light last only a frame or two.
-    this.flash.update(dt);
+    model.flash.update(dt);
     this.muzzleLight.intensity = damp(this.muzzleLight.intensity, 0, FX.muzzleLightFade, dt);
     if (this.muzzleLight.intensity < 0.05) this.muzzleLight.intensity = 0;
     this.gun.updateWorldMatrix(true, false);
@@ -301,17 +374,17 @@ export class RifleView {
   }
 
   /**
-   * Where the end of the barrel appears to be in the world. Because the
-   * model is drawn small and close, the true point is scaled back out from
-   * the camera so tracers, smoke and casings line up with what you see.
+   * Where the end of the barrel that just fired appears to be in the world.
+   * Because the model is drawn small and close, the true point is scaled
+   * back out from the camera so tracers and smoke line up with what you see.
    */
   muzzleWorld(): THREE.Vector3 {
-    return this.apparent(this.worldMuzzle.copy(MUZZLE));
+    return this.apparent(this.worldMuzzle.copy(this.current.muzzles[this.current.barrel]!));
   }
 
-  /** Where spent casings appear to leave the gun. */
-  ejectionPortWorld(): THREE.Vector3 {
-    return this.apparent(this.worldPort.copy(EJECTION_PORT));
+  /** Where spent casings appear to leave the gun, or null if this gun keeps them. */
+  ejectionPortWorld(): THREE.Vector3 | null {
+    return this.current.port ? this.apparent(this.worldPort.copy(this.current.port)) : null;
   }
 
   private apparent(local: THREE.Vector3): THREE.Vector3 {

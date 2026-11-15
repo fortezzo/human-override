@@ -63,6 +63,8 @@ export const PROPS = [
 export const MODELS = {
   robot: 'models/robot.glb',
   rifle: 'models/rifle.glb',
+  pistol: 'models/pistol.glb',
+  shotgun: 'models/shotgun.glb',
 } as const;
 
 export const SKY = 'env/night_sky.webp';

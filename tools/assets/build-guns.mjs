@@ -1,12 +1,13 @@
-// Converts the Sketchfab gun downloads in assets-source/guns into game files.
+// Converts the Sketchfab gun downloads in assets-source/guns into game files:
 //
-// Stage 0 ships the rifle only:
-//   public/assets/models/rifle.glb
+//   public/assets/models/rifle.glb     (from an OBJ, below)
+//   public/assets/models/pistol.glb    (from an FBX, see lib/fbx-gun.mjs)
+//   public/assets/models/shotgun.glb   (from an FBX)
 //
-// The source is an OBJ in arbitrary units sitting far from the origin, so it
-// is re-centred, scaled to real-world size and turned to point down -Z (the
-// direction the player looks). Its separate AO / roughness / metalness
-// images are packed into one texture.
+// Every source arrives in its own units, facing its own way and sitting
+// wherever its author left it, so each is re-centred, scaled to real-world
+// size and turned to point down -Z (the direction the player looks). Its
+// separate AO / roughness / metalness images are packed into one texture.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,6 +16,7 @@ import { Document, NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { meshopt, prune, weld } from '@gltf-transform/functions';
 import { MeshoptDecoder, MeshoptEncoder } from 'meshoptimizer';
+import { buildFbxGun } from './lib/fbx-gun.mjs';
 
 const WORK = 'assets-source/_work/guns';
 const OUT_DIR = 'public/assets/models';
@@ -220,6 +222,44 @@ async function buildRifle() {
   return true;
 }
 
+/** The guns that arrive as FBX scenes. */
+const FBX_GUNS = [
+  {
+    // The sidearm. Its scene also holds a spare magazine and loose rounds on
+    // display beside it, and rounds inside the grip that are never seen.
+    name: 'pistol',
+    dir: 'sci-fi-pistol-pbr',
+    fbx: 'source/Scene.fbx',
+    keep: (material) => material === 'Pistol',
+    // The author posed it tipped 34 degrees nose-down.
+    level: 34.2,
+    length: 0.2,
+    forward: '+z',
+    colorSize: 1024,
+    ormSize: 1024,
+    maps: { color: 'PistolDiffuse.png', normal: 'PistolNormal.png', ao: 'PistolAO.png', metal: 'PistolMetallic.png', emissive: 'PistolEmission.png' },
+  },
+  {
+    name: 'shotgun',
+    dir: 'sci-fi-super-shotgun',
+    fbx: 'source/DoubleSciFiShotgun.fbx',
+    keep: () => true,
+    length: 0.66,
+    forward: '+z',
+    colorSize: 2048,
+    ormSize: 1024,
+    maps: { color: 'SciFiDoubleBarrel_Albedo.png', normal: 'SciFiDoubleBarrel_Normal.png', ao: 'SciFiDoubleBarrel_AO.png', rough: 'SciFiDoubleBarrel_Roughness.png', metal: 'SciFiDoubleBarrel_Metalness.png', emissive: 'Shotgun_Emit.png' },
+  },
+];
+
 console.log('Guns');
-const ok = await buildRifle();
+let ok = await buildRifle();
+for (const gun of FBX_GUNS) {
+  const report = await buildFbxGun(io, { ...gun, src: path.join(WORK, gun.dir), outDir: OUT_DIR, tempDir: path.join(WORK, '_convert') });
+  if (report) console.log(`  ${report}`);
+  else {
+    console.error(`Missing ${path.join(WORK, gun.dir)}. Extract assets-source/guns/${gun.dir}.zip there first.`);
+    ok = false;
+  }
+}
 process.exit(ok ? 0 : 1);

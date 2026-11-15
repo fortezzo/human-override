@@ -21,7 +21,11 @@ const variations = (name: string, count: number): string[] => Array.from({ lengt
 
 export const SOUNDS = {
   rifleShot: { files: variations('rifle_shot', 4), bus: 'weapons', gain: 0.9, pitchJitter: 0.035, reverb: 0.5, maxVoices: 8 },
+  pistolShot: { files: variations('pistol_shot', 3), bus: 'weapons', gain: 0.85, pitchJitter: 0.04, reverb: 0.5, maxVoices: 6 },
+  shotgunShot: { files: variations('shotgun_shot', 3), bus: 'weapons', gain: 1.0, pitchJitter: 0.03, reverb: 0.6, maxVoices: 4 },
   rifleDry: { files: ['rifle_dry.mp3'], bus: 'weapons', gain: 0.7 },
+  weaponSwitch: { files: ['weapon_switch.mp3'], bus: 'weapons', gain: 0.6, pitchJitter: 0.05, reverb: 0.1 },
+  meleeHit: { files: variations('melee_hit', 3), bus: 'weapons', gain: 0.95, pitchJitter: 0.08, reverb: 0.4, maxVoices: 3 },
   reloadMagOut: { files: ['reload_magout.mp3'], bus: 'weapons', gain: 0.7, reverb: 0.15 },
   reloadMagIn: { files: ['reload_magin.mp3'], bus: 'weapons', gain: 0.75, reverb: 0.15 },
   reloadBolt: { files: ['reload_bolt.mp3'], bus: 'weapons', gain: 0.75, reverb: 0.2 },
@@ -37,6 +41,7 @@ export const SOUNDS = {
   robotServo: { files: variations('robot_servo', 3), bus: 'robots', gain: 0.4, pitchJitter: 0.1, reverb: 0.3, maxVoices: 4 },
   robotVoice: { files: variations('robot_voice', 3), bus: 'robots', gain: 0.7, pitchJitter: 0.08, reverb: 0.5, maxVoices: 3 },
   robotAttack: { files: ['robot_attack.mp3'], bus: 'robots', gain: 0.8, pitchJitter: 0.08, reverb: 0.3, maxVoices: 4 },
+  robotLand: { files: variations('robot_land', 2), bus: 'robots', gain: 0.9, pitchJitter: 0.08, reverb: 0.5, maxVoices: 4 },
   robotDeath: { files: variations('robot_death', 2), bus: 'robots', gain: 1.0, pitchJitter: 0.06, reverb: 0.6, maxVoices: 4 },
   scrap: { files: variations('scrap', 4), bus: 'impacts', gain: 0.6, pitchJitter: 0.15, reverb: 0.4, maxVoices: 5 },
 
@@ -48,6 +53,12 @@ export const SOUNDS = {
   killTick: { files: ['kill_tick.mp3'], bus: 'ui', gain: 0.55 },
   uiClick: { files: ['ui_click.mp3'], bus: 'ui', gain: 0.6 },
   uiHover: { files: ['ui_hover.mp3'], bus: 'ui', gain: 0.4 },
+  buy: { files: ['buy.mp3'], bus: 'ui', gain: 0.6 },
+  deny: { files: ['deny.mp3'], bus: 'ui', gain: 0.5 },
+  scrapTick: { files: ['scrap_tick.mp3'], bus: 'ui', gain: 0.35, pitchJitter: 0.1, maxVoices: 3 },
+  doorOpen: { files: ['door_open.mp3'], bus: 'impacts', gain: 0.95, reverb: 0.6 },
+  roundClear: { files: ['round_clear.mp3'], bus: 'music', gain: 0.8, reverb: 0.4 },
+  gameOver: { files: ['game_over.mp3'], bus: 'music', gain: 0.95, reverb: 0.3 },
 
   ambienceRoom: { files: ['ambience_room.mp3'], bus: 'ambience', gain: 0.8 },
   musicBed: { files: ['music_bed.mp3'], bus: 'music', gain: 0.9 },

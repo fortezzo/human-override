@@ -2,7 +2,7 @@
 // motions (head bob, recoil, shake, landing dip) that make it feel physical.
 
 import * as THREE from 'three';
-import { LOOK, PLAYER } from '../config';
+import { LOADOUT, LOOK, PLAYER } from '../config';
 import type { Input } from '../core/input';
 import { clamp, damp } from '../core/math';
 import { settings } from '../core/settings';
@@ -25,6 +25,10 @@ export class Player {
   /** Advances with distance walked; the weapon model bobs in step with it. */
   bobPhase = 0;
   /** Fires once per footfall, for footstep sounds. */
+  /** Set from the weapon in hand: how far it zooms and how long it takes to raise. */
+  aimFov: number = LOOK.aimFov;
+  aimTime = 0.17;
+
   onStep: () => void = () => {};
   onLand: (impact: number) => void = () => {};
 
@@ -122,7 +126,7 @@ export class Player {
 
     // Sprint only while moving mostly forward and not aiming.
     this.sprinting = input.isDown('sprint') && az < -0.5 && !wantAim && this.onGround;
-    this.aim = damp(this.aim, wantAim && !this.sprinting ? 1 : 0, 1 / 0.06, dt);
+    this.aim = damp(this.aim, wantAim && !this.sprinting ? 1 : 0, 1 / (this.aimTime * 0.35), dt);
 
     let maxSpeed = this.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
     maxSpeed *= 1 - this.aim * (1 - PLAYER.aimSpeedFactor);
@@ -227,8 +231,8 @@ export class Player {
 
   private updateCamera(dt: number): void {
     // Ease the temporary offsets back to rest.
-    this.recoilPitch = damp(this.recoilPitch, 0, 8.5, dt);
-    this.recoilYaw = damp(this.recoilYaw, 0, 8.5, dt);
+    this.recoilPitch = damp(this.recoilPitch, 0, LOADOUT.recoilRecovery, dt);
+    this.recoilYaw = damp(this.recoilYaw, 0, LOADOUT.recoilRecovery, dt);
     this.hitRoll = damp(this.hitRoll, 0, 6, dt);
     this.landDip = damp(this.landDip, 0, 9, dt);
     this.shakeTrauma = Math.max(0, this.shakeTrauma - dt * 2.2);
@@ -248,7 +252,7 @@ export class Player {
     camera.position.set(this.position.x + this.right.x * bobX, this.position.y + PLAYER.eyeHeight - bobY - this.landDip, this.position.z + this.right.z * bobX);
     camera.rotation.set(this.pitch + this.recoilPitch + shakePitch, this.yaw + this.recoilYaw + shakeYaw, this.hitRoll + shakeRoll + bobX * 0.35);
 
-    const fov = LOOK.fov + (this.sprinting ? LOOK.sprintFovBoost : 0) - this.aim * (LOOK.fov - LOOK.aimFov);
+    const fov = LOOK.fov + (this.sprinting ? LOOK.sprintFovBoost : 0) - this.aim * (LOOK.fov - this.aimFov);
     if (Math.abs(camera.fov - fov) > 0.01) {
       camera.fov = damp(camera.fov, fov, LOOK.fovLerp, dt);
       camera.updateProjectionMatrix();

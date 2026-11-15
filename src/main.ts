@@ -2,10 +2,12 @@
 // the HUD and menus.
 
 import './ui/style.css';
-import { PLAYER, QUALITY } from './config';
+import { PLAYER, QUALITY, WEAPONS } from './config';
 import { settings } from './core/settings';
-import { installDebugApi } from './debug/debugApi';
+import { installDebugApi, type DebugTools } from './debug/debugApi';
 import { Game } from './game/Game';
+import { accuracy, readBest } from './game/RunStats';
+import { AREA_NAMES } from './world/plan';
 import { Hud } from './ui/Hud';
 import { Screens } from './ui/Screens';
 
@@ -27,28 +29,59 @@ async function boot(): Promise<void> {
   const hud = new Hud(app);
   hud.setVisible(false);
   const debug = new URLSearchParams(location.search).has('debug');
-  if (debug) installDebugApi(game);
+  let tools: DebugTools | null = null;
+  if (debug) tools = installDebugApi(game);
 
   // Phones and tablets get the scene and a friendly note instead of a game
   // they cannot control.
   const touchOnly = matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches;
 
   // ---- Game -> interface
+  let previous = game.state;
   game.onStateChange = (state) => {
+    // Coming into play from anything but a pause is a new run.
+    if (state === 'playing' && previous !== 'paused') hud.reset();
+    previous = state;
     hud.setVisible(state === 'playing');
-    screens.show(state === 'playing' ? 'none' : state === 'paused' ? 'pause' : touchOnly ? 'touch' : 'title');
+    if (state === 'title') screens.setBest(readBest().round);
+    screens.show(state === 'playing' ? 'none' : state === 'paused' ? 'pause' : state === 'over' ? 'over' : touchOnly ? 'touch' : 'title');
   };
   game.onQualityChange = (level, automatic) => {
     screens.setQuality(level, settings.value.quality);
     if (automatic) hud.showToast(`Graphics lowered to ${QUALITY[level].label} to keep the game smooth`);
   };
-  game.onHit = (weak, kill) => hud.hit(weak, kill);
+  game.onHit = (hit) => {
+    hud.hit(hit.weakPoint, hit.killed);
+    hud.scrapChange(hit.scrap);
+  };
   game.onPlayerHurt = (angle) => hud.damage(angle);
-  game.onPlayerDown = () => hud.showToast('You went down. Resetting the test.', 3);
+  game.onRound = (event, round) => {
+    if (event === 'start') hud.announce(`ROUND ${round}`, round === 1 ? 'THEY ARE COMING' : 'INCOMING');
+    else hud.announce('ROUND CLEARED', `ROUND ${round}`, 2.6);
+  };
+  game.onPurchase = (purchase) => {
+    hud.scrapChange(-purchase.cost);
+    if (purchase.kind === 'weapon' && purchase.replaced) hud.showToast(`${WEAPONS[purchase.replaced].name} left behind`, 2.5);
+  };
+  game.onGameOver = (stats, best) => {
+    screens.setSummary({
+      round: Math.max(1, stats.round),
+      kills: stats.kills,
+      weakPointKills: stats.weakPointKills,
+      meleeKills: stats.meleeKills,
+      accuracy: accuracy(stats),
+      scrapEarned: stats.scrapEarned,
+      time: stats.time,
+      best,
+      bestRound: readBest().round,
+    });
+  };
 
   // ---- Interface -> game
   screens.onStart = () => game.requestPlay();
   screens.onResume = () => game.requestPlay();
+  screens.onRestart = () => game.restart();
+  screens.onQuit = () => game.toTitle();
   screens.onQuality = (choice) => {
     if (choice === 'auto') screens.setQuality(game.qualityLevel, 'auto');
     else game.setQuality(choice, false);
@@ -70,22 +103,37 @@ async function boot(): Promise<void> {
 
   await game.load((fraction) => screens.setProgress(fraction));
   screens.setQuality(game.qualityLevel, settings.value.quality);
+  screens.setBest(readBest().round);
   screens.show(touchOnly ? 'touch' : 'title');
 
   // The HUD reads the game's state once per frame.
   const tick = () => {
     if (game.state === 'playing') {
+      const { weapons, player, director, wallet } = game;
+      const def = weapons.def;
       hud.update(1 / Math.max(game.fps, 1), {
-        health: game.player.health,
+        health: player.health,
         maxHealth: PLAYER.maxHealth,
-        ammo: game.rifle.state.ammo,
-        reloading: game.rifle.reloading,
-        spread: game.rifle.spread(game.player),
+        weapon: def.name,
+        ammo: weapons.state.ammo,
+        reserve: weapons.state.reserve,
+        lowAmmo: Math.max(1, Math.floor(def.magazine * 0.2)),
+        reloading: weapons.reloading,
+        slots: weapons.loadout.slots.map((slot) => (slot ? WEAPONS[slot.id].kind : null)),
+        current: weapons.loadout.current,
+        scrap: wallet.scrap,
+        round: director.rounds.round,
+        remaining: director.remaining,
+        area: AREA_NAMES[game.world.playerArea],
+        prompt: game.interactions.prompt,
+        markers: game.markers(),
+        spread: weapons.spread(player),
         fov: game.camera.fov,
-        aim: game.player.aim,
-        sprinting: game.player.sprinting,
+        aim: player.aim,
+        sprinting: player.sprinting,
         fps: game.fps,
         quality: game.qualityLevel,
+        debug: tools ? tools.overlay() : null,
       });
     }
     requestAnimationFrame(tick);

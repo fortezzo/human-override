@@ -39,6 +39,44 @@ export const AUDIO_SPEC = [
       { pack: 'firearm-library', file: `${FIREARM}/AK-47/C_31P.wav`, at: [0.35, 4.41][i % 2], snap: true, gain: 0.55, filter: 'lowpass=f=2600' },
     ],
   })),
+  // ---- Sidearm: a sharper, shorter report.
+  ...[1.41, 6.44, 10.66].map((at, i) => ({
+    name: `pistol_shot_${i}`,
+    stereo: true,
+    bitrate: '128k',
+    peak: 0.9,
+    duration: 0.6,
+    fadeOut: 0.36,
+    drive: 5,
+    post: 'bass=g=3:f=120:w=0.8,treble=g=2.5:f=5200:w=0.6',
+    layers: [
+      { pack: 'firearm-library', file: `${FIREARM}/Walther PPQ/X_39P.wav`, at, snap: true, gain: 1 },
+      { pack: 'firearm-library', file: `${FIREARM}/Walther PPQ/X_31P.wav`, at: [1.08, 5.24][i % 2], snap: true, gain: 0.5, filter: 'lowpass=f=2400' },
+    ],
+  })),
+  // ---- Shotgun: the heaviest sound in the game, with a long tail.
+  ...[0.78, 4.57, 7.95].map((at, i) => ({
+    name: `shotgun_shot_${i}`,
+    stereo: true,
+    bitrate: '128k',
+    peak: 0.99,
+    duration: 1.15,
+    fadeOut: 0.65,
+    drive: 9,
+    post: 'bass=g=7:f=80:w=0.9,treble=g=1:f=4200:w=0.6',
+    layers: [
+      { pack: 'firearm-library', file: `${FIREARM}/Mossberg/N_26P.wav`, at, snap: true, gain: 1 },
+      { pack: 'firearm-library', file: `${FIREARM}/Mossberg/N_30P.wav`, at: [1.7, 4.96][i % 2], snap: true, gain: 0.6, filter: 'lowpass=f=2200' },
+    ],
+  })),
+  { name: 'weapon_switch', peak: 0.55, duration: 0.3, layers: [{ pack: 'equipment-clicks-ii', file: 'equipment-clicks-ii/equipmentclicks.wav', at: 2.07, snap: true }] },
+  // ---- Melee: steel on steel.
+  ...[0, 1, 2].map((i) => ({
+    name: `melee_hit_${i}`,
+    peak: 0.95,
+    drive: 2,
+    layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_heavy_00${i}.ogg`), whole('impact-sounds', `${KENNEY_IMPACT}/impactPunch_heavy_00${i + 2}.ogg`, { gain: 0.7, filter: 'lowpass=f=2600' })],
+  })),
   { name: 'rifle_dry', peak: 0.6, duration: 0.2, layers: [{ pack: 'equipment-clicks-ii', file: 'equipment-clicks-ii/equipmentclicks.wav', at: 0.14, snap: true }] },
   { name: 'reload_magout', peak: 0.7, duration: 0.5, layers: [{ pack: 'gun-reload-sounds', file: 'gun-reload-sounds/gunreload1.wav', at: 0.18, snap: true }] },
   { name: 'reload_magin', peak: 0.75, duration: 0.5, layers: [{ pack: 'gun-reload-sounds', file: 'gun-reload-sounds/assaultriflereload1_0.wav', at: 1.05, snap: true }] },
@@ -60,6 +98,12 @@ export const AUDIO_SPEC = [
     name: `robot_hit_weak_${i}`,
     peak: 0.9,
     layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_heavy_00${i}.ogg`), whole('impact-sounds', `${KENNEY_IMPACT}/impactGlass_light_00${i}.ogg`, { gain: 0.5 })],
+  })),
+  ...[2, 3].map((n, i) => ({
+    name: `robot_land_${i}`,
+    peak: 0.95,
+    drive: 2,
+    layers: [whole('metal-impact-sounds', `metal-impact-sounds/thud${n}.wav`, { pitch: 0.7 }), whole('robotic-steps', 'robotic-steps/robotic/robotstomp.wav', { gain: 0.7 })],
   })),
   ...[1, 2, 3, 4].map((n, i) => ({ name: `robot_step_${i}`, peak: 0.8, duration: 0.45, fadeOut: 0.12, layers: [whole('robotic-steps', `robotic-steps/robotic/robotstep${n}.wav`)] })),
   ...[1, 2, 3].map((n, i) => ({ name: `robot_servo_${i}`, peak: 0.7, layers: [whole('robotic-steps', `robotic-steps/robotic/robot${n}.wav`)] })),
@@ -93,6 +137,32 @@ export const AUDIO_SPEC = [
   { name: 'kill_tick', peak: 0.55, layers: [whole('interface-sounds', `${KENNEY_UI}/glass_002.ogg`)] },
   { name: 'ui_click', peak: 0.5, layers: [whole('interface-sounds', `${KENNEY_UI}/click_001.ogg`)] },
   { name: 'ui_hover', peak: 0.35, layers: [whole('interface-sounds', `${KENNEY_UI}/tick_002.ogg`)] },
+  { name: 'buy', peak: 0.6, layers: [whole('interface-sounds', `${KENNEY_UI}/confirmation_002.ogg`, { pitch: 0.85 })] },
+  { name: 'deny', peak: 0.5, layers: [whole('interface-sounds', `${KENNEY_UI}/error_004.ogg`, { pitch: 0.8 })] },
+  { name: 'scrap_tick', peak: 0.3, layers: [whole('interface-sounds', `${KENNEY_UI}/drop_002.ogg`, { pitch: 1.3 })] },
+
+  // ---- The facility.
+  {
+    name: 'door_open',
+    peak: 0.9,
+    drive: 2,
+    duration: 1.9,
+    fadeOut: 0.5,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorOpen_002.ogg`, { pitch: 0.42 }),
+      whole('breaking-falling-hit', 'breaking-falling-hit/bfh1_metal_falling_03.ogg', { gain: 0.5, pitch: 0.6, filter: 'lowpass=f=1800' }),
+    ],
+  },
+  { name: 'round_clear', stereo: true, bitrate: '112k', peak: 0.7, duration: 2.2, fadeOut: 1.4, layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactBell_heavy_002.ogg`, { pitch: 0.5 })] },
+  {
+    name: 'game_over',
+    stereo: true,
+    bitrate: '112k',
+    peak: 0.9,
+    duration: 3.2,
+    fadeOut: 1.6,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_001.ogg`, { pitch: 0.55 }), whole('sci-fi-sounds', `${KENNEY_SCIFI}/spaceEngineLow_002.ogg`, { gain: 0.5, pitch: 0.6 })],
+  },
 
   // ---- Beds and stings.
   {

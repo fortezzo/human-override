@@ -10,7 +10,7 @@ import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
 import { nextWaypoint, type NavGrid } from '../../sim/navGrid';
 import { rayCapsule, raySphere } from '../../sim/rayShapes';
-import { createRobotMind, damageRobot, moveFactor, thinkRobot, type HitZone, type RobotMind } from '../../sim/robotMind';
+import { createRobotMind, damageRobot, moveFactor, thinkRobot, type HitZone, type RobotMind, type RobotSpec } from '../../sim/robotMind';
 import type { ClipName, RobotModel } from './RobotModel';
 
 export interface RobotHit {
@@ -27,6 +27,19 @@ export interface RobotEventsOut {
   footstep: boolean;
   /** The robot finished collapsing and should now break apart. */
   breakApart: boolean;
+  /** It dropped from a vent and hit the floor this frame. */
+  landed: boolean;
+  /** It has made no headway for too long and should be sent round again. */
+  stuck: boolean;
+}
+
+/** What makes one robot different from the next: set by the round it belongs to. */
+export interface RobotTraits {
+  health: number;
+  /** Ground speed when chasing, metres per second. */
+  speed: number;
+  /** Dropping from a ceiling vent: the height it starts at. Leave out for one that walks in. */
+  dropFrom?: number;
 }
 
 /** Capsules that follow the limbs: [bone at one end, bone at the other, radius]. */
@@ -50,7 +63,10 @@ const _headCentre = new THREE.Vector3();
 
 export class Robot {
   readonly root: THREE.Object3D;
-  readonly mind: RobotMind = createRobotMind(ROBOT);
+  readonly spec: RobotSpec;
+  readonly mind: RobotMind;
+  /** Chasing speed for this robot, metres per second. */
+  readonly moveSpeed: number;
   readonly bones = new Map<string, THREE.Bone>();
   /** Direction and force of the shot that destroyed it. */
   readonly killImpulse = new THREE.Vector3();
@@ -58,6 +74,10 @@ export class Robot {
   removed = false;
   /** Stand still and idle (used on the start screen). */
   hold = false;
+  /** Still outside the building: hurry in. Cleared once it is indoors. */
+  hurry = false;
+  /** Where it came in, for the debug tools. */
+  entry = '';
 
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<ClipName, THREE.AnimationAction>();
@@ -73,6 +93,13 @@ export class Robot {
   private stride = 0;
   private lastHalfStride = 0;
   private collapse = 0;
+  /** Falling from a vent: vertical speed, and how long since it landed. */
+  private falling = false;
+  private fallSpeed = 0;
+  private landing = 0;
+  /** Stuck check: the shortest walk to the target seen lately, and how long since it improved. */
+  private bestRemaining = Infinity;
+  private sinceProgress = 0;
   // Procedural flinch: a quick lean away from the shot.
   private flinchLean = 0;
   private flinchTwist = 0;
@@ -84,9 +111,14 @@ export class Robot {
     x: number,
     z: number,
     heading: number,
+    traits: RobotTraits = { health: ROBOT.health, speed: ROBOT.walkSpeed },
   ) {
+    this.spec = { ...ROBOT, health: traits.health };
+    this.mind = createRobotMind(this.spec);
+    this.moveSpeed = traits.speed;
     this.root = model.instantiate();
-    this.root.position.set(x, 0, z);
+    this.root.position.set(x, traits.dropFrom ?? 0, z);
+    this.falling = traits.dropFrom !== undefined;
     this.heading = heading;
     this.root.rotation.y = heading;
     this.root.traverse((node) => {
@@ -141,9 +173,10 @@ export class Robot {
     return out.setFromMatrixPosition(this.bones.get('Spine1')!.matrixWorld);
   }
 
-  update(dt: number, target: THREE.Vector3, targetAlive: boolean, grid: NavGrid, colliders: readonly Collider[]): RobotEventsOut {
+  /** @param others every robot on the map (this one included), to keep them from walking through each other */
+  update(dt: number, target: THREE.Vector3, targetAlive: boolean, grid: NavGrid, colliders: readonly Collider[], others: readonly Robot[] = []): RobotEventsOut {
     this.time += dt;
-    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false };
+    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false };
     const p = this.root.position;
     const dx = target.x - p.x;
     const dz = target.z - p.z;
@@ -158,13 +191,39 @@ export class Robot {
       return out;
     }
 
+    // Dropping from a vent: fall, hit the floor, take a moment to find its feet.
+    if (this.alive && (this.falling || this.landing > 0)) {
+      if (this.falling) {
+        this.fallSpeed += 14 * dt;
+        p.y -= this.fallSpeed * dt;
+        this.play('idle', 0.1);
+        if (p.y <= 0) {
+          p.y = 0;
+          this.falling = false;
+          this.landing = ROBOT.landingTime;
+          out.landed = true;
+          this.play('hit', 0.05, true);
+          this.actions.get('hit')!.timeScale = 1.3;
+        }
+      } else {
+        this.landing -= dt;
+      }
+      this.heading = Math.atan2(dx, dz);
+      this.root.rotation.y = this.heading;
+      this.setEyes(0.9);
+      this.mixer.update(dt);
+      this.pose.apply();
+      this.root.updateMatrixWorld(true);
+      return out;
+    }
+
     if (this.mind.state === 'dead') {
       // Collapsing: the death animation plays briefly, eyes guttering.
       this.collapse += dt;
       this.setEyes(Math.random() < 0.5 ? 0.15 : 1 - this.collapse / COLLAPSE_TIME);
       if (this.collapse >= COLLAPSE_TIME) out.breakApart = true;
     } else {
-      const events = thinkRobot(this.mind, ROBOT, dt, distance, targetAlive);
+      const events = thinkRobot(this.mind, this.spec, dt, distance, targetAlive);
       out.hitPlayer = events.hit;
       out.attackStarted = events.attackStarted;
       if (events.attackStarted) this.play('attack', 0.12, true);
@@ -173,16 +232,49 @@ export class Robot {
       let wantX = dx;
       let wantZ = dz;
       let wantSpeed = 0;
+      const pace = this.hurry ? Math.max(this.moveSpeed, ROBOT.arrivalSpeed) : this.moveSpeed;
+      const running = pace > ROBOT.runAbove;
       if (this.mind.state === 'chase') {
         if (distance > ROBOT.attackRange * 0.85) {
           const waypoint = distance > 2.2 ? nextWaypoint(grid, p.x, p.z) : null;
           if (waypoint) {
             wantX = waypoint.x - p.x;
             wantZ = waypoint.z - p.z;
+            // Stuck check: is the walk to the target getting any shorter?
+            if (waypoint.remaining < this.bestRemaining - 0.4) {
+              this.bestRemaining = waypoint.remaining;
+              this.sinceProgress = 0;
+            } else {
+              this.sinceProgress += dt;
+              // The target moving away is not being stuck: let the mark drift up slowly.
+              this.bestRemaining += dt * 1.2;
+              if (this.sinceProgress > ROBOT.stuckTime) out.stuck = true;
+            }
           }
-          wantSpeed = ROBOT.walkSpeed * moveFactor(this.mind);
+          wantSpeed = pace * moveFactor(this.mind);
+
+          // Steer away from robots that are too close, so a crowd spreads
+          // out round the player instead of queueing in single file.
+          const length = Math.hypot(wantX, wantZ) || 1;
+          let steerX = wantX / length;
+          let steerZ = wantZ / length;
+          for (const other of others) {
+            if (other === this || !other.alive) continue;
+            const ox = p.x - other.root.position.x;
+            const oz = p.z - other.root.position.z;
+            const gap = Math.hypot(ox, oz);
+            if (gap < ROBOT.separation && gap > 0.001) {
+              const push = ((ROBOT.separation - gap) / ROBOT.separation) * ROBOT.separationForce;
+              steerX += (ox / gap) * push;
+              steerZ += (oz / gap) * push;
+            }
+          }
+          wantX = steerX;
+          wantZ = steerZ;
+        } else {
+          this.sinceProgress = 0;
         }
-        this.play(wantSpeed > 0.05 || this.speed > 0.2 ? 'walk' : 'idle', 0.25);
+        this.play(wantSpeed > 0.05 || this.speed > 0.2 ? (running ? 'run' : 'walk') : 'idle', 0.25);
       } else if (this.mind.state === 'stagger') {
         this.play('hit', 0.1);
       }
@@ -199,6 +291,18 @@ export class Robot {
 
       p.x += Math.sin(this.heading) * this.speed * dt;
       p.z += Math.cos(this.heading) * this.speed * dt;
+      // Robots are solid to each other: never let two overlap.
+      for (const other of others) {
+        if (other === this || !other.alive || other.falling) continue;
+        const ox = p.x - other.root.position.x;
+        const oz = p.z - other.root.position.z;
+        const gap = Math.hypot(ox, oz);
+        const least = ROBOT.radius * 1.7;
+        if (gap < least && gap > 0.001) {
+          p.x += (ox / gap) * (least - gap) * 0.5;
+          p.z += (oz / gap) * (least - gap) * 0.5;
+        }
+      }
       this.body.x = p.x;
       this.body.z = p.z;
       resolveCircle(this.body, colliders, 0.3);
@@ -206,11 +310,11 @@ export class Robot {
       p.z = this.body.z;
       this.root.rotation.y = this.heading;
 
-      // Match the walk cycle to ground speed so the feet do not slide.
-      const walk = this.actions.get('walk')!;
-      walk.timeScale = clamp(this.speed / ROBOT.walkAnimSpeedAt, 0.6, 3.2);
+      // Match the stride to ground speed so the feet do not slide.
+      this.actions.get('walk')!.timeScale = clamp(this.speed / ROBOT.walkAnimSpeedAt, 0.6, 3.6);
+      this.actions.get('run')!.timeScale = clamp(this.speed / ROBOT.runAnimSpeedAt, 0.55, 1.5);
       this.stride += this.speed * dt;
-      const half = Math.floor(this.stride / 0.42);
+      const half = Math.floor(this.stride / (running ? 0.85 : 0.42));
       if (half !== this.lastHalfStride) {
         this.lastHalfStride = half;
         out.footstep = true;
@@ -282,7 +386,7 @@ export class Robot {
 
   /** Apply damage from a shot travelling along `direction`. */
   damage(amount: number, direction: THREE.Vector3): { killed: boolean; staggered: boolean } {
-    const result = damageRobot(this.mind, ROBOT, amount);
+    const result = damageRobot(this.mind, this.spec, amount);
     // Which way the shot pushes the robot, in its own frame.
     const forward = direction.x * Math.sin(this.heading) + direction.z * Math.cos(this.heading);
     const side = direction.x * Math.cos(this.heading) - direction.z * Math.sin(this.heading);

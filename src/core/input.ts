@@ -16,7 +16,9 @@ export type Action =
   | 'reload'
   | 'interact'
   | 'melee'
-  | 'grenade';
+  | 'grenade'
+  | 'weapon1'
+  | 'weapon2';
 
 const KEY_BINDINGS: Record<string, Action> = {
   KeyW: 'forward',
@@ -34,6 +36,8 @@ const KEY_BINDINGS: Record<string, Action> = {
   KeyF: 'interact',
   KeyV: 'melee',
   KeyG: 'grenade',
+  Digit1: 'weapon1',
+  Digit2: 'weapon2',
 };
 
 const MOUSE_BINDINGS: Record<number, Action> = { 0: 'fire', 2: 'aim' };

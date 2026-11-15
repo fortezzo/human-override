@@ -28,15 +28,18 @@ function glowParts(materials: THREE.MeshStandardMaterial[]): THREE.MeshStandardM
   return materials.filter((m) => m.emissiveMap || /glass|light$/i.test(m.name));
 }
 
+/** A light before it is tagged with the area it belongs to. */
+type LobbyLight = Omit<LightDef, 'area'>;
+
 export interface LobbyLighting {
-  lights: LightDef[];
+  lights: LobbyLight[];
   /** Haze effects, each tied to the light whose flicker it follows. */
   haze: Array<{ effect: ConeShaft | FogCard; follows?: string }>;
   dustBeams: DustBeam[];
 }
 
 export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLights): LobbyLighting {
-  const lights: LightDef[] = [];
+  const lights: LobbyLight[] = [];
   const haze: LobbyLighting['haze'] = [];
   const dustBeams: DustBeam[] = [];
   const { z0, z1, x0, x1 } = ROOM;
@@ -178,15 +181,16 @@ export function buildLights(b: LevelBuilder, fixtures: Fixtures, work: WorkLight
   // steady (it keeps that side readable), the third is dead.
   fixtures.strips.forEach((strip, i) => {
     const level = [14, 9, 0][i] ?? 0;
+    if (level <= 0) return;
     lights.push({
       name: `strip${i}`,
       kind: 'point',
       color: 0xd6e4ff,
       intensity: level,
       position: strip.at,
-      distance: level > 0 ? 8.5 : 0.1,
+      distance: 8.5,
       flicker: i === 0 ? 'faulty' : undefined,
-      glow: { materials: glowParts(strip.materials), color: 0xdce8ff, intensity: level > 0 ? 3 + level * 0.15 : 0 },
+      glow: { materials: glowParts(strip.materials), color: 0xdce8ff, intensity: 3 + level * 0.15 },
     });
   });
 

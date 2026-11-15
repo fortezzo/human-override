@@ -91,7 +91,11 @@ export class MuzzleFlash {
   private readonly tongues = new THREE.Group();
   private timer = 0;
 
-  constructor(prepare: (material: THREE.Material) => void) {
+  /** @param scale size relative to the carbine's flash */
+  constructor(
+    prepare: (material: THREE.Material) => void,
+    private readonly scale = 1,
+  ) {
     const make = (map: THREE.Texture) => {
       const material = new THREE.MeshBasicMaterial({
         map,
@@ -127,7 +131,7 @@ export class MuzzleFlash {
   /** Show a new flash. `aim` (0..1) shrinks it a little when sighted. */
   fire(aim: number): void {
     const calm = settings.value.reducedMotion ? 0.55 : 1;
-    const size = rand(0.17, 0.25) * (1 - aim * 0.3) * calm;
+    const size = rand(0.17, 0.25) * (1 - aim * 0.3) * calm * this.scale;
     this.star.scale.setScalar(size);
     this.star.rotation.z = rand(0, Math.PI * 2);
     this.tongues.scale.set(size * rand(0.8, 1.15), size * rand(0.8, 1.15), size * rand(1.3, 2.1));

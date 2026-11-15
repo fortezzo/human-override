@@ -98,8 +98,21 @@ body {
   font-weight: 700;
   letter-spacing: 0.3em;
 }
+.hud-round {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+  line-height: 1;
+}
+.hud-round-number {
+  font-size: 46px;
+  font-weight: 700;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+}
 .hud-brand-sub {
-  margin-top: 2px;
+  margin-top: 4px;
   font-family: var(--mono);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -608,8 +621,12 @@ kbd {
 }
 .panel-actions {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 0 12px;
   margin-top: 6px;
+}
+.over-panel .panel-actions {
+  justify-content: center;
 }
 .panel-actions .button {
   margin-top: 14px;
@@ -673,4 +690,298 @@ kbd {
   .controls-card {
     display: none;
   }
+}
+
+/* ----------------------------------------------------------- Stage 1 HUD */
+
+.hud-debug {
+  position: absolute;
+  top: 48px;
+  right: 28px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  text-align: right;
+  white-space: pre;
+  color: var(--amber);
+  background: rgba(8, 10, 12, 0.6);
+  border: 1px solid var(--line);
+}
+
+.hud-scrap {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 10px;
+  line-height: 1;
+}
+.hud-scrap-count {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+}
+.hud-ammo.dry .hud-ammo-reserve {
+  color: var(--red);
+}
+.hud-slots {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+.hud-slot {
+  opacity: 0.55;
+}
+.hud-slot.current {
+  opacity: 1;
+  color: var(--ink);
+}
+.hud-slot.empty {
+  opacity: 0.3;
+}
+.hud-slot b {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 5px;
+  font-family: var(--mono);
+  font-weight: 400;
+  border: 1px solid var(--line);
+}
+
+/* Scrap earned floats up beside the crosshair. */
+.scrap-pops {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+}
+.scrap-pop {
+  position: absolute;
+  left: 34px;
+  top: -8px;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--amber);
+  white-space: nowrap;
+  animation: scrap-rise 0.9s ease-out forwards;
+}
+.scrap-pop.big {
+  font-size: 26px;
+  color: #ffd27a;
+}
+.scrap-pop.spent {
+  color: var(--ink-dim);
+}
+@keyframes scrap-rise {
+  from {
+    opacity: 0;
+    transform: translate(0, 6px);
+  }
+  18% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--drift, 0px), -46px);
+  }
+}
+
+/* Round announcements. */
+.hud-banner {
+  position: absolute;
+  top: 17%;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+}
+.hud-banner.show {
+  animation: banner 3.2s ease-out forwards;
+}
+.hud-banner-sub {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.34em;
+  color: var(--amber);
+}
+.hud-banner-title {
+  margin-top: 4px;
+  font-size: clamp(44px, 6vw, 86px);
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  line-height: 1;
+  color: var(--ink);
+}
+@keyframes banner {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(1.06);
+  }
+  10% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  72% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -6px);
+  }
+}
+
+/* Purchase prompt: what F will do here, and what it costs. */
+.hud-prompt {
+  position: absolute;
+  left: 50%;
+  bottom: 17%;
+  transform: translate(-50%, 6px);
+  padding: 11px 18px 10px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-bottom: 2px solid var(--amber);
+  opacity: 0;
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+.hud-prompt.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.hud-prompt-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.hud-prompt kbd {
+  min-width: 28px;
+  padding: 1px 8px;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: #0b0d0f;
+  background: var(--amber);
+}
+.hud-prompt-cost {
+  font-weight: 700;
+  color: var(--amber);
+}
+.hud-prompt-cost:empty {
+  display: none;
+}
+.hud-prompt-note {
+  margin-top: 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--ink-dim);
+}
+.hud-prompt-note:empty {
+  display: none;
+}
+.hud-prompt.locked {
+  border-bottom-color: var(--red);
+}
+.hud-prompt.locked kbd {
+  background: #5b6066;
+}
+.hud-prompt.locked .hud-prompt-cost,
+.hud-prompt.locked .hud-prompt-note {
+  color: var(--red);
+}
+
+/* A marker over each of the last few robots of a round. */
+.robot-marker {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.robot-marker i {
+  position: absolute;
+  left: -7px;
+  top: -7px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--red);
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.robot-marker span {
+  position: absolute;
+  left: 14px;
+  top: -8px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--red);
+  white-space: nowrap;
+}
+.robot-marker.edge i {
+  background: var(--red);
+}
+
+/* ------------------------------------------------------------- Game over */
+
+.over {
+  background: radial-gradient(ellipse at center, rgba(40, 4, 2, 0.35) 0%, rgba(4, 5, 6, 0.82) 70%);
+}
+.over-panel {
+  width: min(620px, 92vw);
+  text-align: center;
+}
+.over-title {
+  font-size: clamp(34px, 4.4vw, 56px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.05;
+}
+.over-title span {
+  color: var(--red);
+}
+.over-best {
+  min-height: 20px;
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  color: var(--amber);
+}
+.over-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 28px;
+  margin: 24px 0 6px;
+  text-align: left;
+}
+.over-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 16px;
+  letter-spacing: 0.06em;
+  color: var(--ink-dim);
+}
+.over-stat b {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }

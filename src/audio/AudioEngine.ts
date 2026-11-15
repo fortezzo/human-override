@@ -246,6 +246,31 @@ export class AudioEngine {
     osc.stop(t + 0.15);
   }
 
+  /** The rush of air from a fast swing: a short burst of noise swept through a band. */
+  whoosh(strength = 1): void {
+    if (this.context.state !== 'running') return;
+    const ctx = this.context;
+    const t = ctx.currentTime;
+    const length = Math.floor(ctx.sampleRate * 0.28);
+    const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < length; i++) data[i] = Math.random() * 2 - 1;
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    const band = ctx.createBiquadFilter();
+    band.type = 'bandpass';
+    band.Q.value = 1.1;
+    band.frequency.setValueAtTime(380, t);
+    band.frequency.exponentialRampToValueAtTime(2100, t + 0.11);
+    band.frequency.exponentialRampToValueAtTime(600, t + 0.26);
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(0.34 * strength, t + 0.07);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.27);
+    source.connect(band).connect(gain).connect(this.buses.get('weapons')!);
+    source.start(t);
+  }
+
   /** Build the echo of a hard-walled room: decaying noise with early slaps. */
   private roomImpulse(seconds: number): AudioBuffer {
     const ctx = this.context;

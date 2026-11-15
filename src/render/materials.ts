@@ -44,6 +44,11 @@ const DEFS = {
   hazard: { surface: 'PaintedMetal016', tile: 1.3, kind: 'metal', tint: 0xece6d6, roughness: 1.0 },
   darkSteel: { surface: 'Metal046B', tile: 1.0, kind: 'metal', tint: 0xcfd4d9, roughness: 1.0 },
   cable: { surface: 'Metal046B', tile: 0.5, kind: 'soft', tint: 0x3a3d42, roughness: 1.0, metalness: 0.1 },
+  // The same plaster in the taller rooms, with the stains reaching down from their own ceilings.
+  wallHall: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xd2d6d6, roughness: 0.82, normalScale: 0.9, weathering: { rail: 1.25, ceiling: 5.1 } },
+  wallPower: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xd8cfbe, roughness: 0.82, normalScale: 0.9, weathering: { rail: 1.25, ceiling: 4.7 } },
+  rackSteel: { surface: 'Metal046B', tile: 1.3, kind: 'metal', tint: 0x9aa1aa, roughness: 1.0 },
+  coreSteel: { surface: 'metal_plate_02', tile: 2.4, kind: 'metal', tint: 0x8b929b, roughness: 0.9, normalScale: 1.2 },
 } satisfies Record<string, MaterialDef>;
 
 export type MaterialKey = keyof typeof DEFS;

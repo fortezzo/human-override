@@ -31,8 +31,6 @@ export function buildMarkings(b: LevelBuilder, atlas: SignAtlas): void {
   // ---- South wall: the way deeper in.
   const serverHall = atlas.text('SERVER HALL', { size: 110, color: PAINT.amber, plate: '#0d0f11', wear: 0 });
   put(serverHall, [0, BLAST_DOOR.top + 0.18, z1 - 0.165], S, 2.2, { emissive: 2.6, tint: 0xffb060 });
-  put(atlas.text('B', { size: 300, wear: 0.5 }), [1.05, 2.42, z1 + 0.158], S, 0.36, { opacity: 0.85 });
-  put(atlas.text('02', { size: 300, wear: 0.5 }), [-1.05, 2.42, z1 + 0.158], S, 0.66, { opacity: 0.85 });
   // Red paint is darker than the wall in this light, so the two warning
   // signs are painted on a pale panel, the way real hazard signs are.
   put(atlas.text(['NO NETWORKED DEVICES', 'BEYOND THIS POINT'], { size: 58, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.35 }), [4.15, 2.25, z1], S, 2.3, { opacity: 0.9 });

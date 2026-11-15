@@ -1,12 +1,14 @@
 // The game itself: owns the scene and every system, and runs the frame loop.
 //
-// Stage 0 is a look test: one room, one robot at a time, one rifle. Rounds,
-// scrap and the mission arrive in later stages and plug in here.
+// A run goes: title screen -> playing (rounds of robots, scrap, purchases)
+// -> the player goes down -> game over -> play again, all without reloading
+// the page. The rules live in src/sim; the pieces that connect them to the
+// 3D world live beside this file (Director, Combat, Interactions).
 
 import * as THREE from 'three';
 import { acceleratedRaycast } from 'three-mesh-bvh';
 import { AudioEngine } from '../audio/AudioEngine';
-import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, RIFLE, ROBOT, type QualityLevel } from '../config';
+import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
 import { Input } from '../core/input';
 import { damp, rand } from '../core/math';
@@ -14,28 +16,43 @@ import { settings } from '../core/settings';
 import { Player } from '../entities/Player';
 import { Gibs } from '../entities/robot/Gibs';
 import { DRUDGE } from '../entities/robot/designs/drudge';
-import { Robot } from '../entities/robot/Robot';
+import { Robot, type RobotTraits } from '../entities/robot/Robot';
 import { RobotModel } from '../entities/robot/RobotModel';
-import { RifleController, type ShotEvent } from '../entities/weapon/RifleController';
-import { RifleView } from '../entities/weapon/RifleView';
+import { WeaponController } from '../entities/weapon/WeaponController';
+import { WeaponView } from '../entities/weapon/WeaponView';
 import { BulletDecals } from '../fx/BulletDecals';
 import { Casings } from '../fx/Casings';
 import { Effects } from '../fx/Effects';
 import { Particles } from '../fx/Particles';
-import { DustMotes, updateShaftTime } from '../render/atmosphere';
+import { updateShaftTime } from '../render/atmosphere';
 import { LightRig } from '../render/lighting';
 import { MaterialLibrary, type SurfaceKind } from '../render/materials';
 import { bakeReflectionProbe, blankEnvironment } from '../render/reflectionProbe';
 import { Renderer } from '../render/Renderer';
-import { createNavGrid, floodFrom, type NavGrid } from '../sim/navGrid';
-import { damageForZone } from '../sim/robotMind';
-import { buildLobby, type Lobby } from '../world/lobby';
-import { NAV_BOUNDS, PLAYER_START, ROBOT_SPAWN, ROOM } from '../world/lobby/plan';
+import { createWallet, earn, type Wallet } from '../sim/economy';
+import { floodFrom } from '../sim/navGrid';
+import { ROOM, PLAYER_START } from '../world/lobby/plan';
+import { AREA_CENTRES, AREA_IDS, type AreaId } from '../world/plan';
+import { World } from '../world/World';
+import { Combat, type HitResult } from './Combat';
+import { Director } from './Director';
+import { Interactions, type Purchase } from './Interactions';
+import { createRunStats, saveBest, type RunStats } from './RunStats';
 
 // Fast ray tests against the level for bullets.
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-export type GameState = 'title' | 'playing' | 'paused';
+export type GameState = 'title' | 'playing' | 'paused' | 'over';
+
+/** A robot to point out on the HUD when only a few are left. */
+export interface Marker {
+  /** Position on screen, -1..1 across and up. Clamped to the edge when the robot is out of view. */
+  x: number;
+  y: number;
+  onScreen: boolean;
+  /** Metres from the player. */
+  distance: number;
+}
 
 export class Game {
   readonly scene = new THREE.Scene();
@@ -45,49 +62,61 @@ export class Game {
   readonly renderer: Renderer;
   readonly input: Input;
   readonly player: Player;
-  readonly rifle: RifleController;
+  readonly weapons: WeaponController;
+  readonly robots: Robot[] = [];
+
+  world!: World;
+  lights!: LightRig;
+  director!: Director;
+  interactions!: Interactions;
+  /** Scrap, and what happened this run. */
+  wallet: Wallet = createWallet(SCRAP.start);
+  stats: RunStats = createRunStats();
 
   state: GameState = 'title';
   onStateChange: (state: GameState) => void = () => {};
   onQualityChange: (level: QualityLevel, automatic: boolean) => void = () => {};
-  /** A shot landed on a robot. */
-  onHit: (weakPoint: boolean, kill: boolean) => void = () => {};
+  /** A shot or strike landed on a robot. */
+  onHit: (hit: HitResult) => void = () => {};
   /** The player was hurt; `angle` is the attacker's bearing relative to the view. */
   onPlayerHurt: (angle: number) => void = () => {};
-  onPlayerDown: () => void = () => {};
+  onRound: (event: 'start' | 'clear', round: number) => void = () => {};
+  onPurchase: (purchase: Purchase) => void = () => {};
+  onDenied: () => void = () => {};
+  /** The run ended. `best` is true if it beat the best round so far. */
+  onGameOver: (stats: RunStats, best: boolean) => void = () => {};
 
   /** Debug only: overrides where the camera sits and looks. */
   debugCamera: { position: THREE.Vector3; yaw: number; pitch: number; fov?: number } | null = null;
   /** Debug only: the player takes no damage. */
   godMode = false;
-  /** Debug only: hide the rifle (for photographs of the room). */
+  /** Debug only: hide the weapon (for photographs of the room). */
   hideWeapon = false;
+  /** Debug only: something that plays the game by itself, called once per frame while playing. */
+  autopilot: { update(dt: number): void } | null = null;
 
   private materials!: MaterialLibrary;
-  private lobby!: Lobby;
-  lights!: LightRig;
-  private dust!: DustMotes;
-  private nav!: NavGrid;
-  private rifleView!: RifleView;
+  private view!: WeaponView;
   private robotModel!: RobotModel;
   private gibs!: Gibs;
+  private combat!: Combat;
   private readonly particles = new Particles();
   private readonly decals = new BulletDecals();
   private readonly casings = new Casings();
   private readonly effects = new Effects(this.particles, this.decals);
-  readonly robots: Robot[] = [];
+  /** The room's own reflections, photographed once per area. */
+  private readonly environments = new Map<AreaId, THREE.Texture>();
 
-  private readonly raycaster = new THREE.Raycaster();
   private quality: QualityLevel = 'high';
   private time = 0;
   private running = false;
   private lastFrame = 0;
-  private respawnTimer = 0;
   private fade = 1;
   private fadeTarget = 1;
   private bedsStarted = false;
-  private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2 };
+  private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2, step: 0 };
   private nextDrip = 2;
+  private nextFocus = 0;
 
   /** How long each part of start-up took, in milliseconds (for the performance report). */
   readonly loadTimings: Record<string, number> = {};
@@ -99,7 +128,6 @@ export class Game {
 
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
-  private readonly tmpC = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement) {
     this.renderer = new Renderer(this.scene, this.camera, container);
@@ -108,8 +136,7 @@ export class Game {
 
     this.input = new Input(this.renderer.three.domElement);
     this.player = new Player(this.camera, this.input);
-    this.rifle = new RifleController(this.camera, this.input);
-    this.raycaster.firstHitOnly = true;
+    this.weapons = new WeaponController(this.camera, this.input);
 
     this.input.onLockChange = (locked) => {
       if (locked) this.setState('playing');
@@ -137,44 +164,43 @@ export class Game {
       mark = now;
     };
 
-    await this.assets.load((data) => this.audio.decode(data), (f) => onProgress(f * 0.92));
+    await this.assets.load((data) => this.audio.decode(data), (f) => onProgress(f * 0.9));
     this.audio.attach(this.assets);
     lap('download and decode');
 
     this.materials = new MaterialLibrary(this.assets);
-    this.lobby = buildLobby(this.assets, this.materials);
-    this.scene.add(this.lobby.group);
-    for (const solid of this.lobby.solids) solid.updateMatrixWorld(true);
+    this.world = new World(this.assets, this.materials);
+    this.scene.add(this.world.group);
+    this.world.onDoorPassable = () => this.refocus();
 
     this.scene.fog = new THREE.FogExp2(LOOKDEV.fogColor, LOOKDEV.fogDensity);
     this.scene.background = this.assets.sky;
     this.scene.backgroundIntensity = 0.22;
     this.scene.add(new THREE.HemisphereLight(LOOKDEV.ambientSky, LOOKDEV.ambientGround, LOOKDEV.ambientIntensity));
 
-    this.lights = new LightRig(this.lobby.lights);
+    this.lights = new LightRig(this.world.lights);
     this.scene.add(this.lights.group);
-
-    this.dust = new DustMotes([ROOM.x0, 0.1, ROOM.z0 - 6], [ROOM.x1, ROOM.height - 0.4, ROOM.z1], this.lobby.dustBeams);
-    this.scene.add(this.dust.points, this.particles.group, this.decals.group, this.casings.mesh);
-
-    this.nav = createNavGrid(NAV_BOUNDS, 0.3, this.lobby.colliders, ROBOT.radius + 0.06, 0.3, 1.8);
+    this.scene.add(this.particles.group, this.decals.group, this.casings.mesh);
 
     this.robotModel = new RobotModel(this.assets, DRUDGE);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
 
-    this.rifleView = new RifleView(this.assets);
-    this.camera.add(this.rifleView.root);
-    this.scene.add(this.rifleView.muzzleLight);
+    this.view = new WeaponView(this.assets);
+    this.camera.add(this.view.root);
+    this.scene.add(this.view.muzzleLight);
 
+    this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits));
+    this.combat = new Combat(this.world, this.robots, this.player, this.camera, this.view, this.effects, this.casings, this.audio);
+    this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet);
     this.wireEvents();
+
     this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
-    this.spawnRobot(0, ROOM.z0 - 1.4, true);
+    this.spawnTitleRobot();
 
     this.setQuality(this.pickStartingQuality(), false);
     this.resize();
     window.addEventListener('resize', () => this.resize());
-
     lap('build world');
 
     // Compile every shader up front, in the background, so neither the first
@@ -182,7 +208,7 @@ export class Game {
     // blank stand-in environment is in place first: shaders are built
     // differently with and without reflections, and this way they are only
     // ever built once.
-    onProgress(0.96);
+    onProgress(0.94);
     this.scene.environment = blankEnvironment(this.renderer.three);
     this.scene.environmentIntensity = 0;
     const hidden = this.revealForCompile();
@@ -198,6 +224,7 @@ export class Game {
     for (const object of hidden) object.visible = false;
     lap('compile shaders');
 
+    onProgress(0.97);
     this.bakeReflections();
     lap('bake reflections');
     this.frame(0);
@@ -206,10 +233,58 @@ export class Game {
   }
 
   private wireEvents(): void {
-    const { rifle, player, audio } = this;
-    rifle.onShot = (shot) => this.handleShot(shot);
-    rifle.onDryFire = () => audio.play('rifleDry');
-    rifle.onReloadStage = (stage) => audio.play(stage === 'magOut' ? 'reloadMagOut' : stage === 'magIn' ? 'reloadMagIn' : 'reloadBolt');
+    const { weapons, player, audio, combat, director, interactions } = this;
+    weapons.onShot = (shot) => combat.shot(shot);
+    weapons.onDryFire = () => audio.play('rifleDry');
+    weapons.onReloadStage = (stage) => audio.play(stage === 'magOut' ? 'reloadMagOut' : stage === 'magIn' ? 'reloadMagIn' : 'reloadBolt');
+    weapons.onSwitch = (weapon) => {
+      this.view.show(weapon.id);
+      audio.play('weaponSwitch');
+    };
+    weapons.onMelee = () => combat.swing();
+    weapons.onMeleeLand = () => combat.strike();
+
+    combat.onHit = (hit) => {
+      earn(this.wallet, hit.scrap);
+      this.stats.scrapEarned += hit.scrap;
+      if (hit.killed) {
+        this.stats.kills++;
+        if (hit.weakPoint) this.stats.weakPointKills++;
+        if (hit.melee) this.stats.meleeKills++;
+        director.destroyed();
+      }
+      this.onHit(hit);
+    };
+    combat.onShotFired = (hit) => {
+      this.stats.shots++;
+      if (hit) this.stats.shotsHit++;
+    };
+
+    director.onRoundStart = (round) => {
+      this.stats.round = round;
+      audio.play('sting');
+      this.onRound('start', round);
+    };
+    director.onRoundClear = (round) => {
+      audio.play('roundClear');
+      this.onRound('clear', round);
+    };
+
+    interactions.onPurchase = (purchase) => {
+      this.stats.scrapSpent += purchase.cost;
+      audio.play('buy');
+      if (purchase.kind === 'door') {
+        this.stats.doorsOpened++;
+        audio.play('doorOpen', { position: purchase.door.centre });
+        player.addShake(0.12);
+      }
+      this.onPurchase(purchase);
+    };
+    interactions.onDenied = () => {
+      audio.play('deny');
+      this.onDenied();
+    };
+
     player.onStep = () => audio.play('step', { gain: player.sprinting ? 1.2 : 0.8 });
     player.onLand = (impact) => audio.play('land', { gain: 0.4 + impact });
     this.casings.onBounce = (position, speed) => {
@@ -236,21 +311,43 @@ export class Game {
     return revealed;
   }
 
-  /** Re-photograph the room for reflections and bounce light. */
+  /** Photograph every area for its reflections and bounce light. */
   private bakeReflections(): void {
     const preset = QUALITY[this.quality];
-    const hidden = [this.dust.points, this.particles.group, this.gibs.group, this.casings.mesh, this.rifleView.root, ...this.robots.map((r) => r.root)];
-    const centre = new THREE.Vector3(0, 1.7, 0.5);
-    // Two passes: the first captures direct light only; the second sees the
-    // first's bounce light, so shadowed corners pick up a little colour
-    // from the lit parts of the room.
-    this.scene.environmentIntensity = 0;
-    for (let pass = 0; pass < 2; pass++) {
-      const previous = this.scene.environment;
-      this.scene.environment = bakeReflectionProbe(this.renderer.three, this.scene, centre, preset.reflectionProbeSize, hidden);
-      this.scene.environmentIntensity = LOOKDEV.environmentIntensity;
-      previous?.dispose();
+    const hidden: THREE.Object3D[] = [this.particles.group, this.gibs.group, this.casings.mesh, this.view.root, ...this.robots.map((r) => r.root)];
+    for (const motes of this.world.dust.values()) hidden.push(motes.points);
+    const shown = new Map<AreaId, boolean>();
+    for (const [id, area] of this.world.areas) shown.set(id, area.group.visible);
+
+    for (const id of AREA_IDS) {
+      for (const [other, area] of this.world.areas) area.group.visible = other === id;
+      const centre = new THREE.Vector3(...AREA_CENTRES[id]);
+      this.lights.focus(centre, new Map([[id, 1]]), true);
+      this.environments.get(id)?.dispose();
+      // The lobby gets two passes: the second sees the first's bounce light,
+      // so shadowed corners pick up a little colour from the lit parts of
+      // the room. The other areas make do with one, to keep loading short.
+      this.scene.environmentIntensity = 0;
+      let environment = bakeReflectionProbe(this.renderer.three, this.scene, centre, preset.reflectionProbeSize, hidden);
+      if (id === 'lobby') {
+        const first = environment;
+        this.scene.environment = first;
+        this.scene.environmentIntensity = LOOKDEV.environmentIntensity;
+        environment = bakeReflectionProbe(this.renderer.three, this.scene, centre, preset.reflectionProbeSize, hidden);
+        first.dispose();
+      }
+      this.environments.set(id, environment);
     }
+    for (const [id, area] of this.world.areas) area.group.visible = shown.get(id)!;
+    this.scene.environment = this.environments.get(this.world.playerArea)!;
+    this.scene.environmentIntensity = LOOKDEV.environmentIntensity;
+    this.refocus(true);
+  }
+
+  /** Hand the live lights to whatever can be seen from where the camera is. */
+  private refocus(instant = false): void {
+    this.lights.focus(this.camera.position, this.world.visible, instant);
+    this.nextFocus = this.time + 0.25;
   }
 
   private pickStartingQuality(): QualityLevel {
@@ -272,13 +369,14 @@ export class Game {
     this.renderer.applyQuality(preset);
     this.materials.setAnisotropy(Math.min(preset.anisotropy, this.renderer.maxAnisotropy));
     this.lights.applyQuality(preset);
-    this.dust.setCount(preset.dustMotes);
+    this.refocus(true);
+    for (const motes of this.world.dust.values()) motes.setCount(preset.dustMotes);
     this.particles.density = preset.particleScale;
-    for (const { effect } of this.lobby.haze) effect.mesh.visible = preset.lightShafts;
+    for (const area of this.world.areas.values()) for (const { effect } of area.haze) effect.mesh.visible = preset.lightShafts;
     this.settleUntil = this.time + GOVERNOR.settle;
     this.lowFpsTime = 0;
     // Lights changed, so the baked reflections are out of date.
-    if (changed && this.scene.environment) this.bakeReflections();
+    if (changed && this.environments.size) this.bakeReflections();
     this.onQualityChange(level, automatic);
   }
 
@@ -292,7 +390,7 @@ export class Game {
 
   // ------------------------------------------------------------------ state
 
-  /** Called from the start button: capture the mouse and begin. */
+  /** Called from a button: capture the mouse, which starts or resumes play. */
   requestPlay(): void {
     this.audio.resume();
     this.input.lock();
@@ -305,17 +403,76 @@ export class Game {
     if (state === 'playing') {
       this.audio.resume();
       this.startBeds();
-      if (from === 'title') {
-        for (const robot of this.robots) robot.hold = false;
-        this.audio.play('sting');
-      }
+      if (from === 'title' || from === 'over') this.beginRun();
       // Throw away mouse movement that built up while not playing.
       this.input.consumeLook();
       this.lastFrame = performance.now();
     } else if (state === 'paused') {
       this.audio.suspend();
+    } else if (state === 'title') {
+      this.audio.resume();
+      this.resetWorld();
+      this.spawnTitleRobot();
+      this.fadeTarget = 1;
     }
     this.onStateChange(state);
+  }
+
+  /** Put the map and everything in it back to how a run starts. */
+  private resetWorld(): void {
+    for (const robot of this.robots) robot.dispose();
+    this.robots.length = 0;
+    this.gibs.clear();
+    this.decals.clear();
+    this.casings.clear();
+    this.particles.clear();
+    this.world.reset();
+    this.director.reset();
+    this.director.forceEntry = null;
+    this.weapons.reset();
+    this.view.show(this.weapons.def.id);
+    this.wallet = createWallet(SCRAP.start);
+    this.stats = createRunStats();
+    this.interactions.prompt = null;
+    this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
+    this.scene.environment = this.environments.get('lobby') ?? this.scene.environment;
+  }
+
+  /** Start a fresh run from round 1. */
+  private beginRun(): void {
+    this.resetWorld();
+    this.fade = 0.25;
+    this.fadeTarget = 1;
+    this.camera.position.set(PLAYER_START.x, 1.64, PLAYER_START.z);
+    this.refocus(true);
+  }
+
+  /**
+   * Start a new run from round 1, from the pause menu or the game-over
+   * screen. The run begins the moment the mouse is captured again.
+   */
+  restart(capture = true): void {
+    if (this.state === 'playing') return;
+    this.state = 'over';
+    if (capture) this.requestPlay();
+  }
+
+  /** Leave a finished run for the title screen. */
+  toTitle(): void {
+    this.setState('title');
+  }
+
+  /** The player went down: the run is over. */
+  private endRun(): void {
+    if (this.state !== 'playing') return;
+    this.state = 'over';
+    this.fadeTarget = 0.32;
+    this.audio.play('gameOver');
+    for (const action of ['fire', 'aim', 'sprint', 'forward', 'back', 'left', 'right'] as const) this.input.release(action);
+    const best = saveBest(this.stats);
+    this.input.unlock();
+    this.onStateChange('over');
+    this.onGameOver(this.stats, best);
   }
 
   private startBeds(): void {
@@ -353,7 +510,8 @@ export class Game {
     this.time += step;
 
     if (this.state === 'playing') this.updatePlay(step);
-    else if (this.state === 'title') this.updateTitle(step);
+    else if (this.state === 'title') this.updateTitle();
+    else if (this.state === 'over') this.view.root.visible = false;
 
     if (this.debugCamera) {
       const { position, yaw, pitch, fov } = this.debugCamera;
@@ -363,29 +521,34 @@ export class Game {
         this.camera.fov = fov;
         this.camera.updateProjectionMatrix();
       }
+      // Draw and light whichever area the camera has been parked in.
+      if (this.world.track(position.x, position.z)) this.areaChanged();
     }
     this.camera.updateMatrixWorld(true);
 
     if (simulate) {
+      this.world.update(step, this.time);
       this.updateRobots(step);
       // The jammed shutter's torn wiring spits sparks now and then.
       if (this.time > this.nextDrip) {
         this.nextDrip = this.time + rand(1.8, 6);
-        this.effects.drip(this.tmpA.set(rand(1.2, 1.75) * (Math.random() < 0.75 ? 1 : -1), 2.02, ROOM.z0 - 0.28));
+        if (this.world.areas.get('lobby')!.group.visible) this.effects.drip(this.tmpA.set(rand(1.2, 1.75) * (Math.random() < 0.75 ? 1 : -1), 2.02, ROOM.z0 - 0.28));
       }
-      this.gibs.update(step, this.lobby.colliders);
+      this.gibs.update(step, this.world.colliders);
       this.casings.update(step);
       this.particles.update(step);
+      if (this.time >= this.nextFocus) this.refocus();
       this.lights.update(this.time);
-      this.lobby.screens.update(this.time);
-      for (const { effect, follows } of this.lobby.haze) {
-        if (follows) effect.setLevel(this.lights.levelOf(follows));
+      const height = this.renderer.three.domElement.height;
+      for (const [id, area] of this.world.areas) {
+        if (!area.group.visible) continue;
+        for (const { effect, follows } of area.haze) if (follows) effect.setLevel(this.lights.levelOf(follows));
+        updateShaftTime(
+          area.haze.map((h) => h.effect),
+          this.time,
+        );
+        this.world.dust.get(id)!.update(this.time, height);
       }
-      updateShaftTime(
-        this.lobby.haze.map((h) => h.effect),
-        this.time,
-      );
-      this.dust.update(this.time, this.renderer.three.domElement.height);
     }
 
     this.audio.setListener(this.camera);
@@ -398,31 +561,36 @@ export class Game {
   }
 
   private updatePlay(dt: number): void {
-    const { player, rifle, input } = this;
+    const { player, weapons, input } = this;
+    this.autopilot?.update(dt);
     const look = input.consumeLook();
-    const wantAim = input.isDown('aim') && !rifle.reloading;
-    player.update(dt, this.lobby.colliders, wantAim, look);
+    const def = weapons.def;
+    player.aimFov = def.aimFov;
+    player.aimTime = def.aimTime;
+    const wantAim = input.isDown('aim') && !weapons.busy;
+    player.update(dt, this.world.colliders, wantAim, look);
     this.camera.updateMatrixWorld(true);
-    rifle.update(dt, player);
-    this.rifleView.root.visible = !this.hideWeapon;
-    this.rifleView.update(dt, player, look, rifle.reload);
+    if (!this.debugCamera && this.world.track(player.position.x, player.position.z)) this.areaChanged();
 
-    // Stage 0: keep one robot coming. The next is sent in a few seconds
-    // after the last one has finished breaking apart.
-    if (this.robots.length === 0) {
-      this.respawnTimer -= dt;
-      if (this.respawnTimer <= 0) {
-        this.spawnRobot(ROBOT_SPAWN.x + rand(-1.2, 1.2), ROBOT_SPAWN.z, false);
-        this.respawnTimer = ROBOT.respawnDelay;
-      }
-    }
+    weapons.update(dt, player);
+    this.view.root.visible = !this.hideWeapon;
+    this.view.update(dt, player, look, { reload: weapons.reload, swap: weapons.swap, strike: weapons.strike });
+
+    this.interactions.update(input.wasPressed('interact'));
+    this.director.update(dt);
+    this.stats.time += dt;
+  }
+
+  /** The player (or the debug camera) has walked into a different area. */
+  private areaChanged(): void {
+    this.scene.environment = this.environments.get(this.world.playerArea) ?? this.scene.environment;
+    this.refocus();
   }
 
   /** Start screen: a slow drifting camera with a robot waiting in the doorway. */
-  private updateTitle(dt: number): void {
-    void dt;
+  private updateTitle(): void {
     const t = this.time;
-    this.rifleView.root.visible = false;
+    this.view.root.visible = false;
     this.camera.position.set(Math.sin(t * 0.08) * 1.7 + 0.6, 1.72 + Math.sin(t * 0.13) * 0.1, 5.4 + Math.cos(t * 0.06) * 0.5);
     this.camera.rotation.set(-0.02 + Math.sin(t * 0.1) * 0.012, Math.sin(t * 0.08) * 0.12 - 0.03, 0);
     if (Math.abs(this.camera.fov - 60) > 0.01) {
@@ -433,36 +601,51 @@ export class Game {
 
   // ----------------------------------------------------------------- robots
 
-  /** Remove every robot at once (for tests and screenshots). The next one is sent after the usual delay. */
+  /** Remove every robot at once (for tests and screenshots). */
   clearRobots(): void {
     for (const robot of this.robots) robot.dispose();
     this.robots.length = 0;
-    this.respawnTimer = ROBOT.respawnDelay;
   }
 
-  spawnRobot(x: number, z: number, hold: boolean): Robot {
-    const robot = new Robot(this.robotModel, x, z, 0);
-    robot.hold = hold;
+  /** Add a robot to the map. */
+  addRobot(x: number, z: number, heading: number, traits?: RobotTraits): Robot {
+    const robot = new Robot(this.robotModel, x, z, heading, traits);
     this.robots.push(robot);
     this.scene.add(robot.root);
     return robot;
   }
 
+  /** The robot that stands in the breached doorway behind the title screen. */
+  private spawnTitleRobot(): void {
+    this.addRobot(0, ROOM.z0 - 1.4, 0).hold = true;
+  }
+
   private updateRobots(dt: number): void {
     const { player, audio } = this;
+    const playing = this.state === 'playing';
     const target = this.state === 'title' ? this.tmpA.set(PLAYER_START.x, 0, PLAYER_START.z) : player.position;
-    floodFrom(this.nav, target.x, target.z);
+    floodFrom(this.world.nav, target.x, target.z);
 
     this.soundClock.voice -= dt;
     this.soundClock.servo -= dt;
+    this.soundClock.step -= dt;
 
     for (let i = this.robots.length - 1; i >= 0; i--) {
       const robot = this.robots[i]!;
-      const events = robot.update(dt, target, this.state === 'playing' && player.alive, this.nav, this.lobby.colliders);
+      const events = robot.update(dt, target, playing && player.alive, this.world.nav, this.world.colliders, this.robots);
 
-      if (events.footstep) audio.play('robotStep', { position: robot.position });
+      // With a crowd on the map, not every footfall needs a sound.
+      if (events.footstep && this.soundClock.step <= 0) {
+        this.soundClock.step = 0.06;
+        audio.play('robotStep', { position: robot.position });
+      }
       if (events.attackStarted) audio.play('robotAttack', { position: robot.chest(this.tmpB) });
       if (events.hitPlayer > 0) this.hurtPlayer(events.hitPlayer, robot);
+      if (events.landed) {
+        audio.play('robotLand', { position: robot.position });
+        this.effects.landing(robot.position);
+        player.addShake(Math.max(0, 0.35 - robot.position.distanceTo(player.position) * 0.04));
+      }
 
       if (robot.alive && !robot.hold) {
         if (this.soundClock.voice <= 0) {
@@ -479,101 +662,54 @@ export class Game {
         this.gibs.burst(robot.bones, centre, robot.killImpulse);
         this.effects.robotDestroyed(centre);
         audio.play('robotDeath', { position: centre });
-        const distance = centre.distanceTo(this.camera.position);
-        player.addShake(Math.max(0, 0.5 - distance * 0.05));
+        player.addShake(Math.max(0, 0.5 - centre.distanceTo(this.camera.position) * 0.05));
         robot.dispose();
         this.robots.splice(i, 1);
-        this.respawnTimer = ROBOT.respawnDelay;
+      } else if (events.stuck && playing) {
+        // Never let a robot stay wedged somewhere: take it off and send it round again.
+        robot.dispose();
+        this.robots.splice(i, 1);
+        this.director.recalled();
       }
     }
   }
 
   private hurtPlayer(amount: number, robot: Robot): void {
     const { player } = this;
-    if (this.godMode || !player.alive) return;
+    if (this.godMode || !player.alive || this.state !== 'playing') return;
     player.damage(amount, robot.position.x, robot.position.z);
     this.audio.play('hurt');
     // Bearing of the attacker relative to where the player is looking.
     const dx = robot.position.x - player.position.x;
     const dz = robot.position.z - player.position.z;
     this.onPlayerHurt(Math.atan2(dx, -dz) + player.yaw);
-    if (!player.alive) this.playerDown();
+    if (!player.alive) this.endRun();
   }
 
-  /** Stage 0 has no game-over screen yet: fade out and reset the test. */
-  private playerDown(): void {
-    this.fadeTarget = 0;
-    this.onPlayerDown();
-    window.setTimeout(() => {
-      for (const robot of this.robots) robot.dispose();
-      this.robots.length = 0;
-      this.gibs.clear();
-      this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
-      this.respawnTimer = ROBOT.respawnDelay;
-      this.fadeTarget = 1;
-    }, 1100);
-  }
-
-  // --------------------------------------------------------------- shooting
-
-  private handleShot(shot: ShotEvent): void {
-    const { player, audio, effects } = this;
-    const { origin, direction } = shot;
-
-    // What does the bullet hit first: the level, or a robot?
-    this.raycaster.set(origin, direction);
-    this.raycaster.far = RIFLE.range;
-    const worldHit = this.raycaster.intersectObjects(this.lobby.solids, false)[0];
-    let limit = worldHit ? worldHit.distance : RIFLE.range;
-
-    let struck: Robot | null = null;
-    let zone: 'head' | 'torso' | 'limb' = 'torso';
-    const point = this.tmpA;
+  /** Robots to point out on the HUD: every one left, once only a few remain. */
+  markers(): Marker[] {
+    const out: Marker[] = [];
+    const remaining = this.director.remaining;
+    if (this.state !== 'playing' || remaining <= 0 || remaining > ROUNDS.markLast) return out;
     for (const robot of this.robots) {
-      const hit = robot.hitTest(origin, direction, limit);
-      if (hit) {
-        limit = hit.distance;
-        struck = robot;
-        zone = hit.zone;
-        point.copy(hit.point);
+      if (!robot.alive) continue;
+      const point = robot.chest(this.tmpA);
+      const distance = point.distanceTo(this.camera.position);
+      point.y += 0.75;
+      point.project(this.camera);
+      const behind = point.z > 1;
+      let x = behind ? -point.x : point.x;
+      let y = behind ? -point.y : point.y;
+      const onScreen = !behind && Math.abs(x) < 0.94 && Math.abs(y) < 0.9;
+      if (!onScreen) {
+        // Slide it to the edge of the screen in the robot's direction.
+        const scale = 0.9 / Math.max(Math.abs(x), Math.abs(y), 0.001);
+        x *= scale;
+        y *= scale;
       }
+      out.push({ x, y, onScreen, distance });
     }
-
-    const end = this.tmpC.copy(origin).addScaledVector(direction, limit);
-    if (struck) {
-      const weak = zone === 'head';
-      const result = struck.damage(damageForZone(RIFLE, zone), direction);
-      effects.robotHit(point, direction, weak);
-      audio.play(weak ? 'robotHitWeak' : 'robotHit', { position: point });
-      audio.play(result.killed ? 'killTick' : 'hitTick');
-      this.onHit(weak, result.killed);
-    } else if (worldHit) {
-      const normal = this.tmpB.copy(worldHit.face!.normal);
-      if (normal.dot(direction) > 0) normal.negate();
-      const kind = (worldHit.object.userData.kind as SurfaceKind) ?? 'concrete';
-      effects.bulletImpact(worldHit.point, normal, kind);
-      audio.play(kind === 'metal' ? 'impactMetal' : kind === 'concrete' ? 'impactConcrete' : 'impactSoft', { position: worldHit.point });
-    }
-
-    // Everything the shooter sees and feels.
-    const muzzle = this.rifleView.muzzleWorld();
-    effects.tracer(muzzle, end);
-    effects.muzzleSmoke(muzzle, direction);
-    this.rifleView.kick(player.aim);
-    player.addRecoil(RIFLE.recoilPitch + (RIFLE.recoilPitchAim - RIFLE.recoilPitch) * player.aim, rand(-RIFLE.recoilYaw, RIFLE.recoilYaw));
-    player.addShake(RIFLE.shake * (1 - player.aim * 0.35));
-    audio.play('rifleShot');
-    audio.thump(0.9);
-
-    // Spent casing out to the right.
-    const right = this.tmpB.setFromMatrixColumn(this.camera.matrixWorld, 0);
-    const velocity = new THREE.Vector3()
-      .copy(right)
-      .multiplyScalar(RIFLE.casingSpeed * rand(0.8, 1.2))
-      .addScaledVector(direction, -0.4)
-      .add(player.velocity);
-    velocity.y += rand(1.4, 2.2);
-    this.casings.eject(this.rifleView.ejectionPortWorld(), velocity);
+    return out;
   }
 
   /** In automatic mode, step quality down if the frame rate stays low. */
@@ -598,13 +734,24 @@ export class Game {
 
   // -------------------------------------------------------------- debugging
 
-  /** Counts used by the performance report. */
+  /** Counts used by the performance report and the tests. */
   get counts(): { robots: number; particles: number; gibs: number; aim: number; reticle: number; flash: boolean } {
-    return { robots: this.robots.length, particles: this.particles.active, gibs: this.gibs.active, aim: this.player.aim, ...this.rifleView.status };
+    return { robots: this.robots.length, particles: this.particles.active, gibs: this.gibs.active, aim: this.player.aim, ...this.view.status };
   }
 
   /** Debug only: a spark shower and bullet scars, for screenshots. */
   debugScar(point: THREE.Vector3, normal: THREE.Vector3, kind: SurfaceKind): void {
     this.effects.bulletImpact(point, normal, kind);
+  }
+
+  /** Debug only: scrap from nowhere. */
+  grantScrap(amount: number): void {
+    earn(this.wallet, amount);
+  }
+
+  /** Debug only: end the round now. */
+  skipRound(): void {
+    this.clearRobots();
+    this.director.skip();
   }
 }

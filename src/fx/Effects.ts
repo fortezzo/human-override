@@ -3,7 +3,7 @@
 // when a robot is destroyed.
 
 import * as THREE from 'three';
-import { FX, RIFLE } from '../config';
+import { FX } from '../config';
 import { rand } from '../core/math';
 import type { SurfaceKind } from '../render/materials';
 import type { BulletDecals } from './BulletDecals';
@@ -159,6 +159,14 @@ export class Effects {
     this.decals.add('scorch', new THREE.Vector3(centre.x, 0, centre.z), up, rand(1.1, 1.6));
   }
 
+  /** A robot dropping from a vent hits the floor: a ring of dust and a few sparks off its feet. */
+  landing(point: THREE.Vector3): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    const at = new THREE.Vector3(point.x, 0.05, point.z);
+    this.puff(at, up, this.particles.scaled(7), 1.4, 0.6, 0.46, 0.44, 0.41);
+    this.sparks(at, up, this.particles.scaled(8), 1.3, 1.5, 4, SPARK);
+  }
+
   /** A few sparks dripping from damaged machinery (ambient detail). */
   drip(point: THREE.Vector3): void {
     this.sparks(point, new THREE.Vector3(0, -1, 0), this.particles.scaled(5), 0.5, 0.3, 1.6, SPARK);
@@ -176,10 +184,10 @@ export class Effects {
       x: from.x + _dir.x * lead,
       y: from.y + _dir.y * lead,
       z: from.z + _dir.z * lead,
-      vx: _dir.x * RIFLE.tracerSpeed,
-      vy: _dir.y * RIFLE.tracerSpeed,
-      vz: _dir.z * RIFLE.tracerSpeed,
-      life: Math.max(0.02, (distance - lead) / RIFLE.tracerSpeed),
+      vx: _dir.x * FX.tracerSpeed,
+      vy: _dir.y * FX.tracerSpeed,
+      vz: _dir.z * FX.tracerSpeed,
+      life: Math.max(0.02, (distance - lead) / FX.tracerSpeed),
       size: 0.032,
       r: 7,
       g: 5,

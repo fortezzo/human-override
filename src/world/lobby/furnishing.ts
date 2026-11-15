@@ -101,8 +101,8 @@ function buildClutter(b: LevelBuilder): void {
   b.prop('cardboard_box_01', { at: [x0 + 1.25, 0, 0.1], rotY: 0.3, kind: 'soft' });
   b.prop('cardboard_box_01', { at: [x0 + 1.3, 0.34, 0.14], rotY: -0.25, kind: 'soft', collide: false });
   b.prop('cardboard_box_01', { at: [x0 + 1.95, 0, -0.55], rotY: 1.3, kind: 'soft' });
-  b.prop('metal_stool_02', { at: [x0 + 1.1, 0, 2.9], rotY: 0.3 });
-  b.prop('metal_stool_02', { at: [x0 + 1.9, 0.22, 2.2], rot: [HALF_PI, 0.9, 0] });
+  b.prop('metal_stool_02', { at: [x0 + 0.7, 0, 1.3], rotY: 0.3 });
+  b.prop('metal_stool_02', { at: [x0 + 2.6, 0.22, 1.5], rot: [HALF_PI, 0.9, 0] });
 
   // South-west corner: shelving, crates and a parts cart.
   b.prop('worn_metal_rack', { at: [x0 + 2.2, 0, z1 - 0.34], rotY: Math.PI });

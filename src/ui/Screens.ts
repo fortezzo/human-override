@@ -1,5 +1,6 @@
 // The full-screen overlays: loading, the start screen, pause with its
-// settings, the credits list, and the "use a computer" notice for phones.
+// settings, game over, the credits list, and the "use a computer" notice
+// for phones.
 
 import { BRIGHTNESS, QUALITY, QUALITY_ORDER, type QualityLevel } from '../config';
 import { settings } from '../core/settings';
@@ -20,15 +21,37 @@ const CONTROLS: Array<[string, string]> = [
   ['Left click', 'Fire'],
   ['Right click', 'Aim down sights'],
   ['R', 'Reload'],
+  ['V', 'Melee strike'],
+  ['F', 'Buy / open'],
+  ['1  2  wheel', 'Switch weapon'],
   ['Shift', 'Sprint'],
   ['Space', 'Jump'],
   ['Esc', 'Pause and settings'],
   ['M', 'Mute'],
 ];
 
+/** The numbers shown on the game-over screen. */
+export interface RunSummary {
+  round: number;
+  kills: number;
+  weakPointKills: number;
+  meleeKills: number;
+  /** 0..1 */
+  accuracy: number;
+  scrapEarned: number;
+  /** Seconds. */
+  time: number;
+  best: boolean;
+  bestRound: number;
+}
+
 export class Screens {
   onStart: Handler = () => {};
   onResume: Handler = () => {};
+  /** Start a new run (from the pause menu or the game-over screen). */
+  onRestart: Handler = () => {};
+  /** Leave for the title screen. */
+  onQuit: Handler = () => {};
   onQuality: (choice: QualityLevel | 'auto') => void = () => {};
   onClick: Handler = () => {};
   onHover: Handler = () => {};
@@ -37,7 +60,9 @@ export class Screens {
   private readonly loadingBar: HTMLElement;
   private readonly loadingText: HTMLElement;
   private readonly title: HTMLElement;
+  private readonly titleNote: HTMLElement;
   private readonly pause: HTMLElement;
+  private readonly over: HTMLElement;
   private readonly credits: HTMLElement;
   private readonly touch: HTMLElement;
   private readonly qualityButtons = new Map<string, HTMLElement>();
@@ -64,14 +89,19 @@ export class Screens {
         <div class="eyebrow">SITE 04 · MANUAL OVERRIDE FACILITY</div>
         <div class="logo big">HUMAN <span>OVERRIDE</span></div>
         <div class="tagline">Don't let the AI win.</div>
-        <button class="button primary" data-action="start">ENTER THE LOBBY</button>
-        <div class="title-note">Stage 0 look test: one room, one robot, one rifle.</div>
+        <button class="button primary" data-action="start">PLAY</button>
+        <div class="title-note"></div>
       </div>
       <div class="controls-card">
         <div class="card-title">CONTROLS</div>
         ${CONTROLS.map(([key, what]) => `<div class="control"><kbd>${key}</kbd><span>${what}</span></div>`).join('')}
       </div>`;
+    this.titleNote = this.title.querySelector('.title-note')!;
     parent.appendChild(this.title);
+
+    // ---- Game over
+    this.over = h('div', 'screen over hidden');
+    parent.appendChild(this.over);
 
     // ---- Pause and settings
     this.pause = h('div', 'screen pause hidden');
@@ -99,7 +129,7 @@ export class Screens {
     panel.appendChild(this.toggle('Reduce screen shake and flashing', settings.value.reducedMotion, (v) => settings.set({ reducedMotion: v })));
 
     const actions = h('div', 'panel-actions');
-    actions.innerHTML = `<button class="button primary" data-action="resume">RESUME</button><button class="button" data-action="credits">CREDITS</button>`;
+    actions.innerHTML = `<button class="button primary" data-action="resume">RESUME</button><button class="button" data-action="restart">RESTART RUN</button><button class="button" data-action="quit">TITLE SCREEN</button><button class="button" data-action="credits">CREDITS</button>`;
     panel.appendChild(actions);
     this.pause.appendChild(panel);
     parent.appendChild(this.pause);
@@ -139,6 +169,8 @@ export class Screens {
       const action = target.dataset.action;
       if (action === 'start') this.onStart();
       else if (action === 'resume') this.onResume();
+      else if (action === 'restart') this.onRestart();
+      else if (action === 'quit') this.onQuit();
       else if (action === 'credits') this.show('credits');
       else if (action === 'credits-back') this.show('pause');
       else if (target.dataset.quality) {
@@ -159,12 +191,40 @@ export class Screens {
   }
 
   /** Show one overlay, or none. */
-  show(which: 'loading' | 'title' | 'pause' | 'credits' | 'touch' | 'none'): void {
+  show(which: 'loading' | 'title' | 'pause' | 'over' | 'credits' | 'touch' | 'none'): void {
     this.loading.classList.toggle('hidden', which !== 'loading');
     this.title.classList.toggle('hidden', which !== 'title');
     this.pause.classList.toggle('hidden', which !== 'pause');
+    this.over.classList.toggle('hidden', which !== 'over');
     this.credits.classList.toggle('hidden', which !== 'credits');
     this.touch.classList.toggle('hidden', which !== 'touch');
+  }
+
+  /** The line under the start button: the best round so far, if there is one. */
+  setBest(round: number): void {
+    this.titleNote.textContent = round > 0 ? `Best run so far: round ${round}` : 'Hold the facility. Every round sends more of them.';
+  }
+
+  /** Fill in the game-over screen for a finished run. */
+  setSummary(run: RunSummary): void {
+    const minutes = Math.floor(run.time / 60);
+    const seconds = Math.floor(run.time % 60);
+    const rows: Array<[string, string]> = [
+      ['Robots destroyed', String(run.kills)],
+      ['Weak-point kills', String(run.weakPointKills)],
+      ['Melee kills', String(run.meleeKills)],
+      ['Accuracy', `${Math.round(run.accuracy * 100)}%`],
+      ['Scrap earned', run.scrapEarned.toLocaleString('en-US')],
+      ['Time held', `${minutes}:${String(seconds).padStart(2, '0')}`],
+    ];
+    this.over.innerHTML = `
+      <div class="panel over-panel">
+        <div class="eyebrow">ARGUS WINS</div>
+        <div class="over-title">YOU HELD UNTIL <span>ROUND ${run.round}</span></div>
+        <div class="over-best">${run.best ? 'A new best.' : run.bestRound > 0 ? `Your best is round ${run.bestRound}.` : ''}</div>
+        <div class="over-stats">${rows.map(([label, value]) => `<div class="over-stat"><span>${label}</span><b>${value}</b></div>`).join('')}</div>
+        <div class="panel-actions"><button class="button primary" data-action="restart">PLAY AGAIN</button><button class="button" data-action="quit">TITLE SCREEN</button></div>
+      </div>`;
   }
 
   /** Reflect the current quality choice and what "Auto" resolved to. */

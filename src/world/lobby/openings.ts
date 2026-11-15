@@ -1,6 +1,7 @@
 // Everything that fills a hole in the lobby's walls: the breached main
 // entrance with its entry corridor and the yard outside, the two west
-// windows, the blast door to the server hall and the power room door.
+// windows, and the frames of the blast door to the server hall and of the
+// power room door.
 
 import type { LevelBuilder } from '../build/LevelBuilder';
 import { BLAST_DOOR, BREACH, POWER_DOOR, ROOM, VESTIBULE, WINDOW, WINDOWS } from './plan';
@@ -101,34 +102,19 @@ function buildWindows(b: LevelBuilder): void {
   }
 }
 
-/** Blast door to the server hall: two heavy sliding leaves in a steel portal. */
-function buildBlastDoor(b: LevelBuilder): void {
-  const { z1 } = ROOM;
+/**
+ * The steel portal the blast door to the server hall slides in. (The door's
+ * two leaves are moving parts, built in world/Door.ts.)
+ */
+function buildBlastDoorFrame(b: LevelBuilder): void {
+  const { z1, wall: t } = ROOM;
   const { x0, x1, top } = BLAST_DOOR;
-  const face = z1 + 0.16;
 
-  // Leaves, with a hairline gap where they meet.
-  b.box('steelPlate', [x0, 0, face], [-0.012, top, face + 0.24]);
-  b.box('steelPlate', [0.012, 0, face], [x1, top, face + 0.24]);
-  // Hazard bands along the meeting edges and the foot of the door.
-  b.box('hazard', [-0.36, 0, face - 0.012], [-0.012, top, face], { collide: false, cast: false });
-  b.box('hazard', [0.012, 0, face - 0.012], [0.36, top, face], { collide: false, cast: false });
-  b.box('hazard', [x0, 0, face - 0.012], [-0.36, 0.34, face], { collide: false, cast: false });
-  b.box('hazard', [0.36, 0, face - 0.012], [x1, 0.34, face], { collide: false, cast: false });
-  // Stiffening ribs and lock housings.
-  for (const y of [1.0, 1.95, 2.75]) {
-    b.box('darkSteel', [x0, y, face - 0.05], [-0.4, y + 0.09, face], { collide: false });
-    b.box('darkSteel', [0.4, y, face - 0.05], [x1, y + 0.09, face], { collide: false });
-  }
-  b.box('darkSteel', [-0.3, 1.3, face - 0.09], [0.3, 1.72, face - 0.012], { collide: false });
-  b.tube('rustedSteel', [-0.19, 1.51, face - 0.13], [-0.19, 1.51, face - 0.09], 0.085);
-  b.tube('rustedSteel', [0.19, 1.51, face - 0.13], [0.19, 1.51, face - 0.09], 0.085);
-
-  // Portal frame standing proud of the wall, and the track housing above.
-  b.box('steelPlate', [x0 - 0.34, 0, z1 - 0.1], [x0 + 0.06, top, z1 + 0.5]);
-  b.box('steelPlate', [x1 - 0.06, 0, z1 - 0.1], [x1 + 0.34, top, z1 + 0.5]);
-  b.box('steelPlate', [x0 - 0.34, top - 0.06, z1 - 0.16], [x1 + 0.34, top + 0.42, z1 + 0.5], { collide: false });
-  b.box('treadPlate', [x0, 0, z1 - 0.06], [x1, 0.012, z1 + 0.16], { collide: false, cast: false });
+  // Portal frame standing proud of the wall on both sides, and the track housing above.
+  b.box('steelPlate', [x0 - 0.34, 0, z1 - 0.1], [x0 + 0.06, top, z1 + t + 0.08]);
+  b.box('steelPlate', [x1 - 0.06, 0, z1 - 0.1], [x1 + 0.34, top, z1 + t + 0.08]);
+  b.box('steelPlate', [x0 - 0.34, top - 0.06, z1 - 0.16], [x1 + 0.34, top + 0.42, z1 + t + 0.14], { collide: false });
+  b.box('treadPlate', [x0, 0, z1 - 0.06], [x1, 0.012, z1 + t + 0.06], { collide: false, cast: false });
   // Bolt heads along the frame.
   for (let y = 0.35; y < top; y += 0.55) {
     for (const x of [x0 - 0.14, x1 + 0.14]) {
@@ -137,28 +123,20 @@ function buildBlastDoor(b: LevelBuilder): void {
   }
 }
 
-/** Personnel door to the power room. */
-function buildPowerDoor(b: LevelBuilder): void {
-  const { x1 } = ROOM;
+/** The frame of the personnel door to the power room. (The door itself is in world/Door.ts.) */
+function buildPowerDoorFrame(b: LevelBuilder): void {
+  const { x1, wall: t } = ROOM;
   const { z0, z1, top } = POWER_DOOR;
-  const face = x1 + 0.14;
-
-  b.box('paintedMetal', [face, 0, z0], [face + 0.1, top, z1]);
-  b.box('hazard', [face - 0.012, 0.9, z0], [face, 1.2, z1], { collide: false, cast: false });
-  b.box('darkSteel', [face - 0.05, 0, z0], [face, 0.28, z1], { collide: false });
-  // Handle and small vision slot.
-  b.box('darkSteel', [face - 0.07, 1.0, z0 + 0.14], [face - 0.012, 1.1, z0 + 0.42], { collide: false });
-  b.box('darkSteel', [face - 0.02, 1.55, (z0 + z1) / 2 - 0.2], [face, 1.85, (z0 + z1) / 2 + 0.2], { collide: false, cast: false });
-  // Frame.
-  b.box('steelPlate', [x1 - 0.07, 0, z0 - 0.14], [x1 + 0.3, top, z0 + 0.04]);
-  b.box('steelPlate', [x1 - 0.07, 0, z1 - 0.04], [x1 + 0.3, top, z1 + 0.14]);
-  b.box('steelPlate', [x1 - 0.07, top - 0.04, z0 - 0.14], [x1 + 0.3, top + 0.16, z1 + 0.14], { collide: false });
+  b.box('steelPlate', [x1 - 0.07, 0, z0 - 0.14], [x1 + t + 0.07, top, z0 + 0.04]);
+  b.box('steelPlate', [x1 - 0.07, 0, z1 - 0.04], [x1 + t + 0.07, top, z1 + 0.14]);
+  b.box('steelPlate', [x1 - 0.07, top - 0.04, z0 - 0.14], [x1 + t + 0.07, top + 0.16, z1 + 0.14], { collide: false });
+  b.box('treadPlate', [x1 - 0.05, 0, z0], [x1 + t + 0.05, 0.012, z1], { collide: false, cast: false });
 }
 
 export function buildOpenings(b: LevelBuilder): void {
   buildBreach(b);
   buildVestibule(b);
   buildWindows(b);
-  buildBlastDoor(b);
-  buildPowerDoor(b);
+  buildBlastDoorFrame(b);
+  buildPowerDoorFrame(b);
 }

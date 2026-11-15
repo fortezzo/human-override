@@ -1,35 +1,22 @@
 // Assembles the security lobby from its parts.
 
-import type * as THREE from 'three';
 import type { Assets } from '../../core/assets';
-import type { DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
-import type { Collider } from '../../sim/collision';
 import { LevelBuilder } from '../build/LevelBuilder';
+import { vent, weaponRack, type AreaBuild } from '../build/room';
 import { SignAtlas } from '../build/SignAtlas';
+import { ENTRY_PLANS, RACK_PLANS } from '../plan';
 import { buildFurnishing } from './furnishing';
-import { buildLights, type LobbyLighting } from './lights';
+import { buildLights } from './lights';
 import { buildMarkings } from './markings';
 import { buildOpenings } from './openings';
+import { ROOM } from './plan';
 import { ScreenBank } from './ScreenBank';
 import { buildServices } from './services';
 import { buildShell } from './shell';
 
-export interface Lobby {
-  group: THREE.Group;
-  colliders: Collider[];
-  /** Meshes that stop bullets. */
-  solids: THREE.Mesh[];
-  lights: LightDef[];
-  haze: LobbyLighting['haze'];
-  dustBeams: DustBeam[];
-  screens: ScreenBank;
-  /** The painted signs, kept so they can be inspected as one picture. */
-  signs: SignAtlas;
-}
-
-export function buildLobby(assets: Assets, materials: MaterialLibrary): Lobby {
+export function buildLobby(assets: Assets, materials: MaterialLibrary): AreaBuild {
   const builder = new LevelBuilder(assets, materials);
   const screens = new ScreenBank();
   const signs = new SignAtlas();
@@ -40,11 +27,15 @@ export function buildLobby(assets: Assets, materials: MaterialLibrary): Lobby {
   const work = buildFurnishing(builder, screens);
   buildMarkings(builder, signs);
   const lighting = buildLights(builder, fixtures, work);
+  const lights: LightDef[] = lighting.lights.map((light) => ({ ...light, area: 'lobby' }));
+
+  // The shotgun's rack, and the ceiling vent robots start dropping from in later rounds.
+  for (const rack of RACK_PLANS) if (rack.area === 'lobby') weaponRack(builder, signs, assets, rack, lights);
+  for (const entry of ENTRY_PLANS) if (entry.area === 'lobby' && entry.kind === 'drop') vent(builder, entry.at[0], entry.at[1], ROOM.height);
 
   screens.finish();
   builder.addObject(screens.object);
-  for (const { effect } of lighting.haze) builder.addObject(effect.mesh);
 
   const built = builder.build();
-  return { ...built, lights: lighting.lights, haze: lighting.haze, dustBeams: lighting.dustBeams, screens, signs };
+  return { id: 'lobby', ...built, lights, haze: lighting.haze, dustBeams: lighting.dustBeams, tick: (time) => screens.update(time) };
 }
