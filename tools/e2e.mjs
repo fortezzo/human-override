@@ -18,6 +18,8 @@
 //   - going down without god mode reaches the game-over screen
 //   - restarting three times leaves nothing behind
 //   - pause and resume; phones get a notice instead of a broken game
+//   - the real buttons, pressed with real clicks: the mouse is captured
+//     and released when it should be, and "Auto" quality means what it says
 //
 // The mission, ARGUS and the rest of the economy arrive in later stages and
 // are added to this script with them.
@@ -392,6 +394,27 @@ try {
       },
       [x, z, yaw, frames],
     );
+  // Walking and sprinting reach the speeds set for them (4.3 and 6.4 metres
+  // a second). Sprinting once changed the view and nothing else.
+  const speedAfterHalfASecond = (sprint) =>
+    ev((sprint) => {
+      const ho = window.__HO;
+      ho.place(0, 4.6, 0);
+      ho.step(1 / 60, 5);
+      ho.press('forward', true);
+      if (sprint) ho.press('sprint', true);
+      ho.step(1 / 60, 30);
+      const v = ho.game.player.velocity;
+      const speed = Math.hypot(v.x, v.z);
+      ho.press('forward', false);
+      ho.press('sprint', false);
+      ho.step(1 / 60, 20);
+      return speed;
+    }, sprint);
+  const walking = await speedAfterHalfASecond(false);
+  const sprinting = await speedAfterHalfASecond(true);
+  check('sprinting is faster than walking, and both reach the speeds set for them', Math.abs(walking - 4.3) < 0.1 && Math.abs(sprinting - 6.4) < 0.15, `${walking.toFixed(2)} and ${sprinting.toFixed(2)} metres a second`);
+
   const outside = await sprintFrom(-0.6, -6, 0, 150);
   check('the player can step out into the yard', outside[1] < -13.5, `reached z ${outside[1].toFixed(1)}`);
   const pushes = [];
@@ -590,6 +613,191 @@ try {
   check('resume returns to the same run', (await stats()).state === 'playing' && !(await page.locator('.screen.pause').isVisible()) && (await run()).round >= played.round);
 } catch (error) {
   check('script ran to the end', false, String(error.message ?? error).split('\n')[0]);
+}
+
+// ---- The real interface: real clicks and real mouse capture, no shortcuts
+// Everything above drove the game through its debug tools. This part
+// presses the actual buttons on a fresh page, the way a visitor does: the
+// browser has to capture the mouse when a button is clicked, and the game
+// has to notice when it is let go.
+try {
+  await page.goto('about:blank');
+  const real = await page.context().newPage();
+  real.on('console', (m) => m.type() === 'error' && problems.push(`real clicks: ${m.text()}`));
+  real.on('pageerror', (e) => problems.push(`real clicks exception: ${e.message}`));
+  await real.goto(`${site.url}?debug=1`);
+  await real.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  const at = () => real.evaluate(() => ({ ...window.__HO.run(), quality: window.__HO.stats().quality, ammo: window.__HO.stats().ammo, locked: document.pointerLockElement !== null }));
+  const until = (state) => real.waitForFunction((state) => window.__HO.stats().state === state, state, { timeout: 8000 }).catch(() => {});
+  /** What the browser does when the player presses Esc: it takes the mouse back. */
+  const letGoOfMouse = () => real.evaluate(() => document.exitPointerLock());
+
+  await real.click('button[data-action="start"]');
+  await until('playing');
+  let s = await at();
+  check('the Play button captures the mouse and starts a run', s.state === 'playing' && s.locked);
+
+  await real.mouse.down();
+  await real.waitForTimeout(60);
+  await real.mouse.up();
+  await real.waitForTimeout(300);
+  const fired = s.ammo - (await at()).ammo;
+  check('a real mouse click fires one round', fired === 1, `${fired} fired`);
+
+  // Every key on the controls list, pressed for real. (The checks further
+  // up press the game's buttons from the inside, which would not notice a
+  // key wired to the wrong thing, or to nothing.)
+  const doing = (fn, arg) => real.evaluate(fn, arg);
+  const becomes = (fn, arg) => real.waitForFunction(fn, arg, { timeout: 6000 }).then(() => true, () => false);
+  const key = async (code, hold = 70) => {
+    await real.keyboard.down(code);
+    await real.waitForTimeout(hold);
+    await real.keyboard.up(code);
+  };
+  await doing(() => {
+    const ho = window.__HO;
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+  });
+  const keys = {};
+
+  await key('KeyR');
+  keys['R reloads'] = (await becomes(() => window.__HO.game.weapons.reloading)) && (await becomes(() => window.__HO.stats().ammo === 12));
+
+  await real.mouse.down({ button: 'right' });
+  keys['right click aims'] = await becomes(() => window.__HO.stats().aim > 0.9);
+  await real.mouse.up({ button: 'right' });
+  await becomes(() => window.__HO.stats().aim < 0.1);
+
+  const yaw = await doing(() => window.__HO.game.player.yaw);
+  await real.mouse.move(640, 360);
+  await real.mouse.move(700, 360, { steps: 4 });
+  keys['the mouse turns the view'] = await becomes((yaw) => Math.abs(window.__HO.game.player.yaw - yaw) > 0.02, yaw);
+
+  /** Hold some keys for a while from the same spot and report how far the player got. */
+  const travel = async (codes, ms) => {
+    await doing(() => window.__HO.place(0, 4.6, 0));
+    await real.waitForTimeout(120);
+    const from = await doing(() => [window.__HO.game.player.position.x, window.__HO.game.player.position.z]);
+    for (const code of codes) await real.keyboard.down(code);
+    await real.waitForTimeout(ms);
+    const to = await doing(() => [window.__HO.game.player.position.x, window.__HO.game.player.position.z]);
+    for (const code of codes) await real.keyboard.up(code);
+    await real.waitForTimeout(250);
+    return [to[0] - from[0], to[1] - from[1]];
+  };
+  const forward = await travel(['KeyW'], 600);
+  const back = await travel(['KeyS'], 400);
+  const left = await travel(['KeyA'], 400);
+  const right = await travel(['KeyD'], 400);
+  keys['W A S D move'] = forward[1] < -1 && back[1] > 0.6 && left[0] < -0.6 && right[0] > 0.6;
+  const dash = await travel(['ShiftLeft', 'KeyW'], 600);
+  keys['Shift sprints'] = dash[1] < forward[1] * 1.25;
+
+  await doing(() => window.__HO.place(0, 4.6, 0));
+  await real.keyboard.down('Space');
+  keys['Space jumps'] = await becomes(() => window.__HO.game.player.position.y > 0.3);
+  await real.keyboard.up('Space');
+  await becomes(() => window.__HO.game.player.onGround);
+
+  await doing(() => {
+    const ho = window.__HO;
+    ho.place(0, 2.7, 0);
+    ho.spawnRobot(0, 1.2, 0, true, 1.2, 70);
+    ho.step(1 / 60, 20);
+    ho.aimAtRobot('chest');
+  });
+  await key('KeyV');
+  keys['V strikes'] = await becomes(() => window.__HO.game.robots.every((robot) => !robot.alive));
+
+  await doing(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.scrap(750);
+    ho.place(-4.5, -0.9, 0);
+  });
+  await becomes(() => window.__HO.run().prompt?.usable === true);
+  const wallet = (await at()).scrap;
+  await key('KeyF');
+  keys['F buys'] = (await becomes(() => window.__HO.run().weapon === 'shotgun')) && wallet - (await at()).scrap === 750;
+
+  await real.waitForTimeout(500);
+  await key('Digit1');
+  const first = await becomes(() => window.__HO.run().weapon === 'pistol');
+  await real.waitForTimeout(500);
+  await key('Digit2');
+  const second = await becomes(() => window.__HO.run().weapon === 'shotgun');
+  await real.waitForTimeout(500);
+  await real.mouse.wheel(0, 120);
+  keys['1, 2 and the wheel switch weapons'] = first && second && (await becomes(() => window.__HO.run().weapon === 'pistol'));
+
+  const muted = () => doing(() => JSON.parse(localStorage.getItem('human-override.settings.v1') ?? '{}').muted === true);
+  const wasMuted = await muted();
+  await key('KeyM');
+  await real.waitForTimeout(150);
+  const nowMuted = await muted();
+  await key('KeyM');
+  await real.waitForTimeout(150);
+  keys['M mutes and unmutes'] = nowMuted !== wasMuted && (await muted()) === wasMuted;
+
+  const dead = Object.entries(keys).filter(([, works]) => !works).map(([name]) => name);
+  check('every control on the list does its job when really pressed', dead.length === 0, dead.length ? `not working: ${dead.join('; ')}` : Object.keys(keys).join('; '));
+  await doing(() => {
+    const ho = window.__HO;
+    ho.god(false);
+    ho.clearRobots();
+    ho.place(0, 4.6, 0);
+    ho.holdRounds(false);
+  });
+
+  await letGoOfMouse();
+  await until('paused');
+  s = await at();
+  check('letting go of the mouse (Esc) pauses and shows the menu', s.state === 'paused' && !s.locked && (await real.locator('.screen.pause').isVisible()));
+
+  const automatic = await real.evaluate(() => window.__HO.game.automaticQuality());
+  const other = automatic === 'low' ? 'medium' : 'low';
+  await real.click(`button[data-quality="${other}"]`);
+  await real.waitForTimeout(400);
+  const chosen = (await at()).quality;
+  await real.click('button[data-quality="auto"]');
+  await real.waitForTimeout(400);
+  s = await at();
+  check('choosing a quality level, then Auto, goes back to the level picked for this computer', chosen === other && s.quality === automatic, `${other}, then Auto: ${s.quality}`);
+
+  await real.waitForTimeout(700);
+  await real.click('button[data-action="resume"]');
+  await until('playing');
+  s = await at();
+  check('Resume takes the mouse back and carries on', s.state === 'playing' && s.locked);
+
+  // Go down: one point of health, and time run forward until a robot lands a blow.
+  await real.evaluate(() => {
+    const ho = window.__HO;
+    ho.game.player.health = 1;
+    for (let i = 0; i < 240 && ho.stats().state !== 'over'; i++) ho.step(1 / 60, 30);
+  });
+  await until('over');
+  s = await at();
+  check('going down lets go of the mouse and shows the game-over card', s.state === 'over' && !s.locked && (await real.locator('.screen.over').isVisible()), (await real.locator('.over-title').textContent()).trim());
+
+  await real.click('.screen.over button[data-action="restart"]');
+  await until('playing');
+  s = await at();
+  check('Play Again starts a fresh run with the mouse captured', s.state === 'playing' && s.locked && s.round === 0 && s.health === 100 && s.scrap === 0 && s.robots.length === 0);
+
+  await letGoOfMouse();
+  await until('paused');
+  await real.waitForTimeout(300);
+  await real.click('.screen.pause button[data-action="quit"]');
+  await until('title');
+  s = await at();
+  const note = (await real.locator('.title-note').textContent()).trim();
+  check('Title Screen leaves the run, and the title shows the best round so far', s.state === 'title' && (await real.locator('.screen.title').isVisible()) && /round \d+/.test(note), note);
+  await real.close();
+} catch (error) {
+  check('the real buttons work with real clicks', false, String(error.message ?? error).split('\n')[0]);
 }
 
 // ---- Phones and tablets: the scene with a friendly note, not a broken game

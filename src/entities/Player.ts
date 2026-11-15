@@ -7,6 +7,7 @@ import type { Input } from '../core/input';
 import { clamp, damp } from '../core/math';
 import { settings } from '../core/settings';
 import { groundHeight, resolveCircle, type CircleBody, type Collider } from '../sim/collision';
+import { accelerate, groundStep } from '../sim/movement';
 
 export class Player {
   /** Position of the feet. */
@@ -139,21 +140,14 @@ export class Player {
 
     const v = this.velocity;
     if (this.onGround) {
-      // Friction, then accelerate toward the wished velocity.
-      const speed = Math.hypot(v.x, v.z);
-      if (speed > 0) {
-        const drop = speed * PLAYER.groundFriction * dt;
-        const scale = Math.max(0, speed - drop) / speed;
-        v.x *= scale;
-        v.z *= scale;
-      }
-      this.accelerate(wishX, wishZ, maxSpeed, PLAYER.groundAccel, dt);
+      // Friction, then a push toward the wished velocity.
+      groundStep(v, wishX, wishZ, maxSpeed, { friction: PLAYER.groundFriction, accel: PLAYER.groundAccel }, dt);
       if (input.wasPressed('jump')) {
         v.y = PLAYER.jumpSpeed;
         this.onGround = false;
       }
     } else {
-      this.accelerate(wishX, wishZ, maxSpeed, PLAYER.airAccel, dt);
+      accelerate(v, wishX, wishZ, maxSpeed, PLAYER.airAccel, dt);
     }
     v.y -= PLAYER.gravity * dt;
 
@@ -210,16 +204,6 @@ export class Player {
         this.onStep();
       }
     }
-  }
-
-  private accelerate(wishX: number, wishZ: number, maxSpeed: number, accel: number, dt: number): void {
-    const v = this.velocity;
-    const current = v.x * wishX + v.z * wishZ;
-    const add = maxSpeed - current;
-    if (add <= 0) return;
-    const step = Math.min(accel * dt, add);
-    v.x += wishX * step;
-    v.z += wishZ * step;
   }
 
   private regenerate(dt: number): void {

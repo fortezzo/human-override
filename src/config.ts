@@ -10,8 +10,15 @@ export const PLAYER = {
   walkSpeed: 4.3,
   sprintSpeed: 6.4,
   aimSpeedFactor: 0.55,
-  groundAccel: 46,
+  /**
+   * How hard the player pushes off the ground, as a multiple of the speed
+   * being aimed for per second. It must stay larger than groundFriction:
+   * if friction is the stronger of the two, the top speed is never reached.
+   */
+  groundAccel: 12,
+  /** Share of the current speed lost to friction per second. */
   groundFriction: 11,
+  /** Steering in mid-air, in metres per second per second. */
   airAccel: 9,
   jumpSpeed: 5.4,
   gravity: 17.5,

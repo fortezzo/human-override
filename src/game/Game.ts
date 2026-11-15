@@ -128,6 +128,8 @@ export class Game {
   fps = 60;
   private lowFpsTime = 0;
   private settleUntil = 0;
+  /** The level automatic mode has had to drop to in this visit, if it has. */
+  private governed: QualityLevel | null = null;
 
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
@@ -414,8 +416,16 @@ export class Game {
 
   private pickStartingQuality(): QualityLevel {
     const chosen = settings.value.quality;
-    if (chosen !== 'auto') return chosen;
-    // Guess from the graphics chip's name; the governor corrects it in play.
+    return chosen === 'auto' ? this.automaticQuality() : chosen;
+  }
+
+  /**
+   * The level "Auto" uses on this computer: whatever the governor has had
+   * to drop to in this visit, or else a guess from the graphics chip's
+   * name (which the governor then corrects in play).
+   */
+  automaticQuality(): QualityLevel {
+    if (this.governed) return this.governed;
     const gpu = this.renderer.gpuName.toLowerCase();
     if (/swiftshader|llvmpipe|software|basic render/.test(gpu)) return 'low';
     if (/rtx|radeon rx|geforce gtx 1[0-9]{3}|geforce gtx 9[78]0|arc\(tm\) a[57]|apple m[2-9]/.test(gpu)) return 'high';
@@ -792,7 +802,8 @@ export class Game {
     if (this.lowFpsTime > GOVERNOR.window) {
       const index = QUALITY_ORDER.indexOf(this.quality);
       if (index > 0) {
-        this.setQuality(QUALITY_ORDER[index - 1]!, true);
+        this.governed = QUALITY_ORDER[index - 1]!;
+        this.setQuality(this.governed, true);
       } else {
         // Already on the lowest preset: render fewer pixels instead.
         const next = GOVERNOR.resolutionSteps.find((s) => s < this.renderer.resolutionScale);
