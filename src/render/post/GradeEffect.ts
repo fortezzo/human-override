@@ -56,7 +56,11 @@ float hash(vec2 p) {
 }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  vec3 color = filmic(inputColor.rgb * uExposure);
+  // A broken pixel (not a number) fails every comparison: show it as black
+  // on every graphics card, not as whatever that card makes of it.
+  vec3 scene = inputColor.rgb;
+  if (!(scene.r >= 0.0) || !(scene.g >= 0.0) || !(scene.b >= 0.0)) scene = vec3(0.0);
+  vec3 color = filmic(scene * uExposure);
   float luma = dot(color, vec3(0.2126, 0.7152, 0.0722));
 
   // Split toning: cool shadows, slightly warm highlights.
@@ -82,7 +86,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
 
   vec2 centred = uv - 0.5;
   float edge = length(centred * vec2(1.0, 0.82));
-  color *= mix(1.0, smoothstep(0.86, 0.22, edge), uVignette);
+  color *= mix(1.0, 1.0 - smoothstep(0.22, 0.86, edge), uVignette);
 
   // Damage: red closes in from the screen edges.
   float hurt = uDamage * smoothstep(0.18, 0.75, edge);

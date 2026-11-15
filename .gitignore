@@ -17,3 +17,6 @@ playwright-report/
 Thumbs.db
 .vscode/
 .idea/
+
+# Feedback screenshots from play-testing (kept on this computer only)
+media/feedback/

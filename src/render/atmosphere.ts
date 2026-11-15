@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { addsLightOnly } from './glow';
+import { SAFE_COLOR } from './safeColor';
 
 type Vec3 = THREE.Vector3Tuple;
 
@@ -37,6 +38,7 @@ varying vec3 vPositionView;
 varying float vAlong;
 varying vec3 vWorld;
 
+${SAFE_COLOR}
 float hash(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float noise(vec3 p) {
   vec3 i = floor(p); vec3 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -51,13 +53,18 @@ void main() {
   // Slow drifting unevenness, as if the haze were moving. It also eats
   // into the edges, so they wander instead of running dead straight.
   float drift = noise(vWorld * 1.3 + vec3(0.0, -uTime * 0.12, uTime * 0.05));
-  float body = pow(clamp(facing - (1.0 - drift) * 0.12, 0.0, 1.0), 3.0);
-  // Brightest below the lamp, dying away toward the floor.
-  float along = smoothstep(1.0, 0.84, vAlong) * pow(vAlong, 1.5);
+  float core = clamp(facing - (1.0 - drift) * 0.12, 0.0, 1.0);
+  float body = core * core * core;
+  // Brightest below the lamp, dying away toward the floor. vAlong runs from
+  // 1 at the lamp to 0 at the far end, but at the very rim of the cone it
+  // can arrive a hair below zero, and a power of a negative number has no
+  // answer. So it is clamped first, and no pow() is used on it.
+  float t = clamp(vAlong, 0.0, 1.0);
+  float along = (1.0 - smoothstep(0.84, 1.0, t)) * t * sqrt(t);
   drift = 0.72 + 0.28 * drift;
   // Do not flash in the player's face when they walk through it.
   float near = smoothstep(0.35, 1.6, -vPositionView.z);
-  gl_FragColor = vec4(uColor * uOpacity * uLevel * body * along * drift * near, 1.0);
+  gl_FragColor = vec4(safeColor(uColor * uOpacity * uLevel * body * along * drift * near), 1.0);
 }`;
 
 export interface ConeShaft {
@@ -122,6 +129,7 @@ varying vec2 vUv;
 varying vec3 vPositionView;
 varying vec3 vWorld;
 
+${SAFE_COLOR}
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -132,11 +140,11 @@ void main() {
   vec2 p = (vUv - 0.5) * 2.0;
   // Soft-edged blob; uShape squashes the falloff per axis.
   float d = length(p * uShape);
-  float blob = pow(smoothstep(1.0, 0.0, d), 1.7);
+  float blob = pow(1.0 - smoothstep(0.0, 1.0, d), 1.7);
   float wisps = 0.55 + 0.45 * noise(vWorld.xy * 0.8 + vec2(uTime * 0.07, -uTime * 0.04))
                      * (0.6 + 0.8 * noise(vWorld.xy * 2.3 - vec2(uTime * 0.05, 0.0)));
   float near = smoothstep(0.5, 2.6, -vPositionView.z);
-  gl_FragColor = vec4(uColor * uOpacity * uLevel * blob * wisps * near, 1.0);
+  gl_FragColor = vec4(safeColor(uColor * uOpacity * uLevel * blob * wisps * near), 1.0);
 }`;
 
 export interface FogCard {
@@ -220,7 +228,7 @@ void main() {
 
   vec4 view = viewMatrix * vec4(p, 1.0);
   float depth = -view.z;
-  vFade = smoothstep(0.25, 1.2, depth) * smoothstep(26.0, 12.0, depth);
+  vFade = smoothstep(0.25, 1.2, depth) * (1.0 - smoothstep(12.0, 26.0, depth));
   gl_Position = projectionMatrix * view;
   gl_PointSize = uSize * (0.5 + seed.y) / max(depth, 0.3);
 }`;
@@ -228,10 +236,11 @@ void main() {
 const dustFragment = /* glsl */ `
 varying vec3 vColor;
 varying float vFade;
+${SAFE_COLOR}
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  float disc = smoothstep(0.5, 0.05, length(c));
-  gl_FragColor = vec4(vColor * disc * vFade, 1.0);
+  float disc = 1.0 - smoothstep(0.05, 0.5, length(c));
+  gl_FragColor = vec4(safeColor(vColor * disc * vFade), 1.0);
 }`;
 
 export class DustMotes {

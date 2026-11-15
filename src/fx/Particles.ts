@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { addsLightOnly } from '../render/glow';
+import { SAFE_COLOR } from '../render/safeColor';
 
 export interface ParticleSpec {
   x: number;
@@ -78,6 +79,7 @@ uniform float uAdditive;
 varying vec2 vUv;
 varying vec4 vColor;
 varying float vDepth;
+${SAFE_COLOR}
 
 void main() {
   float shape = texture2D(uMap, vUv).r;
@@ -86,7 +88,7 @@ void main() {
   float a = shape * vColor.a * near;
   if (a < 0.003) discard;
   // Additive layer: premultiply so alpha only scales brightness.
-  gl_FragColor = uAdditive > 0.5 ? vec4(vColor.rgb * a, 1.0) : vec4(vColor.rgb, a);
+  gl_FragColor = uAdditive > 0.5 ? vec4(safeColor(vColor.rgb * a), 1.0) : vec4(safeColor(vColor.rgb), a);
 }`;
 
 /** A soft round dot. */

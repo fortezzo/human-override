@@ -32,16 +32,61 @@ export class Autopilot {
   private strafe: 'left' | 'right' = 'left';
   private strafeTimer = 0;
   private fireHeld = false;
+  /**
+   * An errand: somewhere to walk to, and optionally something to face on
+   * arrival. While it has one it does nothing else. Tests use this to move
+   * the player the way a person does, on foot and through doorways, where a
+   * teleport would skip everything that happens on the way.
+   */
+  private errand: { x: number; z: number; look: { x: number; z: number } | null } | null = null;
+  /** True when an errand was all it was asked to do: stand still afterwards, do not start playing. */
+  private resting = false;
 
   constructor(private readonly game: Game) {
     this.raycaster.firstHitOnly = true;
   }
 
-  /** Let go of every button (when it is switched off). */
+  /** Let go of every button it can press (when it is switched off). */
   release(): void {
-    for (const action of ['forward', 'back', 'left', 'right', 'sprint', 'fire', 'aim'] as const) this.game.input.release(action);
+    for (const action of ['forward', 'back', 'left', 'right', 'sprint', 'fire', 'aim', 'melee', 'reload', 'interact', 'weapon1', 'weapon2'] as const) this.game.input.release(action);
     this.fireHeld = false;
+    this.errand = null;
+    this.resting = false;
     this.status = 'idle';
+  }
+
+  /**
+   * Walk to a spot, then (optionally) turn to face another. With
+   * `thenRest`, it stands there afterwards instead of going back to playing.
+   */
+  walkTo(x: number, z: number, look: { x: number; z: number } | null = null, thenRest = false): void {
+    this.errand = { x, z, look };
+    this.resting = thenRest;
+  }
+
+  /** True while an errand is still under way. */
+  get walking(): boolean {
+    return this.errand !== null;
+  }
+
+  /** One frame of an errand. */
+  private runErrand(dt: number): void {
+    const { player, input, world } = this.game;
+    const errand = this.errand!;
+    const distance = Math.hypot(errand.x - player.position.x, errand.z - player.position.z);
+    if (distance < 0.3) {
+      this.status = 'arrived';
+      if (!errand.look || this.turnToward(_aim.set(errand.look.x, player.position.y + 1.6, errand.look.z), dt) < 0.03) this.errand = null;
+      return;
+    }
+    this.status = `walking (${distance.toFixed(1)} m to go)`;
+    this.route ??= { ...world.nav, distance: new Float32Array(world.nav.distance.length).fill(Infinity), goal: -1 };
+    floodFrom(this.route, errand.x, errand.z);
+    // For the last step, head straight for the spot itself.
+    const waypoint = distance < 0.9 ? { x: errand.x, z: errand.z } : nextWaypoint(this.route, player.position.x, player.position.z);
+    if (!waypoint) return;
+    const error = this.turnToward(_aim.set(waypoint.x, player.position.y + 1.6, waypoint.z), dt);
+    if (error < 0.5) input.press('forward');
   }
 
   update(dt: number): void {
@@ -49,6 +94,11 @@ export class Autopilot {
     const { player, input, weapons, robots, world } = game;
     for (const action of ['forward', 'back', 'left', 'right', 'sprint'] as const) input.release(action);
     if (!player.alive) return;
+    if (this.errand) {
+      this.runErrand(dt);
+      return;
+    }
+    if (this.resting) return;
 
     // The nearest robot it has a clear line to.
     _eye.copy(game.camera.position);

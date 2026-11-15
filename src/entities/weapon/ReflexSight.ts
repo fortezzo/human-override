@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 import type { Assets } from '../../core/assets';
 import { addsLightOnly } from '../../render/glow';
+import { SAFE_COLOR } from '../../render/safeColor';
 import { box, hull, merge, rect, tube, vec } from '../../render/shapes';
 
 /** Height of the line of sight above the rifle model's origin, in metres. */
@@ -263,6 +264,7 @@ export class ReflexSight {
         uniform float uSpan;
         varying vec3 vToEye;
         varying vec2 vPane;
+        ${SAFE_COLOR}
         void main() {
           // Which way this bit of glass lies from the eye, as a slope from
           // straight ahead. The reticle is pinned to "straight ahead".
@@ -270,7 +272,7 @@ export class ReflexSight {
           float mark = texture2D(uReticle, slope / uSpan * 0.5 + 0.5).a;
           // A little reflected sky toward the top of the pane.
           float sheen = 0.3 + 0.7 * smoothstep(0.3, 1.0, vPane.y);
-          gl_FragColor = vec4(uTint * sheen + uColor * (mark * uGain), 1.0);
+          gl_FragColor = vec4(safeColor(uTint * sheen + uColor * (mark * uGain)), 1.0);
         }`,
       transparent: true,
       blending: THREE.AdditiveBlending,

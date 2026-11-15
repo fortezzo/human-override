@@ -27,7 +27,7 @@ import { Particles } from '../fx/Particles';
 import { updateShaftTime } from '../render/atmosphere';
 import { LightRig } from '../render/lighting';
 import { MaterialLibrary, type SurfaceKind } from '../render/materials';
-import { bakeReflectionProbe, blankEnvironment } from '../render/reflectionProbe';
+import { bakeReflectionProbe, blankEnvironment, countBrokenPixels } from '../render/reflectionProbe';
 import { Renderer } from '../render/Renderer';
 import { createWallet, earn, type Wallet } from '../sim/economy';
 import { floodFrom } from '../sim/navGrid';
@@ -369,20 +369,32 @@ export class Game {
     return revealed;
   }
 
-  /** Photograph every area for its reflections and bounce light. */
-  private bakeReflections(): void {
-    const preset = QUALITY[this.quality];
+  /**
+   * Set each area up in turn the way it is photographed for its reflections
+   * (that area alone drawn, its own lamps live, nothing that moves in the
+   * picture) and hand it to `visit`. Everything is put back afterwards.
+   */
+  private eachAreaStaged(visit: (id: AreaId, centre: THREE.Vector3, hidden: THREE.Object3D[]) => void): void {
     // The monitors glow in those photographs too, so their picture must be ready.
     developScreens(this.renderer.three);
     const hidden: THREE.Object3D[] = [this.particles.group, this.gibs.group, this.casings.mesh, this.view.root, ...this.robots.map((r) => r.root)];
     for (const motes of this.world.dust.values()) hidden.push(motes.points);
     const shown = new Map<AreaId, boolean>();
     for (const [id, area] of this.world.areas) shown.set(id, area.group.visible);
-
     for (const id of AREA_IDS) {
       for (const [other, area] of this.world.areas) area.group.visible = other === id;
       const centre = new THREE.Vector3(...AREA_CENTRES[id]);
       this.lights.focus(centre, new Map([[id, 1]]), true);
+      visit(id, centre, hidden);
+    }
+    for (const [id, area] of this.world.areas) area.group.visible = shown.get(id)!;
+    this.refocus(true);
+  }
+
+  /** Photograph every area for its reflections and bounce light. */
+  private bakeReflections(): void {
+    const preset = QUALITY[this.quality];
+    this.eachAreaStaged((id, centre, hidden) => {
       this.environments.get(id)?.dispose();
       // The lobby gets two passes: the second sees the first's bounce light,
       // so shadowed corners pick up a little colour from the lit parts of
@@ -399,11 +411,27 @@ export class Game {
         first.dispose();
       }
       this.environments.set(id, environment);
-    }
-    for (const [id, area] of this.world.areas) area.group.visible = shown.get(id)!;
+    });
     this.scene.environment = this.environments.get(this.world.playerArea)!;
     this.scene.environmentIntensity = LOOKDEV.environmentIntensity;
-    this.refocus(true);
+  }
+
+  /**
+   * For the tests: how many broken pixels (not a number, or infinite) each
+   * room's reflection photograph has, at every size a quality level uses.
+   * The bake cleans such pixels away, so this is how a shader that produces
+   * them is noticed. Every count should be zero.
+   */
+  brokenReflectionPixels(): Record<string, number> {
+    const sizes = [...new Set(QUALITY_ORDER.map((level) => QUALITY[level].reflectionProbeSize))].sort((a, b) => a - b);
+    const found: Record<string, number> = {};
+    const intensity = this.scene.environmentIntensity;
+    this.scene.environmentIntensity = 0;
+    this.eachAreaStaged((id, centre, hidden) => {
+      for (const size of sizes) found[`${id} at ${size}`] = countBrokenPixels(this.renderer.three, this.scene, centre, size, hidden);
+    });
+    this.scene.environmentIntensity = intensity;
+    return found;
   }
 
   /** Hand the live lights to whatever can be seen from where the camera is. */

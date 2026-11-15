@@ -13,6 +13,10 @@
 //   - every kind of purchase, and that each charges the right amount
 //   - the player cannot leave the map
 //   - a change of quality level mid-game leaves no shader to be built late
+//   - every door, bought with F and walked through on foot from both sides
+//     at every quality level: the room beyond is never near black
+//   - no room's reflection photograph has a broken pixel, and one broken
+//     pixel cannot black out a room if it ever does
 //   - a robot from every entry point reaches the player in every area
 //   - whole rounds played by the autopilot, with purchases
 //   - going down without god mode reaches the game-over screen
@@ -580,13 +584,22 @@ try {
     ho.holdRounds(true);
   });
   let marked = false;
+  let markerDetail = 'the round never got down to its last three robots';
   for (let t = 0; t < 400 && !marked; t++) {
     const s = await run();
     if (s.remaining > 0 && s.remaining <= 3 && s.robots.some((q) => q.alive)) {
       await step(2);
-      await page.waitForTimeout(60);
-      marked = (await page.locator('.robot-marker:not(.hidden)').count()) === Math.min(3, s.robots.filter((q) => q.alive).length);
-      break;
+      // Count again after the step: a robot may have fallen during it. The
+      // HUD draws on the browser's own clock, so give it a moment to agree.
+      const alive = (await run()).robots.filter((q) => q.alive).length;
+      if (alive > 0) {
+        const expected = Math.min(3, alive);
+        marked = await page
+          .waitForFunction((expected) => document.querySelectorAll('.robot-marker:not(.hidden)').length === expected, expected, { timeout: 2500 })
+          .then(() => true, () => false);
+        markerDetail = `${expected} robot(s) still standing, ${await page.locator('.robot-marker:not(.hidden)').count()} marker(s) on screen`;
+        break;
+      }
     }
     await ev(() => {
       const ho = window.__HO;
@@ -597,7 +610,7 @@ try {
       ho.holdRounds(true);
     });
   }
-  check('the last few robots of a round are marked on the HUD', marked);
+  check('the last few robots of a round are marked on the HUD', marked, markerDetail);
 
   // ------------------------------------------------------ pause and resume
   await ev(() => {
@@ -614,6 +627,136 @@ try {
   await ev(() => window.__HO.play());
   await step(5);
   check('resume returns to the same run', (await stats()).state === 'playing' && !(await page.locator('.screen.pause').isVisible()) && (await run()).round >= played.round);
+
+  // ------------------------------------ every door, on foot, at every level
+  // Played the way a person plays: a new run, the door bought with F, then
+  // walked through, with no teleport and no free door. (A teleport skips
+  // what happens on the way: the area changing, the lamps being handed
+  // over, the reflections being swapped. That is where the server hall
+  // once went black, on Ultra only, and no earlier check walked there.)
+  // Once inside, the picture is measured.
+  /** Walk somewhere on foot and face a point. False if it took too long. */
+  const walkTo = async (x, z, lookX, lookZ) => {
+    await ev(([x, z, lookX, lookZ]) => window.__HO.walkTo(x, z, lookX, lookZ), [x, z, lookX, lookZ]);
+    for (let i = 0; i < 80; i++) {
+      const walking = await ev(() => {
+        window.__HO.step(1 / 60, 30);
+        return window.__HO.walking();
+      });
+      if (!walking) return true;
+    }
+    return false;
+  };
+  // Each leg: where to stand to use the door, a point beyond it to face,
+  // where to stop inside the room beyond, and what to look at from there.
+  const LOOPS = {
+    'lobby, hall, power room, lobby': [
+      { door: 'lobbyHall', stand: [0, 5.4], face: [0, 9], inside: [-1, 12.9], look: [-1, 22], room: 'hall' },
+      { door: 'hallPower', stand: [8.0, 11.4], face: [10.5, 11.4], inside: [12.6, 10.4], look: [17, 4], room: 'power' },
+      { door: 'lobbyPower', stand: [10.5, 3.6], face: [8, 3.6], inside: [6.2, 3.4], look: [-2, 0], room: 'lobby' },
+    ],
+    'lobby, power room, hall, lobby': [
+      { door: 'lobbyPower', stand: [7.9, 3.6], face: [10.5, 3.6], inside: [12.2, 4.2], look: [18, 7], room: 'power' },
+      { door: 'hallPower', stand: [10.6, 11.4], face: [8, 11.4], inside: [5.2, 11.6], look: [-3, 17], room: 'hall' },
+      { door: 'lobbyHall', stand: [0, 9.3], face: [0, 6], inside: [0, 4.2], look: [0, -6], room: 'lobby' },
+    ],
+  };
+  const dark = [];
+  const walked = [];
+  for (const level of ['low', 'medium', 'high', 'ultra']) {
+    for (const [name, legs] of Object.entries(LOOPS)) {
+      await ev((level) => {
+        const ho = window.__HO;
+        ho.autopilot(false);
+        ho.restart();
+        ho.setQuality(level);
+        ho.god(true);
+        ho.scrap(4000);
+        ho.step(1 / 60, 20);
+      }, level);
+      for (const leg of legs) {
+        const where = `${level}: ${name}, the ${leg.door} door into the ${leg.room}`;
+        if (!(await walkTo(leg.stand[0], leg.stand[1], leg.face[0], leg.face[1]))) {
+          dark.push(`${where}: could not walk to the door`);
+          break;
+        }
+        const atDoor = await ev(() => {
+          const ho = window.__HO;
+          const state = ho.run();
+          const p = ho.game.player;
+          return { scrap: state.scrap, at: `standing at (${p.position.x.toFixed(2)}, ${p.position.z.toFixed(2)}) facing ${((p.yaw * 180) / Math.PI).toFixed(0)} degrees, ${state.state}, health ${state.health}, prompt "${state.prompt?.text ?? 'none'}"` };
+        });
+        await tap('interact');
+        await step(110); // the door takes 1.6 seconds to open
+        const opened = await run();
+        if (!opened.doors[leg.door] || opened.scrap >= atDoor.scrap) {
+          dark.push(`${where}: F did not open it (${atDoor.at})`);
+          break;
+        }
+        if (!(await walkTo(leg.inside[0], leg.inside[1], leg.look[0], leg.look[1]))) {
+          dark.push(`${where}: could not walk through`);
+          break;
+        }
+        // The first robots of round 1 are on their way by now. From here on
+        // keep the rooms empty, so nothing stands in the walker's way.
+        await ev(() => {
+          window.__HO.holdRounds(true);
+          window.__HO.clearRobots();
+        });
+        await step(75);
+        const inside = await run();
+        const picture = await measurePicture();
+        walked.push(picture.mean);
+        if (inside.area !== leg.room) dark.push(`${where}: ended up in the ${inside.area}`);
+        else if (picture.black > 70 || picture.mean < 10) dark.push(`${where}: brightness ${picture.mean.toFixed(1)} of 255, ${picture.black.toFixed(0)}% near black`);
+      }
+    }
+  }
+  check(
+    'every door, bought with F and walked through on foot, leads into a lit room at every quality level',
+    dark.length === 0 && walked.length === 24,
+    dark.length ? dark.join(' | ') : `24 crossings (3 doors, both directions, 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
+  );
+
+  // The reflections each room is lit by are made from a photograph of it.
+  // One broken pixel in that photograph (a shader's "not a number") used to
+  // spread through it and turn every surface in the room black.
+  const broken = await ev(() => window.__HO.brokenReflections());
+  const bad = Object.entries(broken).filter(([, count]) => count > 0);
+  check("no room's reflection photograph contains a broken pixel, at any size", bad.length === 0, bad.length ? bad.map(([what, count]) => `${what}: ${count}`).join(', ') : `${Object.keys(broken).length} photographs checked`);
+
+  // And if a shader ever does produce one again, it must not matter: put an
+  // object that draws nothing but broken pixels in the server hall, bake
+  // the reflections again, take it away, and the hall must still be lit.
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.openDoor('lobbyHall');
+    ho.photoMode(true);
+    ho.steadyLights(true);
+    ho.setQuality('high');
+    ho.view(-1, 1.7, 9.5, 180, 0, 74);
+    ho.step(1 / 60, 150);
+  });
+  const healthy = await measurePicture();
+  await ev(() => {
+    const ho = window.__HO;
+    ho.poison(-1, 2.6, 13.5);
+    ho.setQuality('ultra'); // a change of level bakes every room again
+    ho.poison();
+    ho.step(1 / 60, 60);
+  });
+  const poisoned = await measurePicture();
+  check('one broken pixel in a room cannot black it out', poisoned.mean > healthy.mean * 0.8 && poisoned.black < 50, `brightness ${healthy.mean.toFixed(1)} before, ${poisoned.mean.toFixed(1)} after the reflections were baked with a broken object in the room`);
+  await ev(() => {
+    const ho = window.__HO;
+    ho.setQuality('high');
+    ho.photoMode(false);
+    ho.steadyLights(false);
+    ho.releaseView();
+  });
 } catch (error) {
   check('script ran to the end', false, String(error.message ?? error).split('\n')[0]);
 }

@@ -78,6 +78,20 @@ export interface DebugApi {
   holdRounds(on: boolean): void;
   /** Let the game play itself. */
   autopilot(on: boolean): void;
+  /**
+   * Walk the player to a spot on foot (no teleport), then turn to face
+   * (lookX, lookZ) if given. `walking()` is true until they have arrived.
+   */
+  walkTo(x: number, z: number, lookX?: number, lookZ?: number): void;
+  walking(): boolean;
+  /** Broken pixels in each room's reflection photograph, at every size in use. All should be zero. */
+  brokenReflections(): Record<string, number>;
+  /**
+   * Put a small object that draws broken pixels (not-a-number) at a point,
+   * or remove it again with no arguments. For proving that one bad pixel
+   * cannot black out a room.
+   */
+  poison(x?: number, y?: number, z?: number): void;
   /** Hide the weapon and HUD for clean photographs of the room. */
   photoMode(on: boolean): void;
   /** Hold every lamp at full brightness, so pictures can be compared. */
@@ -110,6 +124,9 @@ export function installDebugApi(game: Game): DebugTools {
     if (!on) pilot.release();
     game.autopilot = on ? pilot : null;
   };
+  /** True while the pilot is only running an errand for a test, not playing. */
+  let onErrand = false;
+  let poison: THREE.Mesh | null = null;
 
   game.input.onKey(KEYS.god, () => (game.godMode = !game.godMode));
   game.input.onKey(KEYS.scrap, () => game.grantScrap(FREE_SCRAP));
@@ -209,6 +226,46 @@ export function installDebugApi(game: Game): DebugTools {
     },
     holdRounds(on) {
       game.director.paused = on;
+    },
+    walkTo(x, z, lookX, lookZ) {
+      if (!game.autopilot) {
+        onErrand = true;
+        game.autopilot = pilot;
+      }
+      pilot.walkTo(x, z, lookX === undefined || lookZ === undefined ? null : { x: lookX, z: lookZ }, onErrand);
+    },
+    walking() {
+      if (pilot.walking) return true;
+      if (onErrand) {
+        // The errand is done: hand the controls back.
+        onErrand = false;
+        setAutopilot(false);
+      }
+      return false;
+    },
+    brokenReflections() {
+      return game.brokenReflectionPixels();
+    },
+    poison(x, y, z) {
+      if (poison) {
+        game.scene.remove(poison);
+        poison.geometry.dispose();
+        (poison.material as THREE.Material).dispose();
+        poison = null;
+      }
+      if (x === undefined || y === undefined || z === undefined) return;
+      // Nothing divided by nothing: the textbook way to make "not a number".
+      // (The zero arrives as a uniform so the shader compiler cannot tidy it away.)
+      poison = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 12, 8),
+        new THREE.ShaderMaterial({
+          uniforms: { uZero: { value: 0 } },
+          vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+          fragmentShader: 'uniform float uZero; void main() { gl_FragColor = vec4(vec3(uZero / uZero), 1.0); }',
+        }),
+      );
+      poison.position.set(x, y, z);
+      game.scene.add(poison);
     },
     autopilot(on) {
       setAutopilot(on);
