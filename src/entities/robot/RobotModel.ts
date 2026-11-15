@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { ROBOT } from '../../config';
 import type { Assets } from '../../core/assets';
-import type { RobotDesign } from './kit/design';
+import type { RobotDesign, RobotLamp } from './kit/design';
 import { RobotBuilder, type Chunk } from './kit/RobotBuilder';
 import { Rig } from './kit/Rig';
 import { createGlowMaterial, createRobotMaterial } from './robotMaterial';
@@ -35,7 +35,7 @@ export class RobotModel {
   /** Colour of everything on it that glows. */
   readonly eyeColor: number;
   /** A light that travels with this kind of robot, or null. */
-  readonly lamp: { color: number; intensity: number; distance: number } | null;
+  readonly lamp: RobotLamp | null;
   /** Where an object can be hung on it: a bone, and a position in that bone's own space. Null if nowhere. */
   readonly carry: { bone: string; at: THREE.Vector3 } | null;
   /** Triangles in the body, for the performance report. */

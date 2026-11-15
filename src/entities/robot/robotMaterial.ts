@@ -38,6 +38,12 @@ export const EDGE_LIGHT = {
   power: 2.2,
   /** Surface brightness at which it has faded away completely. */
   fadeBy: 0.09,
+  /**
+   * How it comes up with distance from the viewer: [from, to, share]. At
+   * `from` metres and nearer only that share of it is left; at `to` metres
+   * and beyond, all of it. (The usual one is the same at any distance.)
+   */
+  ramp: [0, 1, 1] as readonly [number, number, number],
 };
 
 /** An edge light's settings: its colour, and how it behaves (see EDGE_LIGHT). */
@@ -47,6 +53,7 @@ export interface EdgeLight {
   lift: number;
   power: number;
   fadeBy: number;
+  ramp: readonly [number, number, number];
 }
 
 /** Every robot type's edge light as its shader sees it (strength, lift, power, fade), with what it is set to. */
@@ -90,13 +97,14 @@ export function createRobotMaterial(assets: Assets, edge: Partial<EdgeLight> = {
     shader.uniforms.uRustMap = { value: rust.color };
     shader.uniforms.uEdgeColor = { value: light.color };
     shader.uniforms.uEdge = edgeUniform;
+    shader.uniforms.uEdgeRamp = { value: new THREE.Vector3(...light.ramp) };
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec3 aSurface;\nvarying vec3 vSurface;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurface = aSurface;');
 
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uRustMap;\nuniform vec3 uEdgeColor;\nuniform vec4 uEdge;\nvarying vec3 vSurface;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uRustMap;\nuniform vec3 uEdgeColor;\nuniform vec4 uEdge;\nuniform vec3 uEdgeRamp;\nvarying vec3 vSurface;')
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
@@ -130,7 +138,8 @@ export function createRobotMaterial(assets: Assets, edge: Partial<EdgeLight> = {
         float edgeDark = 1.0 - smoothstep(0.0, uEdge.w, dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722)));
         float edgeFar = clamp((length(vViewPosition) - 3.0) / 9.0, 0.0, 1.0);
         float edgeShape = pow(edgeFacing, mix(uEdge.z, uEdge.z * 0.5, edgeFar));
-        outgoingLight += uEdgeColor * (uEdge.y * (1.0 + 2.5 * edgeFar) + uEdge.x * edgeShape) * edgeDark;
+        float edgeRamp = mix(uEdgeRamp.z, 1.0, smoothstep(uEdgeRamp.x, uEdgeRamp.y, length(vViewPosition)));
+        outgoingLight += uEdgeColor * (uEdge.y * (1.0 + 2.5 * edgeFar) + uEdge.x * edgeShape) * edgeDark * edgeRamp;
         #include <opaque_fragment>`,
       )
       .replace(

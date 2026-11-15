@@ -7,9 +7,11 @@
 // It has to read as the boss from across the core, against a red room and
 // among a crowd. So it is lit from inside: broad seams down its chest and
 // back, bands round its forearms and shins, lit shoulder plates, a row of
-// eyes over a wide visor, all in the white-hot orange of ARGUS's own iris;
-// its edges glow pale whatever light it stands in; and a light travels
-// with it, so its shape and the floor round it are always lit.
+// eyes over a wide visor, all in the white-hot orange of ARGUS's own iris.
+// And from a distance its edges glow pale whatever light it stands in and
+// a light travels with it, so its shape and the floor round it are lit.
+// Both of those fade as it closes in: at arm's length it is the black
+// machine it was built as, with only its own seams burning.
 //
 // Built from the same model with different scale, plating, accents and eye
 // colour, so it needs no assets of its own.
@@ -91,10 +93,12 @@ export const PROXY: RobotDesign = {
   // The white-hot orange of ARGUS's own iris.
   eyeColor: 0xff5a26,
   glow: { at: DRUDGE.glow.at, size: [0.95, 0.34] },
-  // Its edges glow pale and hot whatever light it stands in (the usual
-  // edge light is a faint cold sheen, and only on what is nearly black).
-  edge: { color: [1.0, 0.56, 0.42], strength: 0.85, lift: 0.03, power: 1.7, fadeBy: 3.0 },
-  lamp: { color: 0xff8a5c, intensity: 16, distance: 6.5 },
+  // From across a room its edges glow pale and hot whatever light it
+  // stands in (the usual edge light is a faint cold sheen, and only on
+  // what is nearly black), and it carries a light. Within a few metres
+  // both are mostly gone.
+  edge: { color: [1.0, 0.56, 0.42], strength: 0.85, lift: 0.03, power: 1.7, fadeBy: 3.0, ramp: [2.5, 6.5, 0.2] },
+  lamp: { color: 0xff8a5c, intensity: 16, distance: 6.5, ramp: [2.5, 6.5, 0.12] },
   build(rig, builder) {
     builder.repaint = (paint) => FINISH.get(paint) ?? paint;
     DRUDGE.build(rig, builder);

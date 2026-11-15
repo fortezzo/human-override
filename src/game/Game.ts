@@ -900,6 +900,7 @@ export class Game {
     // little to the player's side of it, so the side the player sees is lit
     // and so is the floor round it. It dies with the robot.
     const lamp = lit && !lit.removed ? lit.model.lamp : null;
+    let wanted = 0;
     if (lit && lamp) {
       const chest = lit.chest(this.tmpB);
       const dx = this.camera.position.x - chest.x;
@@ -909,8 +910,12 @@ export class Game {
       this.escort.position.set(chest.x + dx * reach, chest.y + 0.9, chest.z + dz * reach);
       this.escort.color.setHex(lamp.color);
       this.escort.distance = lamp.distance;
+      // Up close it is left dark, as it was built; the light comes up with distance.
+      const [from, to, share] = lamp.ramp ?? [0, 1, 1];
+      const t = Math.min(1, Math.max(0, (distance - from) / (to - from)));
+      wanted = lamp.intensity * (share + (1 - share) * t * t * (3 - 2 * t));
     }
-    this.escort.intensity = damp(this.escort.intensity, lamp ? lamp.intensity : 0, 5, dt);
+    this.escort.intensity = damp(this.escort.intensity, wanted, 5, dt);
     if (this.escort.intensity < 0.02) this.escort.intensity = 0;
   }
 

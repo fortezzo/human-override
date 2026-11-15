@@ -4,6 +4,13 @@
 import type { Paint, RobotBuilder } from './RobotBuilder';
 import type { PostureLean, Proportions, Rig } from './Rig';
 
+export interface RobotLamp {
+  color: number;
+  intensity: number;
+  distance: number;
+  ramp?: readonly [number, number, number];
+}
+
 export interface RobotDesign {
   /** How the skeleton is reshaped before the body is built on it. */
   proportions: Proportions;
@@ -17,10 +24,19 @@ export interface RobotDesign {
   glow: { at: [number, number, number]; size: [number, number] };
   /** Colour of everything on it that glows (the standard red if left out). */
   eyeColor?: number;
-  /** Its own edge light, where it differs from the usual one: [red, green, blue], strength, lift, power, fade. */
-  edge?: { color?: [number, number, number]; strength?: number; lift?: number; power?: number; fadeBy?: number };
-  /** A light that travels with it, lighting it and the floor round it: colour, brightness in candela, reach in metres. */
-  lamp?: { color: number; intensity: number; distance: number };
+  /**
+   * Its own edge light, where it differs from the usual one (see
+   * EDGE_LIGHT): [red, green, blue], strength, lift, power, fade, and how
+   * it comes up with distance from the viewer.
+   */
+  edge?: { color?: [number, number, number]; strength?: number; lift?: number; power?: number; fadeBy?: number; ramp?: readonly [number, number, number] };
+  /**
+   * A light that travels with it, lighting it and the floor round it:
+   * colour, brightness in candela, reach in metres, and how it comes up
+   * with distance from the viewer ([from, to, share]: that share of it at
+   * `from` metres and nearer, all of it at `to` metres and beyond).
+   */
+  lamp?: RobotLamp;
   /** Somewhere on the body an object can be hung: relative to a joint, riding on that joint's bone. */
   carry?: { bone: string; at: [number, number, number] };
   /** Adds every part of the body to the builder. */
