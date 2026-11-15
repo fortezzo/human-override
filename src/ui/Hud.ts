@@ -5,6 +5,7 @@
 
 import type { QualityLevel } from '../config';
 import { QUALITY } from '../config';
+import { RoundAnnouncer } from './RoundAnnouncer';
 
 function el(tag: string, className: string, parent: HTMLElement, text = ''): HTMLElement {
   const node = document.createElement(tag);
@@ -80,9 +81,8 @@ export class Hud {
   private readonly scrapPops: HTMLElement;
   private readonly round: HTMLElement;
   private readonly roundSub: HTMLElement;
-  private readonly banner: HTMLElement;
-  private readonly bannerTitle: HTMLElement;
-  private readonly bannerSub: HTMLElement;
+  /** The round announcements, which also keep the corner counter. */
+  readonly announcer: RoundAnnouncer;
   private readonly prompt: HTMLElement;
   private readonly promptText: HTMLElement;
   private readonly promptCost: HTMLElement;
@@ -97,10 +97,9 @@ export class Hud {
   private damageTimer = 0;
   private damageAngle = 0;
   private toastTimer = 0;
-  private bannerTimer = 0;
   private hintTimer = 16;
   private shownScrap = -1;
-  private last = { ammo: -1, reserve: -1, weapon: '', round: -1, sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '' };
+  private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '' };
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud', parent);
@@ -109,7 +108,7 @@ export class Hud {
     el('div', 'hud-brand-title', brand, 'HUMAN OVERRIDE');
     const roundRow = el('div', 'hud-round', brand);
     el('span', 'hud-label', roundRow, 'ROUND');
-    this.round = el('span', 'hud-round-number', roundRow, '1');
+    this.round = el('span', 'hud-round-number', roundRow);
     this.roundSub = el('div', 'hud-brand-sub', brand);
 
     this.fps = el('div', 'hud-fps', this.root);
@@ -131,9 +130,7 @@ export class Hud {
       this.markers.push(marker);
     }
 
-    this.banner = el('div', 'hud-banner', this.root);
-    this.bannerSub = el('div', 'hud-banner-sub', this.banner);
-    this.bannerTitle = el('div', 'hud-banner-title', this.banner);
+    this.announcer = new RoundAnnouncer(this.root, this.round);
 
     this.healthBlock = el('div', 'hud-health', this.root);
     el('div', 'hud-label', this.healthBlock, 'VITALS');
@@ -174,8 +171,7 @@ export class Hud {
   reset(): void {
     this.hintTimer = 16;
     this.hint.classList.remove('faded');
-    this.bannerTimer = 0;
-    this.banner.classList.remove('show');
+    this.announcer.reset();
     this.scrapPops.textContent = '';
     this.shownScrap = -1;
     this.damageTimer = 0;
@@ -210,14 +206,14 @@ export class Hud {
     this.damageTimer = 1.4;
   }
 
-  /** A large announcement across the top of the view: a round starting or ending. */
-  announce(title: string, sub: string, seconds = 3.2): void {
-    this.bannerTitle.textContent = title;
-    this.bannerSub.textContent = sub;
-    this.banner.classList.remove('show');
-    void this.banner.offsetWidth;
-    this.banner.classList.add('show');
-    this.bannerTimer = seconds;
+  /** A round has begun, with this many robots on their way. */
+  roundStarted(round: number, robots: number): void {
+    this.announcer.begin(round, robots);
+  }
+
+  /** A round has been cleared, having paid this much scrap. */
+  roundCleared(round: number, scrap: number): void {
+    this.announcer.cleared(round, scrap);
   }
 
   showToast(text: string, seconds = 4): void {
@@ -298,10 +294,10 @@ export class Hud {
       this.scrap.textContent = scrapText;
     }
 
-    if (state.round !== last.round) {
-      last.round = state.round;
-      this.round.textContent = String(Math.max(1, state.round));
-    }
+    // The round counter belongs to the announcer: it takes each new number
+    // when the announcement's numeral lands on it.
+    this.announcer.sync(state.round);
+    this.announcer.update();
     const sub = state.remaining > 0 ? `${state.area.toUpperCase()} · ${state.remaining} ROBOT${state.remaining === 1 ? '' : 'S'} LEFT` : state.area.toUpperCase();
     if (sub !== last.sub) {
       last.sub = sub;
@@ -350,10 +346,6 @@ export class Hud {
     }
 
     if (this.hintTimer > 0) this.hintTimer -= dt;
-    if (this.bannerTimer > 0) {
-      this.bannerTimer -= dt;
-      if (this.bannerTimer <= 0) this.banner.classList.remove('show');
-    }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toast.classList.remove('show');

@@ -72,6 +72,8 @@ export class Game {
   interactions!: Interactions;
   /** Scrap, and what happened this run. */
   wallet: Wallet = createWallet(SCRAP.start);
+  /** Scrap earned in the run before the round now being played began. */
+  private earnedBeforeRound = 0;
   stats: RunStats = createRunStats();
 
   state: GameState = 'title';
@@ -81,7 +83,11 @@ export class Game {
   onHit: (hit: HitResult) => void = () => {};
   /** The player was hurt; `angle` is the attacker's bearing relative to the view. */
   onPlayerHurt: (angle: number) => void = () => {};
-  onRound: (event: 'start' | 'clear', round: number) => void = () => {};
+  /**
+   * A round has started (`amount` is how many robots it will send) or been
+   * cleared (`amount` is the scrap earned during it).
+   */
+  onRound: (event: 'start' | 'clear', round: number, amount: number) => void = () => {};
   onPurchase: (purchase: Purchase) => void = () => {};
   onDenied: () => void = () => {};
   /** The run ended. `best` is true if it beat the best round so far. */
@@ -263,14 +269,17 @@ export class Game {
       if (hit) this.stats.shotsHit++;
     };
 
+    // The sound and the announcement on the HUD start on the same call, so
+    // the lettering lands on the sting's opening burst.
     director.onRoundStart = (round) => {
       this.stats.round = round;
+      this.earnedBeforeRound = this.wallet.earned;
       audio.play('sting');
-      this.onRound('start', round);
+      this.onRound('start', round, director.rounds.plan.count);
     };
     director.onRoundClear = (round) => {
       audio.play('roundClear');
-      this.onRound('clear', round);
+      this.onRound('clear', round, this.wallet.earned - this.earnedBeforeRound);
     };
 
     interactions.onPurchase = (purchase) => {

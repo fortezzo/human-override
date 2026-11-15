@@ -44,6 +44,15 @@ export interface DebugState {
 
 export interface DebugApi {
   ready: boolean;
+  /**
+   * The round announcement on the HUD (connected by main.ts, which owns the
+   * HUD): hold it at a moment so many seconds in (null lets it run on), and
+   * report what it is showing and what the corner counter reads.
+   */
+  announcement: {
+    freezeAt(seconds: number | null): void;
+    status(): { showing: 'none' | 'start' | 'clear'; seconds: number; counter: string };
+  } | null;
   game: Game;
   /** Start playing without capturing the mouse. */
   play(): void;
@@ -178,6 +187,7 @@ export function installDebugApi(game: Game): DebugTools {
 
   window.__HO = {
     ready: false,
+    announcement: null,
     game,
     play() {
       game.input.locked = true;

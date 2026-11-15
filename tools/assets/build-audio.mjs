@@ -54,8 +54,12 @@ function measure(file) {
   return { peak, rms: Math.sqrt(sum / Math.max(1, samples.length)), duration: samples.length / RATE };
 }
 
+// "node tools/assets/build-audio.mjs sting" rebuilds only the sounds whose
+// names start with "sting"; with no argument, all of them.
+const only = process.argv[2];
 let total = 0;
 for (const spec of AUDIO_SPEC) {
+  if (only && !spec.name.startsWith(only)) continue;
   const inputs = [];
   const chains = [];
   spec.layers.forEach((layer, i) => {
@@ -98,4 +102,4 @@ for (const spec of AUDIO_SPEC) {
   total += fs.statSync(out).size;
   console.log(`  ${spec.name.padEnd(20)} ${m.duration.toFixed(2).padStart(6)}s  x${gain.toFixed(2).padStart(5)}  ${(fs.statSync(out).size / 1024).toFixed(0).padStart(4)} KB`);
 }
-console.log(`Audio: ${AUDIO_SPEC.length} sounds, ${(total / 1024 / 1024).toFixed(2)} MB`);
+console.log(`Audio: ${only ? `sounds named "${only}..."` : `${AUDIO_SPEC.length} sounds`}, ${(total / 1024 / 1024).toFixed(2)} MB`);

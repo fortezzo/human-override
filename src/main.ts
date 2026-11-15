@@ -30,7 +30,10 @@ async function boot(): Promise<void> {
   hud.setVisible(false);
   const debug = new URLSearchParams(location.search).has('debug');
   let tools: DebugTools | null = null;
-  if (debug) tools = installDebugApi(game);
+  if (debug) {
+    tools = installDebugApi(game);
+    window.__HO!.announcement = { freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
+  }
 
   // Phones and tablets get the scene and a friendly note instead of a game
   // they cannot control.
@@ -55,9 +58,9 @@ async function boot(): Promise<void> {
     hud.scrapChange(hit.scrap);
   };
   game.onPlayerHurt = (angle) => hud.damage(angle);
-  game.onRound = (event, round) => {
-    if (event === 'start') hud.announce(`ROUND ${round}`, round === 1 ? 'THEY ARE COMING' : 'INCOMING');
-    else hud.announce('ROUND CLEARED', `ROUND ${round}`, 2.6);
+  game.onRound = (event, round, amount) => {
+    if (event === 'start') hud.roundStarted(round, amount);
+    else hud.roundCleared(round, amount);
   };
   game.onPurchase = (purchase) => {
     hud.scrapChange(-purchase.cost);

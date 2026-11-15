@@ -181,6 +181,23 @@ export const AUDIO_SPEC = [
     duration: 57.6,
     layers: [{ pack: 'when-the-shadows-gather', file: 'when-the-shadows-gather/when_the_shadows_gather_0.ogg', at: 2.4 }],
   },
-  { name: 'sting_0', stereo: true, bitrate: '112k', peak: 0.8, layers: [whole('dark-ambiences', 'dark-ambiences/dark_ambiences/ambience-1.wav')] },
-  { name: 'sting_1', stereo: true, bitrate: '112k', peak: 0.8, layers: [whole('dark-ambiences', 'dark-ambiences/dark_ambiences/ambience-5.wav')] },
+  // The round stings. The round number snaps onto the screen the moment a
+  // round begins, so each sting opens on something just as sharp: a short
+  // burst of machine noise over a low thump. The dark swell underneath is
+  // cut in late, so that in both it is already rising as the number lands
+  // and is at its fullest half a second in, while the number is held.
+  ...[
+    ['ambience-1.wav', 0.9, 2.1],
+    ['ambience-5.wav', 0.1, 2.72],
+  ].map(([swell, from, noiseAt], i) => ({
+    name: `sting_${i}`,
+    stereo: true,
+    bitrate: '112k',
+    peak: 0.8,
+    layers: [
+      { pack: 'dark-ambiences', file: `dark-ambiences/dark_ambiences/${swell}`, at: from },
+      { pack: 'sci-fi-sounds', file: `${KENNEY_SCIFI}/computerNoise_000.ogg`, at: noiseAt, gain: 0.5, filter: 'highpass=f=600,afade=t=out:st=0.07:d=0.13,atrim=duration=0.25' },
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_001.ogg`, { gain: 0.55, pitch: 0.6, filter: 'lowpass=f=240' }),
+    ],
+  })),
 ];

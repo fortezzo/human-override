@@ -106,10 +106,17 @@ body {
   line-height: 1;
 }
 .hud-round-number {
+  display: inline-block;
   font-size: 46px;
   font-weight: 700;
   color: var(--red);
   font-variant-numeric: tabular-nums;
+  /* Room for one numeral even before the first round, so the announcement
+     has somewhere to land. */
+  min-width: 0.46em;
+  /* It swells from its own foot when a new round lands on it. */
+  transform-origin: 0% 78%;
+  will-change: transform;
 }
 .hud-brand-sub {
   margin-top: 4px;
@@ -816,49 +823,103 @@ kbd {
   }
 }
 
-/* Round announcements. */
-.hud-banner {
+/* Round announcements. Everything here is only the lettering and where it
+   starts from: ui/RoundAnnouncer.ts moves it, frame by frame. */
+.announce {
   position: absolute;
-  top: 17%;
-  left: 50%;
-  transform: translateX(-50%);
-  text-align: center;
-  opacity: 0;
+  inset: 0;
+  overflow: hidden;
   pointer-events: none;
 }
-.hud-banner.show {
-  animation: banner 3.2s ease-out forwards;
+/* The scan line: a faint red band with a bright leading edge, sweeping down. */
+.announce-scan {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -130px;
+  height: 130px;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(255, 67, 38, 0) 0%, rgba(255, 67, 38, 0.04) 55%, rgba(255, 67, 38, 0.14) 95%, rgba(255, 120, 90, 0.9) 98%, rgba(255, 67, 38, 0) 100%);
+  will-change: transform, opacity;
 }
-.hud-banner-sub {
-  font-family: var(--mono);
-  font-size: 13px;
-  letter-spacing: 0.34em;
-  color: var(--amber);
+/* The interference it leaves for a moment: fine dark lines, like a monitor's. */
+.announce-lines {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, 0) 0 2px, rgba(0, 0, 0, 0.6) 2px 3px);
 }
-.hud-banner-title {
-  margin-top: 4px;
-  font-size: clamp(44px, 6vw, 86px);
+.announce-start,
+.announce-clear {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  opacity: 0;
+}
+/* Above the crosshair, so what the player is aiming at stays clear. */
+.announce-start {
+  top: 22%;
+}
+.announce-clear {
+  top: 20%;
+}
+/* The title's lettering: heavy, widely spaced, the second part in red. */
+.announce-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3em;
+  /* Letter spacing leaves a gap after the last letter; this balances it. */
+  padding-left: 0.16em;
+  font-size: clamp(60px, 9vw, 160px);
   font-weight: 700;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   line-height: 1;
+  will-change: transform;
+}
+.announce-word {
   color: var(--ink);
 }
-@keyframes banner {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 10px) scale(1.06);
-  }
-  10% {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-  72% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0;
-    transform: translate(-50%, -6px);
-  }
+.announce-number {
+  display: inline-block;
+  color: var(--red);
+  font-variant-numeric: tabular-nums;
+  will-change: transform;
+}
+.announce-rule {
+  width: min(44vw, 600px);
+  height: 2px;
+  margin-top: 16px;
+  background: var(--red);
+  transform: scaleX(0);
+}
+.announce-sub {
+  margin-top: 12px;
+  padding-left: 0.34em;
+  font-family: var(--mono);
+  font-size: clamp(12px, 1.1vw, 16px);
+  letter-spacing: 0.34em;
+  color: var(--amber);
+  white-space: nowrap;
+  text-shadow: 0 1px 10px rgba(0, 0, 0, 0.7);
+}
+.announce-clear-title {
+  padding-left: 0.16em;
+  font-size: clamp(30px, 3.8vw, 62px);
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1;
+  color: var(--ink);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+.announce-clear-title span {
+  color: var(--red);
+}
+.announce-clear .announce-rule {
+  width: min(30vw, 400px);
+  margin-top: 12px;
 }
 
 /* Purchase prompt: what F will do here, and what it costs. */

@@ -21,6 +21,10 @@
 //   - no room's reflection photograph has a broken pixel, and one broken
 //     pixel cannot black out a room if it ever does
 //   - a robot from every entry point reaches the player in every area
+//   - the round announcement: the number snaps in behind a scan line, is
+//     held above the crosshair while the game carries on, and flies to the
+//     corner counter; the plain version with flashing reduced; and the
+//     "cleared" line with the scrap the round paid
 //   - whole rounds played by the autopilot, with purchases
 //   - going down without god mode reaches the game-over screen
 //   - restarting three times leaves nothing behind
@@ -193,6 +197,73 @@ try {
   await step(5 * 60);
   r = await run();
   check('round 1 starts within five seconds of pressing Play', r.round === 1 && r.phase === 'active' && r.robots.length > 0, `${r.robots.length} robot(s) on the map after 5 s`);
+  // ---------------------------------------------- the round announcement
+  // It is part of the HUD and is timed against the round sting, so it runs
+  // on real time, not on the stepped game clock. The debug tools can hold
+  // it at any moment, which is how its stages are looked at here.
+  const announcement = () => ev(() => window.__HO.announcement.status());
+  const lettering = () =>
+    ev(() => {
+      const box = (selector) => {
+        const rect = document.querySelector(selector).getBoundingClientRect();
+        return { top: rect.top, bottom: rect.bottom, left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+      };
+      const style = (selector) => getComputedStyle(document.querySelector(selector));
+      const row = style('.announce-row');
+      const logo = style('.logo');
+      return {
+        word: document.querySelector('.announce-word').textContent,
+        number: document.querySelector('.announce-number').textContent,
+        numberColour: style('.announce-number').color,
+        sub: document.querySelector('.announce-start .announce-sub').textContent,
+        shown: Number(style('.announce-start').opacity),
+        sameType: row.fontFamily === logo.fontFamily && row.fontWeight === logo.fontWeight && Math.abs(parseFloat(row.letterSpacing) / parseFloat(row.fontSize) - parseFloat(logo.letterSpacing) / parseFloat(logo.fontSize)) < 0.01,
+        titleRed: style('.logo span').color,
+        scan: Number(style('.announce-scan').opacity),
+        lines: Number(style('.announce-lines').opacity),
+        rowStyle: document.querySelector('.announce-row').style.cssText,
+        row: box('.announce-row'),
+        crosshair: box('.crosshair'),
+        view: { width: window.innerWidth, height: window.innerHeight },
+      };
+    });
+  let a = await announcement();
+  check('a new round is announced the moment it begins, before the corner counter changes', a.showing === 'start' && a.seconds < 0.6 && a.counter === '', `${a.seconds.toFixed(2)} s into the announcement, the counter still blank`);
+  await ev(() => window.__HO.announcement.freezeAt(0.1));
+  await page.waitForTimeout(120);
+  let look = await lettering();
+  check(
+    'it snaps in behind a scan line that crosses the whole view',
+    look.shown === 1 && look.scan > 0.5 && look.lines > 0 && /skewX\(-/.test(look.rowStyle) && look.rowStyle.includes('rgba(255, 67, 38'),
+    `a tenth of a second in: lettering fully shown, scan line at ${Math.round(look.scan * 100)}% strength`,
+  );
+  await ev(() => window.__HO.announcement.freezeAt(1.0));
+  await page.waitForTimeout(120);
+  look = await lettering();
+  check(
+    "it is the round number in the title's lettering, with the numeral in red",
+    look.word === 'ROUND' && look.number === '1' && look.sameType && look.numberColour === look.titleRed && look.sub === '6 ROBOTS INBOUND',
+    `"${look.word} ${look.number}", "${look.sub}"`,
+  );
+  const covered = (look.row.width * look.row.height) / (look.view.width * look.view.height);
+  check(
+    'it is lettering only, above the crosshair, and small enough to see past',
+    look.row.bottom < look.crosshair.top - 20 && covered < 0.12 && look.scan === 0,
+    `its foot is ${Math.round(look.crosshair.top - look.row.bottom)} px above the crosshair, and it covers ${(covered * 100).toFixed(1)}% of the view`,
+  );
+  const robotThen = (await run()).robots[0];
+  await step(30);
+  const runNow = await run();
+  const robotMoved = Math.hypot(runNow.robots[0].x - robotThen.x, runNow.robots[0].z - robotThen.z);
+  check('the game carries on underneath it', runNow.state === 'playing' && runNow.phase === 'active' && robotMoved > 0.3, `a robot moved ${robotMoved.toFixed(2)} m in half a second`);
+  // Let it run on: the numeral flies to the corner counter, which takes the number and pulses.
+  await ev(() => window.__HO.announcement.freezeAt(null));
+  const pulsed = await page
+    .waitForFunction(() => /scale\(1\.[0-9]*[1-9]/.test(document.querySelector('.hud-round-number').style.transform) && document.querySelector('.hud-round-number').textContent === '1', null, { timeout: 4000, polling: 'raf' })
+    .then(() => true)
+    .catch(() => false);
+  a = await announcement();
+  check('after about a second and a half it flies to the corner counter, which takes the number and pulses', pulsed && a.showing === 'none' && a.counter === '1' && a.seconds < 2.4, `gone ${a.seconds.toFixed(2)} s after it appeared; the counter reads "${a.counter}"`);
   check('the HUD shows the round and scrap', (await page.locator('.hud-round-number').textContent()) === '1' && (await page.locator('.hud-scrap-count').isVisible()));
   const z0 = r.robots[0].z;
   await step(120);
@@ -691,6 +762,73 @@ try {
   }
   check('restarting three times leaves no leftover robots, timers or doubled-up input', clean && (await run()).state === 'over', detail.trim());
   check('the best round is remembered', (await ev(() => JSON.parse(localStorage.getItem('human-override.best.v1') ?? '{}').round)) >= 1);
+
+  // ------------------------- the announcement: reduced flashing, and "cleared"
+  // With "reduce screen shake and flashing" on, the scan line, the
+  // interference and the glitch are left out: the lettering just fades in.
+  const flipReduced = () =>
+    ev(() => {
+      const row = [...document.querySelectorAll('.setting.check')].find((r) => r.textContent.includes('Reduce screen shake'));
+      row.querySelector('input').click();
+      return row.querySelector('input').checked;
+    });
+  const reducedOn = await flipReduced();
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    for (let i = 0; i < 600 && ho.run().round < 1; i++) ho.step(1 / 60, 1);
+    ho.announcement.freezeAt(0.1);
+  });
+  await page.waitForTimeout(120);
+  let calm = await lettering();
+  check(
+    'with flashing reduced it fades in plainly: no scan line, no interference, no glitch',
+    reducedOn && calm.scan === 0 && calm.lines === 0 && calm.shown > 0.2 && calm.shown < 0.8 && !calm.rowStyle.includes('rgba(255, 67, 38') && /skewX\(0(\.0+)?deg\)/.test(calm.rowStyle),
+    `a tenth of a second in: lettering ${Math.round(calm.shown * 100)}% faded in, scan line off`,
+  );
+  await ev(() => window.__HO.announcement.freezeAt(null));
+  const calmLanded = await page
+    .waitForFunction(() => document.querySelector('.hud-round-number').textContent === '1', null, { timeout: 4000, polling: 'raf' })
+    .then(() => true)
+    .catch(() => false);
+  check('and the number still reaches the corner counter', calmLanded && !(await flipReduced()));
+
+  // A cleared round: one line, with the scrap that round paid.
+  await ev(() => window.__HO.autopilot(true));
+  let cleared = await run();
+  for (let guard = 0; guard < 60 * 90 && !(cleared.round === 1 && cleared.phase === 'waiting'); guard += 30) {
+    await step(30);
+    cleared = await run();
+  }
+  await ev(() => {
+    const ho = window.__HO;
+    ho.autopilot(false);
+    ho.announcement.freezeAt(1.4);
+  });
+  await page.waitForTimeout(150);
+  const clearedLine = await ev(() => ({
+    status: window.__HO.announcement.status(),
+    title: document.querySelector('.announce-clear-title').textContent,
+    sub: document.querySelector('.announce-clear .announce-sub').textContent,
+    shown: Number(getComputedStyle(document.querySelector('.announce-clear')).opacity),
+    numberColour: getComputedStyle(document.querySelector('.announce-clear-title span')).color,
+    red: getComputedStyle(document.querySelector('.logo span')).color,
+    bottom: document.querySelector('.announce-clear').getBoundingClientRect().bottom,
+    crosshairTop: document.querySelector('.crosshair').getBoundingClientRect().top,
+  }));
+  check(
+    'a cleared round is announced in one line with the scrap it paid',
+    cleared.round === 1 && clearedLine.status.showing === 'clear' && clearedLine.shown === 1 && clearedLine.title === 'ROUND 1 CLEARED' && clearedLine.sub === `+${cleared.earned.toLocaleString('en-US')} SCRAP THIS ROUND` && cleared.earned > 0 && clearedLine.numberColour === clearedLine.red && clearedLine.bottom < clearedLine.crosshairTop - 20,
+    `"${clearedLine.title}", "${clearedLine.sub}"`,
+  );
+  await ev(() => window.__HO.announcement.freezeAt(null));
+  const clearedGone = await page
+    .waitForFunction(() => window.__HO.announcement.status().showing === 'none', null, { timeout: 5000, polling: 'raf' })
+    .then(() => true)
+    .catch(() => false);
+  a = await announcement();
+  check('and is gone again in under three seconds', clearedGone && a.seconds < 2.9, `${a.seconds.toFixed(2)} s on screen`);
 
   // ------------------------------------------- the autopilot plays rounds
   await ev(() => {
