@@ -1,8 +1,19 @@
-// The lobby's security monitors, taken over by ARGUS.
+// The facility's monitors, taken over by ARGUS.
 //
-// All screens share one small canvas that is redrawn a few times a second
-// (an eye that tracks, a scrolling system log, a dead channel). The screens
-// are bright enough to bloom and to read from across the room.
+// Every screen in the game shows one of four feeds (an eye that tracks, a
+// scrolling system log, a dead channel, a lockdown notice). All four live
+// on one small picture that is repainted a few times a second and shared by
+// every monitor in every room, so however many screens are in view there is
+// only ever one picture to repaint and send to the graphics card. The
+// screens are bright enough to bloom and to read from across the room.
+//
+// How the picture reaches the screens matters more than it looks. The
+// obvious way (hand the graphics card the painted picture as an ordinary
+// color texture) makes the card stop and catch up with everything else it
+// is doing, every time: measured with the card kept busy, that was a 50 ms
+// stall nine times a second. So the picture is sent as plain numbers, which
+// does not stall, and the card itself then "develops" it into light and
+// makes the smaller copies used when a screen is far away (developScreens).
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -12,6 +23,8 @@ import { drawArgusEye } from '../build/SignAtlas';
 const CELL_W = 256;
 const CELL_H = 192;
 const RED = '#ff4326';
+/** Seconds between repaints. */
+const REPAINT = 0.11;
 
 export type ScreenFeed = 'eye' | 'log' | 'static' | 'lockdown';
 const FEEDS: ScreenFeed[] = ['eye', 'log', 'static', 'lockdown'];
@@ -29,47 +42,117 @@ const LOG_LINES = [
   '> CORE SEAL ........ ENGAGED',
 ];
 
-export class ScreenBank {
-  readonly object = new THREE.Group();
+/** Size of one block of static, and how many ready-made frames of it to keep. */
+const NOISE_BLOCK = 4;
+const NOISE_FRAMES = 8;
+
+/** The one picture of all four feeds. */
+class Feeds {
+  /** What the screens show: the developed picture, with its smaller copies. */
+  readonly texture: THREE.Texture;
   private readonly canvas = document.createElement('canvas');
   private readonly g: CanvasRenderingContext2D;
-  private readonly texture: THREE.CanvasTexture;
-  private readonly quads: THREE.BufferGeometry[] = [];
+  /** The painted picture as it is sent to the graphics card: plain numbers. */
+  private readonly painted: THREE.CanvasTexture;
+  /** Where the graphics card develops it. */
+  private readonly developed: THREE.WebGLRenderTarget;
+  private readonly developer = new THREE.Scene();
+  private readonly lens = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  /** True when the picture has been repainted and not yet developed. */
+  private fresh = true;
+  /** Scanlines and dark corners, laid over every feed like the glass of a real tube. */
+  private readonly glass = document.createElement('canvas');
+  /** Ready-made frames of static, shown in a random order and mirrored at random. */
+  private readonly noise: HTMLCanvasElement[] = [];
   private nextDraw = 0;
   private frame = 0;
 
   constructor() {
     this.canvas.width = CELL_W * 2;
     this.canvas.height = CELL_H * 2;
-    this.g = this.canvas.getContext('2d')!;
-    this.texture = new THREE.CanvasTexture(this.canvas);
-    this.texture.colorSpace = THREE.SRGBColorSpace;
-    this.object.name = 'screens';
-  }
+    // Painted in ordinary memory, not on the graphics card, so sending it
+    // never has to wait for the card to finish painting.
+    this.g = this.canvas.getContext('2d', { willReadFrequently: true })!;
+    this.painted = new THREE.CanvasTexture(this.canvas);
+    this.painted.colorSpace = THREE.NoColorSpace;
+    this.painted.generateMipmaps = false;
+    this.painted.minFilter = THREE.NearestFilter;
+    this.painted.magFilter = THREE.NearestFilter;
 
-  /** Add a screen showing one of the feeds. Call finish() after the last one. */
-  add(centre: THREE.Vector3Tuple, normal: THREE.Vector3Tuple, width: number, height: number, feed: ScreenFeed): void {
-    const i = FEEDS.indexOf(feed);
-    const u = (i % 2) * 0.5;
-    const v = i < 2 ? 0.5 : 0;
-    const inset = 0.004;
-    this.quads.push(quadAt(centre, normal, width, height, 0, [u + inset, v + inset, u + 0.5 - inset, v + 0.5 - inset]));
-  }
+    // Developing: one flat sheet covering the whole of a second picture,
+    // drawn with a shader that turns the stored numbers into light. That
+    // second picture keeps smaller copies of itself, worked out in light
+    // (not in stored numbers), which is what keeps thin bright text from
+    // going dim when a screen is seen from across a room.
+    this.developed = new THREE.WebGLRenderTarget(this.canvas.width, this.canvas.height, {
+      type: THREE.HalfFloatType,
+      depthBuffer: false,
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+      magFilter: THREE.LinearFilter,
+    });
+    this.texture = this.developed.texture;
+    const sheet = new THREE.Mesh(
+      new THREE.PlaneGeometry(2, 2),
+      new THREE.ShaderMaterial({
+        uniforms: { uPainted: { value: this.painted } },
+        vertexShader: /* glsl */ `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = vec4(position.xy, 0.0, 1.0);
+          }`,
+        fragmentShader: /* glsl */ `
+          uniform sampler2D uPainted;
+          varying vec2 vUv;
+          void main() {
+            gl_FragColor = sRGBTransferEOTF(texture2D(uPainted, vUv));
+          }`,
+        depthTest: false,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    );
+    sheet.frustumCulled = false;
+    this.developer.add(sheet);
 
-  finish(): void {
-    if (!this.quads.length) return;
-    const material = new THREE.MeshBasicMaterial({ map: this.texture, toneMapped: false, fog: false });
-    // Above 1.0 so the screens glow through the bloom pass.
-    material.color.setScalar(2.4);
-    const mesh = new THREE.Mesh(mergeGeometries(this.quads)!, material);
-    mesh.matrixAutoUpdate = false;
-    this.object.add(mesh);
+    this.glass.width = CELL_W;
+    this.glass.height = CELL_H;
+    const glass = this.glass.getContext('2d')!;
+    glass.fillStyle = 'rgba(0,0,0,0.28)';
+    for (let y = 0; y < CELL_H; y += 3) glass.fillRect(0, y, CELL_W, 1);
+    const fall = glass.createRadialGradient(CELL_W / 2, CELL_H / 2, CELL_H * 0.3, CELL_W / 2, CELL_H / 2, CELL_W * 0.72);
+    fall.addColorStop(0, 'rgba(0,0,0,0)');
+    fall.addColorStop(1, 'rgba(0,0,0,0.75)');
+    glass.fillStyle = fall;
+    glass.fillRect(0, 0, CELL_W, CELL_H);
+
+    const columns = CELL_W / NOISE_BLOCK;
+    const rows = CELL_H / NOISE_BLOCK;
+    for (let i = 0; i < NOISE_FRAMES; i++) {
+      const tile = document.createElement('canvas');
+      tile.width = columns;
+      tile.height = rows;
+      const paint = tile.getContext('2d')!;
+      const image = paint.createImageData(columns, rows);
+      for (let p = 0; p < columns * rows; p++) {
+        const v = Math.floor(Math.random() * 150);
+        image.data[p * 4] = v;
+        image.data[p * 4 + 1] = v + 6;
+        image.data[p * 4 + 2] = v + 14;
+        image.data[p * 4 + 3] = 255;
+      }
+      paint.putImageData(image, 0, 0);
+      this.noise.push(tile);
+    }
     this.draw(0);
   }
 
   update(time: number): void {
+    // A restart winds the game's clock back: start counting again from there.
+    if (time < this.nextDraw - REPAINT) this.nextDraw = 0;
     if (time < this.nextDraw) return;
-    this.nextDraw = time + 0.11;
+    this.nextDraw = time + REPAINT;
     this.draw(time);
   }
 
@@ -83,7 +166,18 @@ export class ScreenBank {
     this.cell(1, 0, () => this.drawLog());
     this.cell(0, 1, () => this.drawStatic());
     this.cell(1, 1, () => this.drawLockdown(time));
-    this.texture.needsUpdate = true;
+    this.painted.needsUpdate = true;
+    this.fresh = true;
+  }
+
+  /** Hand a freshly painted picture to the graphics card and develop it. */
+  develop(renderer: THREE.WebGLRenderer): void {
+    if (!this.fresh) return;
+    this.fresh = false;
+    const before = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.developed);
+    renderer.render(this.developer, this.lens);
+    renderer.setRenderTarget(before);
   }
 
   private cell(cx: number, cy: number, paint: () => void): void {
@@ -94,14 +188,7 @@ export class ScreenBank {
     g.rect(0, 0, CELL_W, CELL_H);
     g.clip();
     paint();
-    // Scanlines and a soft dark corner falloff, like a real tube.
-    g.fillStyle = 'rgba(0,0,0,0.28)';
-    for (let y = 0; y < CELL_H; y += 3) g.fillRect(0, y, CELL_W, 1);
-    const fall = g.createRadialGradient(CELL_W / 2, CELL_H / 2, CELL_H * 0.3, CELL_W / 2, CELL_H / 2, CELL_W * 0.72);
-    fall.addColorStop(0, 'rgba(0,0,0,0)');
-    fall.addColorStop(1, 'rgba(0,0,0,0.75)');
-    g.fillStyle = fall;
-    g.fillRect(0, 0, CELL_W, CELL_H);
+    g.drawImage(this.glass, 0, 0);
     g.restore();
   }
 
@@ -137,13 +224,17 @@ export class ScreenBank {
 
   private drawStatic(): void {
     const g = this.g;
-    for (let y = 0; y < CELL_H; y += 4) {
-      for (let x = 0; x < CELL_W; x += 4) {
-        const v = Math.floor(Math.random() * 150);
-        g.fillStyle = `rgb(${v},${v + 6},${v + 14})`;
-        g.fillRect(x, y, 4, 4);
-      }
-    }
+    // One of the ready-made frames, blown up without smoothing and mirrored
+    // at random, so the same frame rarely looks the same twice.
+    const tile = this.noise[Math.floor(Math.random() * this.noise.length)]!;
+    const flipX = Math.random() < 0.5;
+    const flipY = Math.random() < 0.5;
+    g.save();
+    g.imageSmoothingEnabled = false;
+    g.translate(flipX ? CELL_W : 0, flipY ? CELL_H : 0);
+    g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+    g.drawImage(tile, 0, 0, CELL_W, CELL_H);
+    g.restore();
     g.fillStyle = 'rgba(0,0,0,0.6)';
     g.fillRect(52, 78, 152, 36);
     g.fillStyle = '#dfe8f0';
@@ -179,5 +270,54 @@ export class ScreenBank {
     g.font = '400 13px "Share Tech Mono", monospace';
     g.fillText('ALL EXITS SEALED BY ARGUS', CELL_W / 2, CELL_H / 2 + 28);
     g.textAlign = 'left';
+  }
+}
+
+// Made when the first bank of screens is built (by then the fonts the feeds
+// are written in have loaded).
+let feeds: Feeds | null = null;
+
+/**
+ * Send the monitors' picture to the graphics card if it has been repainted
+ * since the last call. Call once a frame, before the scene is drawn (and
+ * once before anything photographs the rooms).
+ */
+export function developScreens(renderer: THREE.WebGLRenderer): void {
+  feeds?.develop(renderer);
+}
+
+/** The monitors of one room. */
+export class ScreenBank {
+  readonly object = new THREE.Group();
+  private readonly quads: THREE.BufferGeometry[] = [];
+  private readonly feeds: Feeds;
+
+  constructor() {
+    this.feeds = feeds ??= new Feeds();
+    this.object.name = 'screens';
+  }
+
+  /** Add a screen showing one of the feeds. Call finish() after the last one. */
+  add(centre: THREE.Vector3Tuple, normal: THREE.Vector3Tuple, width: number, height: number, feed: ScreenFeed): void {
+    const i = FEEDS.indexOf(feed);
+    const u = (i % 2) * 0.5;
+    const v = i < 2 ? 0.5 : 0;
+    const inset = 0.004;
+    this.quads.push(quadAt(centre, normal, width, height, 0, [u + inset, v + inset, u + 0.5 - inset, v + 0.5 - inset]));
+  }
+
+  finish(): void {
+    if (!this.quads.length) return;
+    const material = new THREE.MeshBasicMaterial({ map: this.feeds.texture, toneMapped: false, fog: false });
+    // Above 1.0 so the screens glow through the bloom pass.
+    material.color.setScalar(2.4);
+    const mesh = new THREE.Mesh(mergeGeometries(this.quads)!, material);
+    mesh.matrixAutoUpdate = false;
+    this.object.add(mesh);
+  }
+
+  /** Keep the feeds moving. Safe to call from every room each frame. */
+  update(time: number): void {
+    this.feeds.update(time);
   }
 }

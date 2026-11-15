@@ -32,6 +32,7 @@ import { Renderer } from '../render/Renderer';
 import { createWallet, earn, type Wallet } from '../sim/economy';
 import { floodFrom } from '../sim/navGrid';
 import { ROOM, PLAYER_START } from '../world/lobby/plan';
+import { developScreens } from '../world/lobby/ScreenBank';
 import { AREA_CENTRES, AREA_IDS, type AreaId } from '../world/plan';
 import { World } from '../world/World';
 import { Combat, type HitResult } from './Combat';
@@ -98,6 +99,8 @@ export class Game {
   private materials!: MaterialLibrary;
   private view!: WeaponView;
   private robotModel!: RobotModel;
+  /** A robot that is never shown: it keeps the robots' shaders built. */
+  private spare!: Robot;
   private gibs!: Gibs;
   private combat!: Combat;
   private readonly particles = new Particles();
@@ -185,6 +188,17 @@ export class Game {
     this.robotModel = new RobotModel(this.assets, DRUDGE);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
+    // A spare robot that is never shown. While it exists the robots' shaders
+    // stay built between rounds, and are rebuilt along with everything else
+    // when the quality level changes, so the first robot of a round never
+    // stalls the game.
+    this.spare = new Robot(this.robotModel, 0, 0, 0);
+    this.spare.root.visible = false;
+    // Parked under the floor, and exempt from the "is it in view?" test so
+    // that the one time it is drawn (see warmShadows) it is drawn for sure.
+    this.spare.root.position.y = -40;
+    this.spare.root.traverse((node) => (node.frustumCulled = false));
+    this.scene.add(this.spare.root);
 
     this.view = new WeaponView(this.assets);
     this.camera.add(this.view.root);
@@ -204,28 +218,15 @@ export class Game {
     lap('build world');
 
     // Compile every shader up front, in the background, so neither the first
-    // frame nor the first gunshot or destroyed robot causes a stutter. A
-    // blank stand-in environment is in place first: shaders are built
-    // differently with and without reflections, and this way they are only
-    // ever built once.
+    // frame nor the first gunshot or destroyed robot causes a stutter.
     onProgress(0.94);
-    this.scene.environment = blankEnvironment(this.renderer.three);
-    this.scene.environmentIntensity = 0;
-    const hidden = this.revealForCompile();
-    // The scene is always drawn into an off-screen HDR buffer (never
-    // straight to the screen), and shaders differ between the two, so
-    // compile with a buffer of that kind bound.
-    const three = this.renderer.three;
-    const offscreen = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
-    three.setRenderTarget(offscreen);
-    await three.compileAsync(this.scene, this.camera);
-    three.setRenderTarget(null);
-    offscreen.dispose();
-    for (const object of hidden) object.visible = false;
+    const standIn = this.useStandInEnvironment();
+    await this.warmShaders();
     lap('compile shaders');
 
     onProgress(0.97);
     this.bakeReflections();
+    standIn.dispose();
     lap('bake reflections');
     this.frame(0);
     lap('first frame');
@@ -299,6 +300,63 @@ export class Game {
     };
   }
 
+  /**
+   * Put a black stand-in where the baked reflections will go. Shaders are
+   * built differently with and without reflections, and for each size of
+   * reflection picture (Ultra's is larger), so with this in place they are
+   * built once, for the right size. The caller throws it away after the
+   * real reflections have been baked.
+   */
+  private useStandInEnvironment(): THREE.Texture {
+    const standIn = blankEnvironment(this.renderer.three, QUALITY[this.quality].reflectionProbeSize);
+    this.scene.environment = standIn;
+    this.scene.environmentIntensity = 0;
+    return standIn;
+  }
+
+  /**
+   * Shadows are drawn with small shaders of their own, which are only built
+   * the first time something of that kind casts one. Draw one throwaway
+   * picture with the spare robot standing in it, so that the first real
+   * robot after a change of quality level does not have to wait for them.
+   */
+  private warmShadows(): void {
+    const three = this.renderer.three;
+    const throwaway = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+    const before = three.getRenderTarget();
+    this.spare.root.visible = true;
+    three.setRenderTarget(throwaway);
+    three.render(this.scene, this.camera);
+    three.setRenderTarget(before);
+    this.spare.root.visible = false;
+    throwaway.dispose();
+  }
+
+  /**
+   * Build every shader the scene can need, including those of things that
+   * are hidden right now (the guns not in hand, scrap not yet on the floor,
+   * the spare robot). The work is handed to the graphics driver all at once,
+   * which lets it build them side by side; the promise resolves when every
+   * one is ready to draw with.
+   */
+  private warmShaders(): Promise<unknown> {
+    const three = this.renderer.three;
+    const hidden = this.revealForCompile();
+    // The scene is always drawn into an off-screen HDR buffer (never
+    // straight to the screen), and shaders differ between the two, so
+    // compile with a buffer of that kind bound.
+    const offscreen = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+    const before = three.getRenderTarget();
+    three.setRenderTarget(offscreen);
+    // Everything is started before this call returns; only the waiting is
+    // left for later, so what was revealed can be hidden again straight away.
+    const ready = three.compileAsync(this.scene, this.camera);
+    three.setRenderTarget(before);
+    offscreen.dispose();
+    for (const object of hidden) object.visible = false;
+    return ready;
+  }
+
   /** Briefly show everything that starts hidden, so its shaders get compiled too. */
   private revealForCompile(): THREE.Object3D[] {
     const revealed: THREE.Object3D[] = [];
@@ -314,6 +372,8 @@ export class Game {
   /** Photograph every area for its reflections and bounce light. */
   private bakeReflections(): void {
     const preset = QUALITY[this.quality];
+    // The monitors glow in those photographs too, so their picture must be ready.
+    developScreens(this.renderer.three);
     const hidden: THREE.Object3D[] = [this.particles.group, this.gibs.group, this.casings.mesh, this.view.root, ...this.robots.map((r) => r.root)];
     for (const motes of this.world.dust.values()) hidden.push(motes.points);
     const shown = new Map<AreaId, boolean>();
@@ -377,8 +437,19 @@ export class Game {
     for (const area of this.world.areas.values()) for (const { effect } of area.haze) effect.mesh.visible = preset.lightShafts;
     this.settleUntil = this.time + GOVERNOR.settle;
     this.lowFpsTime = 0;
-    // Lights changed, so the baked reflections are out of date.
-    if (changed && this.environments.size) this.bakeReflections();
+    if (changed && this.environments.size) {
+      // How many lights cast shadows, and how soft those shadows are, is
+      // built into every shader, so a change of level rebuilds them all.
+      // Do it now and all together, including for what is out of sight:
+      // left alone, each would stall the game the first time it was needed
+      // (the next robot through the door, the next gun bought).
+      const standIn = this.useStandInEnvironment();
+      void this.warmShaders();
+      // Lights changed, so the baked reflections are out of date too.
+      this.bakeReflections();
+      standIn.dispose();
+      this.warmShadows();
+    }
     this.onQualityChange(level, automatic);
   }
 
@@ -554,6 +625,7 @@ export class Game {
 
     this.audio.setListener(this.camera);
     this.fade = damp(this.fade, this.fadeTarget, 5, dt);
+    developScreens(this.renderer.three);
     this.renderer.grade.fade = this.fade;
     this.renderer.grade.damage = this.state === 'title' ? 0 : Math.min(1, this.player.hurt * 1.15);
     this.renderer.render(dt, this.time);

@@ -18,7 +18,6 @@ import { DOCK, DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, W
 type Vec3 = [number, number, number];
 
 const COLD = 0xcfe0ff;
-const BLUE = 0x6f9dff;
 const RED = 0xff2a12;
 const AMBER = 0xff9a2e;
 const HALF_PI = Math.PI / 2;
@@ -275,7 +274,8 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
       glow: { materials: fixture.filter((m) => m.emissiveMap || /glass|light$/i.test(m.name)), color: 0xdce8ff, intensity: 5 },
     });
   });
-  lights.push({ name: 'hallRacksW', area: 'hall', kind: 'point', color: BLUE, intensity: 4, position: [-7.2, 1.3, 16.4], distance: 8 });
+  // By the loading dock, so its frame and sign can be read from inside.
+  lights.push({ name: 'hallDockSide', area: 'hall', kind: 'point', color: 0xd6e4ff, intensity: 8, position: [-9.2, 2.7, 16.5], distance: 8 });
   lights.push({ name: 'hallRacksSW', area: 'hall', kind: 'point', color: 0xff5a3a, intensity: 3, position: [-7.4, 1.3, 21.6], distance: 7 });
   lights.push({ name: 'hallServiceDoor', area: 'hall', kind: 'point', color: 0xffe2b8, intensity: 4, position: [x1 - 0.7, 2.8, (servicePlan.from + servicePlan.to) / 2], distance: 4.5 });
   // The uplink corner: warm light from the console, cold from above.

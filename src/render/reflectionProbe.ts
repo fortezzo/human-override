@@ -32,10 +32,12 @@ export function bakeReflectionProbe(renderer: THREE.WebGLRenderer, scene: THREE.
 }
 
 /**
- * A black environment in the same format the baked one will use. Putting
- * this in place before shaders are compiled means they are built with
- * reflections enabled from the start and never need rebuilding.
+ * A black environment in the same format, and of the same size, as the
+ * baked one will be. Shaders are built differently with and without
+ * reflections, and differently again for each size of reflection picture,
+ * so putting this in place before they are compiled means they are built
+ * once, correctly, and never need rebuilding.
  */
-export function blankEnvironment(renderer: THREE.WebGLRenderer): THREE.Texture {
-  return pmremFor(renderer).fromScene(new THREE.Scene()).texture;
+export function blankEnvironment(renderer: THREE.WebGLRenderer, size: number): THREE.Texture {
+  return pmremFor(renderer).fromScene(new THREE.Scene(), 0, 0.1, 100, { size }).texture;
 }

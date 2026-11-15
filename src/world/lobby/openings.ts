@@ -66,6 +66,18 @@ function buildVestibule(b: LevelBuilder): void {
   // West yard, seen through the windows.
   b.box('floor', [rx0 - 26, -0.4, zIn], [rx0 - 0.5, -0.02, ROOM.z1 + 8], { collide: false, cast: false });
 
+  // The yard is fenced in with road barriers (and sealed behind them), so
+  // nobody wanders off into the dark: robots arrive across it, and the
+  // player can step out a little way but no further.
+  for (let x = -5; x <= 5; x += 2) b.prop('concrete_road_barrier', { at: [x, 0, -19.7], rotY: 0, kind: 'concrete' });
+  for (const z of [-18.2, -15.9, -13.7]) {
+    b.prop('concrete_road_barrier', { at: [-6.2, 0, z], rotY: HALF_PI, kind: 'concrete' });
+    b.prop('concrete_road_barrier', { at: [6.2, 0, z], rotY: HALF_PI, kind: 'concrete' });
+  }
+  b.blocker([-6.6, 0, -20.6], [-6, 3, -12.6]);
+  b.blocker([6, 0, -20.6], [6.6, 3, -12.6]);
+  b.blocker([-6.6, 0, -20.6], [6.6, 3, -20]);
+
   // Wreckage in the entry.
   b.prop('concrete_road_barrier', { at: [1.25, 0, -10.6], rotY: 1.15, kind: 'concrete' });
   b.prop('concrete_road_barrier', { at: [-3.4, 0, -15.2], rotY: 0.3, kind: 'concrete' });

@@ -3,9 +3,10 @@
 //   npm run build && node tools/perf.mjs
 //
 // Measures the real, uncapped frame rate at each quality level at 1080p in
-// the heaviest moment the current stage can produce, plus start-up timings
-// and the total download size. Numbers are from this machine's GPU; the
-// report prints its name so they can be put in context.
+// the heaviest moment the current stage can produce, how evenly frames
+// arrive at the screen's own rate (smoothness), plus start-up timings and
+// the total download size. Numbers are from this machine's GPU; the report
+// prints its name so they can be put in context.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -98,12 +99,74 @@ for (const level of ['low', 'medium', 'high', 'ultra']) {
   );
 }
 
+// ---- Smoothness: how evenly frames arrive at the screen's own rate
+// A high average can hide stutter, so this part runs the way a player sees
+// the game (frame rate limited to the screen's) and looks at the slowest
+// frames instead of the average. Same scene: the full horde in the server
+// hall, every door open, the carbine firing. It is also run at 3840 x 2160,
+// which loads the graphics card about as a slower card is loaded at 1080p.
+// The page used so far is emptied first, so it does not compete for the
+// graphics card with what is measured from here on.
+await page.goto('about:blank');
+const paced = async (width, height) => {
+  const limited = await launch({ width, height, capped: true });
+  await limited.page.goto(`${site.url}?debug=1`);
+  await limited.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await limited.page.evaluate(() => {
+    const ho = window.__HO;
+    ho.play();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    for (const id of ['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+    ho.scrap(5000);
+    ho.place(1.6, 10.1, 180);
+    ho.step(1 / 60, 140);
+    ho.tap('interact');
+    ho.step(1 / 60, 40);
+    ho.place(-1, 17.5, 0, -2);
+  });
+  console.log(`\nSmoothness at ${width} x ${height}, frame rate limited to the screen's (5 seconds of the full horde)`);
+  console.log('quality   frames   usual ms   99th ms   worst ms   frames over 25 ms');
+  for (const level of ['low', 'medium', 'high', 'ultra']) {
+    await limited.page.evaluate((level) => window.__HO.setQuality(level), level);
+    await limited.page.evaluate(() => {
+      const ho = window.__HO;
+      ho.clearRobots();
+      for (let i = 0; i < 24; i++) ho.spawnRobot(-3.2 + (i % 6) * 0.9, 8.6 + Math.floor(i / 6) * 1.7, 180, false, i % 3 === 0 ? 3.0 : 1.6, i % 4 === 0 ? 150 : 1500);
+      ho.game.weapons.state.reserve = 9000;
+      ho.press('fire', true);
+    });
+    // Long enough for the change of level itself to be over and done with.
+    await limited.page.waitForTimeout(3500);
+    const r = await limited.page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const times = [];
+          let last = performance.now();
+          const start = last;
+          const tick = () => {
+            const now = performance.now();
+            times.push(now - last);
+            last = now;
+            if (now - start < 5000) requestAnimationFrame(tick);
+            else {
+              const sorted = [...times].sort((a, b) => a - b);
+              resolve({ frames: times.length, usual: sorted[Math.floor(sorted.length / 2)], p99: sorted[Math.floor(sorted.length * 0.99)], worst: sorted[sorted.length - 1], late: times.filter((t) => t > 25).length });
+            }
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    await limited.page.evaluate(() => window.__HO.press('fire', false));
+    console.log(`${level.padEnd(8)} ${String(r.frames).padStart(7)} ${r.usual.toFixed(1).padStart(10)} ${r.p99.toFixed(1).padStart(9)} ${r.worst.toFixed(1).padStart(10)} ${String(r.late).padStart(19)}`);
+  }
+  await limited.browser.close();
+};
+await paced(1920, 1080);
+await paced(3840, 2160);
+
 // ---- Time to the title screen on slower connections (fresh visit, no cache)
-// Stop the stress test first so it does not compete for the graphics card.
-await page.evaluate(() => {
-  window.__HO.clearRobots();
-  window.__HO.freeze(true);
-});
 console.log('\nTime to title screen on a simulated connection:');
 for (const mbps of [100, 50, 25]) {
   const context = await browser.newContext({ viewport: { width: 1920, height: 1080 } });

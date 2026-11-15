@@ -10,7 +10,12 @@
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= '0';
 const { chromium } = await import('playwright');
 
-export async function launch({ width = 1600, height = 900, headless = true } = {}) {
+/**
+ * `capped: true` leaves the browser's usual frame-rate limit on (60 frames
+ * a second), which is how a player sees the game. The default runs with the
+ * limit off, to measure how fast the game could go.
+ */
+export async function launch({ width = 1600, height = 900, headless = true, capped = false } = {}) {
   const browser = await chromium.launch({
     headless,
     channel: 'chromium', // full Chromium ("new headless"), which can use the GPU
@@ -19,8 +24,7 @@ export async function launch({ width = 1600, height = 900, headless = true } = {
       '--enable-gpu',
       '--ignore-gpu-blocklist',
       '--enable-webgl',
-      '--disable-gpu-vsync',
-      '--disable-frame-rate-limit',
+      ...(capped ? [] : ['--disable-gpu-vsync', '--disable-frame-rate-limit']),
       '--autoplay-policy=no-user-gesture-required',
       '--mute-audio',
     ],

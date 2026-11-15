@@ -11,6 +11,8 @@
 //     solid black, the brightness setting works
 //   - scrap: what a hit, a kill, a weak-point kill and a melee kill pay
 //   - every kind of purchase, and that each charges the right amount
+//   - the player cannot leave the map
+//   - a change of quality level mid-game leaves no shader to be built late
 //   - a robot from every entry point reaches the player in every area
 //   - whole rounds played by the autopilot, with purchases
 //   - going down without god mode reaches the game-over screen
@@ -369,6 +371,81 @@ try {
   check('1 and 2 switch weapons', r.weapon === 'pistol');
   await tap('weapon2');
   await step(40);
+  await ev(() => window.__HO.clearRobots());
+
+  // ------------------------------------------------------ the edge of the map
+  // The player may step out into the yard the robots arrive across, but not
+  // past the barriers around it.
+  const sprintFrom = (x, z, yaw, frames) =>
+    ev(
+      ([x, z, yaw, frames]) => {
+        const ho = window.__HO;
+        ho.place(x, z, yaw);
+        ho.press('forward', true);
+        ho.press('sprint', true);
+        ho.step(1 / 60, frames);
+        ho.press('forward', false);
+        ho.press('sprint', false);
+        ho.step(1 / 60, 2);
+        const p = ho.game.player.position;
+        return [p.x, p.z];
+      },
+      [x, z, yaw, frames],
+    );
+  const outside = await sprintFrom(-0.6, -6, 0, 150);
+  check('the player can step out into the yard', outside[1] < -13.5, `reached z ${outside[1].toFixed(1)}`);
+  const pushes = [];
+  for (const [x, z, yaw] of [[4.5, -18.5, -90], [-4.5, -18.5, 90], [0, -18.5, 0], [5.2, -19, -45], [-5.2, -19, 45], [5.4, -13.2, -90], [-5.4, -13.2, 90], [5.3, -13.4, 180], [-5.3, -13.4, 180]]) {
+    pushes.push(await sprintFrom(x, z, yaw, 240));
+  }
+  const farthest = pushes.reduce((worst, [x, z]) => Math.max(worst, Math.abs(x) - 6, -20 - z, z > -12.6 && Math.abs(x) > 2.7 ? 1 : -9), -9);
+  check('the barriers around the yard cannot be passed', farthest < 0, `sprinting at them from nine places, the closest the player came to the edge was ${(-farthest).toFixed(2)} m inside it`);
+  await ev(() => window.__HO.place(0, 3, 0));
+
+  // ------------------------------------------- changing quality in mid-game
+  // How many lights cast shadows is built into every shader, so a change of
+  // quality level rebuilds them all. That has to happen at the change, for
+  // everything at once: a shader built late freezes the picture for up to a
+  // second the first time it is needed (the next robot through the door,
+  // the next gun raised). The game changes level by itself on slow
+  // computers, so this is the case that matters most.
+  const programIds = () => ev(() => window.__HO.game.renderer.three.info.programs.map((p) => p.id));
+  const builtLate = {};
+  for (const level of ['low', 'ultra', 'high']) {
+    await ev((level) => {
+      const ho = window.__HO;
+      ho.clearRobots();
+      ho.setQuality(level);
+      ho.step(1 / 60, 30);
+    }, level);
+    const before = await programIds();
+    // The next robot to appear, its destruction and the scrap it leaves,
+    // then each weapon swapped in, fired and aimed.
+    await oneRobot(40);
+    await shootUntilDestroyed('chest');
+    for (const slot of ['weapon1', 'weapon2']) {
+      await tap(slot);
+      await step(40);
+      await ev(() => {
+        const ho = window.__HO;
+        ho.tap('fire');
+        ho.step(1 / 60, 10);
+        ho.press('aim', true);
+        ho.step(1 / 60, 30);
+        ho.press('aim', false);
+        ho.step(1 / 60, 20);
+      });
+    }
+    const after = await programIds();
+    builtLate[level] = after.filter((id) => !before.includes(id)).length;
+  }
+  check(
+    'a change of quality level rebuilds every shader at once, leaving none to stall the game later',
+    Object.values(builtLate).every((count) => count === 0),
+    Object.entries(builtLate)
+      .map(([level, count]) => `to ${level}: ${count} built late`)
+      .join(', '),
+  );
   await ev(() => window.__HO.clearRobots());
 
   // ------------------------------------------------- every way in, every area
