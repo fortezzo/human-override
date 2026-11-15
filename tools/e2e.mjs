@@ -353,8 +353,14 @@ try {
   });
   before = (await run()).scrap;
   await tap('fire');
-  await step(40);
+  // Its flash is a small burst drawn for one frame: on for the frame the
+  // gun fires (however short its time is set), gone by the next.
+  const burst = [(await stats()).flash];
+  await step(1);
+  burst.push((await stats()).flash);
+  await step(39);
   r = await run();
+  check("the shotgun's muzzle flash is drawn on the frame it fires and is gone by the next", burst[0] === true && burst[1] === false, `firing frame: ${burst[0] ? 'on' : 'off'}; next frame: ${burst[1] ? 'on' : 'off'}`);
   check('one shotgun shell pays one hit, however many pellets land', r.scrap - before === 10 && r.ammo === 5, `paid ${r.scrap - before}`);
   await ev(() => window.__HO.clearRobots());
   await rack();
@@ -1246,6 +1252,37 @@ try {
     'no robot is ever created in view, wherever the player stands and stares',
     sightings.length === 0 && starved === 0 && resorts === 0,
     sightings.length ? sightings.slice(0, 4).join(' | ') : starved ? `${starved} of the ${stances.length} positions kept the robots from coming at all` : `${arrivals} robots created over ${stances.length} awkward positions, none of them in view, and no round held up`,
+  );
+  // The same count over a lot of ordinary play: eight whole runs by the
+  // autopilot to round 6, worked out without being drawn (so each takes a
+  // few seconds), half of them with every door open so that every way in is
+  // in use. Several hundred robots. (A vent half hidden behind a column
+  // once counted as "not being looked at". That showed up about once in two
+  // hundred robots: more than one played-through run will reliably catch.)
+  const crowd = { created: 0, seen: [], lastResorts: 0, byEntry: {} };
+  for (let i = 0; i < 8; i++) {
+    const audit = await ev((open) => {
+      const ho = window.__HO;
+      ho.restart();
+      ho.god(true);
+      if (open) for (const id of ['lobbyHall', 'lobbyPower', 'hallPower']) ho.openDoor(id);
+      ho.spawnAudit(true);
+      ho.autopilot(true);
+      for (let frame = 0; frame < 60 * 60 * 12 && ho.run().round < 6; frame += 300) ho.simulate(1 / 60, 300);
+      ho.autopilot(false);
+      return ho.spawnAudit();
+    }, i % 2 === 1);
+    crowd.created += audit.created;
+    crowd.lastResorts += audit.lastResorts;
+    for (const seen of audit.seen) crowd.seen.push(seen.entry);
+    for (const [entry, count] of Object.entries(audit.byEntry)) crowd.byEntry[entry] = (crowd.byEntry[entry] ?? 0) + count;
+  }
+  check(
+    'nor in eight whole runs of ordinary play, with every way in used',
+    crowd.created > 300 && crowd.seen.length === 0 && crowd.lastResorts === 0 && Object.keys(crowd.byEntry).length >= 6,
+    crowd.seen.length
+      ? `${crowd.seen.length} of ${crowd.created} appeared in view, at: ${[...new Set(crowd.seen)].join(', ')}`
+      : `${crowd.created} robots created, none in view: ${Object.entries(crowd.byEntry).map(([entry, count]) => `${count} at ${entry}`).join(', ')}`,
   );
   await ev(() => {
     const ho = window.__HO;
