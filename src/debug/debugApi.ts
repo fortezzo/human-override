@@ -106,7 +106,6 @@ export interface DebugTools {
 
 export function installDebugApi(game: Game): DebugTools {
   const pilot = new Autopilot(game);
-  let holding = false;
   const setAutopilot = (on: boolean) => {
     if (!on) pilot.release();
     game.autopilot = on ? pilot : null;
@@ -209,7 +208,6 @@ export function installDebugApi(game: Game): DebugTools {
       game.director.forceEntry = id;
     },
     holdRounds(on) {
-      holding = on;
       game.director.paused = on;
     },
     autopilot(on) {
@@ -273,7 +271,7 @@ export function installDebugApi(game: Game): DebugTools {
       const plan = director.rounds.plan;
       return [
         `DEBUG  [7] god mode ${game.godMode ? 'ON' : 'off'}  [8] +${FREE_SCRAP} scrap  [9] skip round  [0] autopilot ${game.autopilot ? 'ON' : 'off'}`,
-        `round ${director.rounds.round} (${director.rounds.phase}${holding ? ', held' : ''})  robots ${game.robots.length} on map, ${remaining(director.rounds)} left  health ${plan.health}  speed ${plan.walkSpeed.toFixed(2)}${plan.runShare > 0 ? ` / ${plan.runSpeed.toFixed(2)} x${Math.round(plan.runShare * 100)}%` : ''}`,
+        `round ${director.rounds.round} (${director.rounds.phase}${director.paused ? ', held' : ''})  robots ${game.robots.length} on map, ${remaining(director.rounds)} left  health ${plan.health}  speed ${plan.walkSpeed.toFixed(2)}${plan.runShare > 0 ? ` / ${plan.runSpeed.toFixed(2)} x${Math.round(plan.runShare * 100)}%` : ''}`,
         `${WEAPONS[game.weapons.def.id].name}  area ${game.world.playerArea}  lights ${game.lights.liveNames.length}${game.autopilot ? `  autopilot: ${pilot.status}` : ''}`,
       ];
     },

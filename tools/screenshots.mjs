@@ -104,6 +104,24 @@ await run(() => {
 await shoot('04-shotgun');
 
 // ---- 5. A full horde mid-round
+// A horde like this belongs to a later round, so move the run on to round 8
+// first (30 robots, 24 of them on the map at once) and let the round
+// banners clear, so that what the HUD says matches what is on screen.
+await run(() => {
+  const ho = window.__HO;
+  ho.clearRobots();
+  ho.holdRounds(false);
+  for (let guard = 0; guard < 60 && ho.game.director.rounds.round < 8; guard++) {
+    ho.skipRound();
+    ho.step(1 / 60, 2);
+    ho.clearRobots();
+  }
+  ho.holdRounds(true);
+  ho.clearRobots();
+  ho.place(0, 5.6, 0, -1);
+  ho.step(1 / 60, 30);
+});
+await page.waitForTimeout(5000);
 await run(() => {
   const ho = window.__HO;
   ho.clearRobots();
@@ -223,11 +241,33 @@ await run(() => {
 await shoot('15-last-robots-marked');
 
 // ---- 10. Game over
+// A card full of zeros says nothing, so play a real run first: the
+// autopilot fights through three rounds with god mode on, then is left to
+// its fate without it.
 await run(() => {
   const ho = window.__HO;
-  ho.holdRounds(false);
+  ho.restart();
+  ho.god(true);
+  ho.autopilot(true);
+});
+for (let i = 0; i < 600; i++) {
+  await step(30);
+  if ((await run(() => window.__HO.run().round)) >= 4) break;
+}
+await run(() => {
+  const ho = window.__HO;
+  ho.autopilot(false);
+  // The autopilot never misses, and a card reading "accuracy 100%" looks
+  // like what it is. A person misses: put a magazine of the sidearm into
+  // the wall before the end.
+  ho.tap('weapon1');
+  ho.step(1 / 60, 45);
+  ho.place(ho.game.player.position.x, ho.game.player.position.z, 90, 55);
+  for (let shot = 0; shot < 12; shot++) {
+    ho.tap('fire');
+    ho.step(1 / 60, 10);
+  }
   ho.god(false);
-  ho.place(0, 1.5, 0);
 });
 for (let i = 0; i < 400; i++) {
   await step(30);
@@ -244,7 +284,16 @@ await run(() => {
   ho.autopilot(true);
 });
 await overlay(true);
-await step(60 * 14);
+// Wait for a moment worth showing: round 2 under way, several robots in the room.
+for (let i = 0; i < 400; i++) {
+  await step(15);
+  const busy = await run(() => {
+    const state = window.__HO.run();
+    return state.round >= 2 && state.robots.filter((robot) => robot.alive).length >= 4;
+  });
+  if (busy) break;
+}
+await step(25);
 await shoot('17-debug-autopilot');
 
 const errors = [...new Set(problems)].filter((p) => !/X3595|gradient instruction/.test(p));

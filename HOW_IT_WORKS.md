@@ -1,10 +1,10 @@
 # How HUMAN OVERRIDE works
 
-A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 0, the look test) and is extended as each stage is added.
+A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 1, the core loop) and is extended as each stage is added.
 
 ## The one-paragraph version
 
-The game is a web page. When it opens, it downloads about 17 MB of pictures, 3D models and sounds, builds a 3D room out of them, and then redraws that room 60 or more times a second from wherever you are standing. Every redraw is one "frame". Between frames the game does a little bookkeeping: move the player, move the robot, check whether bullets hit anything, play sounds. That loop of "update a little, draw, repeat" is the whole game.
+The game is a web page. When it opens, it downloads about 17 MB of pictures, 3D models and sounds, builds a 3D building out of them, and then redraws it 60 or more times a second from wherever you are standing. Every redraw is one "frame". Between frames the game does a little bookkeeping: move the player, move the robots, check whether bullets hit anything, decide whether another robot should come in, play sounds. That loop of "update a little, draw, repeat" is the whole game.
 
 ## What it is built with
 
@@ -14,15 +14,37 @@ The game is a web page. When it opens, it downloads about 17 MB of pictures, 3D 
 
 There is no server behind it. Once the files are downloaded, everything runs on the player's own computer. That is why it can be hosted for free as a static site.
 
+## How a run works
+
+**Rounds.** A round is a fixed number of robots: 6 in round 1, 8 in round 2, 11, 14, 18 and so on. They do not all arrive at once: one comes in every couple of seconds (faster in later rounds), and never more than 24 are on the map together. When the last one is destroyed there is a short lull, then the next round starts with more robots that are tougher and faster. From round 4 some of them run. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code.
+
+**Scrap.** Destroying robots pays scrap: 10 for a hit, 60 for a kill, 100 for a kill through the head, 130 for a kill with the melee strike. The riskier the kill, the better it pays. The shotgun pays for one hit per shell however many of its nine pellets land, or it would print money.
+
+**Spending it.** Guns hang on wall racks with their price beside them; walk up, press F. Buying a gun you already own refills its ammunition for less. Doors cost scrap too, and stay open. You can only carry two guns, so a third replaces the one in your hands. Every purchase goes through one small piece of code that checks the price, takes the scrap and reports what happened, which is what lets a test buy everything in the game and add up the bill.
+
+**Going down.** Your health comes back if nothing hits you for four seconds. If it reaches zero, the run ends, the game shows how far you got, and "Play Again" puts everything back exactly as it was at the start: robots, doors, guns, scrap, timers.
+
+The rules for all of this (how a round grows, what a hit pays, what a purchase does) are written as plain logic with no graphics in them, in `src/sim/`. That separation is what makes them testable: a test can play out round 30 in a thousandth of a second without drawing anything.
+
+## How the map works
+
+The facility is four areas joined by doors: the security lobby where you start, a server hall, a power room, and the core. Three of the doors can be bought, and together they make a loop, so someone being chased always has somewhere to run. The core's door is sealed until the mission arrives in Stage 2.
+
+**Only what can be seen is drawn.** The game keeps a tiny map of which areas are joined by open doors. An area you could not possibly see (behind a closed door) is not drawn and its lamps are not lit. That is most of why four rooms cost little more than one.
+
+**Lights are shared.** A graphics card can only afford a couple of dozen lights at once, and the facility has about sixty lamps. So the game keeps a fixed pool of 22 lights and lends them to whichever lamps matter most from where you are standing, fading one out and the next in as you walk. A few of them cast real shadows; which ones is chosen the same way.
+
+**Where robots come in.** There are eight entrances: three they walk through (the main breach, a loading dock, a hole in the power room wall) and five ceiling vents they drop out of. Robots only use entrances that connect to where you are, and favour the area you are in, so the fight follows you. In the first two rounds, with no doors bought, that means the one bright doorway in front of you, which is how the game teaches where to look.
+
 ## How the picture is made
 
 Five layers stack up to make the look. If someone asks why it does not look like a typical browser game, this is the answer.
 
 1. **Real surfaces.** Walls, floor and metal are not flat colors. Each one uses three photographs of a real surface: its color, its bumps, and how rough or shiny it is. The graphics card combines them so light catches scratches and rust the way it would in life. This is called physically based rendering, and it is the same approach modern console games use.
 
-2. **A few carefully placed lights.** The room is deliberately dark, with warm pools under the old lamps and a hard cold floodlight blasting in from outside. Robots walk in with that cold light behind them, so you first see a silhouette with a glowing visor and a long shadow. A handful of the lights cast real shadows that are recalculated every frame. Two faint extra lights stand in for lamplight bouncing back up off the floor, so that columns and corners read as dark concrete instead of black holes.
+2. **A few carefully placed lights.** The rooms are deliberately dark, with warm pools under the old lamps and a hard cold floodlight blasting in from outside. Robots walk in with that cold light behind them, so you first see a silhouette with a glowing visor and a long shadow. Faint extra lights stand in for lamplight bouncing back up off the floor, so that columns and corners read as dark concrete instead of black holes.
 
-3. **Reflections of the actual room.** When the game starts it quietly photographs the room in all six directions from its centre. Shiny things (the rifle, the robot, damp patches on the floor) then reflect that photograph, so they mirror the real lamps around them. It also acts as soft bounce light.
+3. **Reflections of the actual rooms.** When the game starts it quietly photographs each room in all six directions from its centre. Shiny things (the guns, the robots, damp patches on the floor) then reflect that photograph, so they mirror the real lamps around them. It also acts as soft bounce light.
 
 4. **Air you can see.** Fog fades distant things. Faint cones of haze hang under the lamps. Hundreds of dust specks drift about and only light up while they pass through a beam. None of this is physically simulated; they are cheap visual tricks that read as atmosphere.
 
@@ -30,34 +52,45 @@ Five layers stack up to make the look. If someone asks why it does not look like
 
 ## Quality levels
 
-The same scene can be drawn at four levels: Low, Medium, High and Ultra. Lower levels turn off the most expensive steps (fewer shadow-casting lights, no ambient occlusion, lower resolution, fewer particles) but never change what happens in the game: the same robots, the same rules. Every lamp stays switched on at every level, so the room is equally bright on all of them; an automated check measures that.
+The same scene can be drawn at four levels: Low, Medium, High and Ultra. Lower levels turn off the most expensive steps (fewer shadow-casting lights, no ambient occlusion, lower resolution, fewer particles) but never change what happens in the game: the same robots, the same rules. Every lamp stays switched on at every level, so the rooms are equally bright on all of them; an automated check measures that.
 
 On "Auto" the game guesses a level from the name of your graphics chip, then watches the frame rate. If it stays under about 44 frames a second for three seconds, it drops a level and tells you. If even Low is too slow, it starts drawing fewer pixels and stretching them to fit.
 
-## How the room was built
+Changing level is more work than it sounds. The little programs the graphics card runs to draw each surface ("shaders") have the number of shadow-casting lights built into them, so a change of level means rebuilding every one. The game does that at the moment of the change, for everything at once, including things that are out of sight. Left to happen on demand, each would freeze the picture for half a second the first time it was needed: the next robot through the door, the next gun bought.
 
-The lobby is assembled in code from a small kit: "put a concrete wall from here to here", "hang a duct along this line", "place this barrel model there". Textures are sized by real-world measurements, so concrete looks the same scale on a huge wall and a small ledge.
+## How the rooms were built
+
+Each room is assembled in code from a small kit: "put a concrete wall from here to here, with a doorway in it", "hang a duct along this line", "place this barrel model there". Textures are sized by real-world measurements, so concrete looks the same scale on a huge wall and a small ledge.
 
 When the level loads, hundreds of separate pieces that share a material are fused into one object each. The graphics card is slow at drawing many small things and fast at drawing a few large ones, so this keeps the frame rate high.
 
-The signs and floor markings ("SITE 04", "STOP - ID CHECK AHEAD", the eye logo) are painted by code onto one shared image, then scuffed and chipped so they look sprayed on years ago. Every chip is kept smaller than the thinnest stroke of the lettering it lands on, so a worn sign can never turn into a different word. The security monitors are a tiny animation redrawn a few times a second.
+The signs and floor markings ("SITE 04", "STOP - ID CHECK AHEAD", the eye logo) are painted by code onto one shared image, then scuffed and chipped so they look sprayed on years ago. Every chip is kept smaller than the thinnest stroke of the lettering it lands on, so a worn sign can never turn into a different word.
 
 The stains on the upper walls are not part of any picture. The wall's texture is a plain, calm plaster that repeats every few metres; the damp patches, the streaks where water has run down from the ceiling and the soot above them are worked out for each point from where it is in the room, so no two metres of wall look the same.
 
+**Things that move on a surface.** The security monitors and the thousands of status lights on the server racks look like the same trick and are done two different ways, for a reason found by measuring.
+
+- The **monitors** are one small picture, repainted nine times a second and shared by every screen in the building. Handing a fresh picture to the graphics card sounds free and is not: done the obvious way, the card stops and catches up with everything else it is doing first. On a busy card that was a stall of a twentieth of a second, nine times a second. The picture is now sent in a plainer form that does not cause the stall, and the card converts it itself.
+- The **rack lights** are never repainted at all. The racks are a picture made once; which lights exist, and which of eight groups each belongs to, is two more pictures made once. Whether a group is lit at this instant is worked out by the graphics card for each rack unit, from the clock. Nothing is sent anywhere, however many racks are in view.
+
 ## How the robot works
 
-**The body.** A robot has two halves. The first is a skeleton with a set of recorded movements (walk, punch, flinch, fall), which comes from Adobe Mixamo, a library of motion-captured animation. The second is the body you see, which is original: the game builds it when it loads, out of a few simple kinds of shape (plates with their edges cut off, tubes, ribbed bellows, cables), each one fixed to a bone of the skeleton. The whole robot is described in one short file as a list of parts ("a plate here on the chest", "a piston from this bone to that one"), along with its proportions and its hunch. That is why it does not look like a stock character, and why a new type of robot later is a new list of parts, not a new download.
+**The body.** A robot has two halves. The first is a skeleton with a set of recorded movements (walk, run, punch, flinch, fall), which comes from Adobe Mixamo, a library of motion-captured animation. The second is the body you see, which is original: the game builds it when it loads, out of a few simple kinds of shape (plates with their edges cut off, tubes, ribbed bellows, cables), each one fixed to a bone of the skeleton. The whole robot is described in one short file as a list of parts ("a plate here on the chest", "a piston from this bone to that one"), along with its proportions and its hunch. That is why it does not look like a stock character, and why a new type of robot later is a new list of parts, not a new download.
 
 The body is painted in code too: every part is given a paint color and a wear level, and the shader adds rust, chipped edges and grime that gathers toward the feet. The visor and sensor lights are bright enough to trigger the glow filter.
 
-**Finding you.** The floor is divided into a grid of 30 cm squares. Starting from the square you are standing in, the game "floods" outward and writes into every square how many steps it is from you, going around walls and furniture. A robot anywhere on the map only has to step toward a neighbouring square with a smaller number. There is always one, so a robot can never get stuck, and one flood works for any number of robots at once. (This is called a flow field.)
+**Finding you.** The floor is divided into a grid of 30 cm squares. Starting from the square you are standing in, the game "floods" outward and writes into every square how many steps it is from you, going around walls, furniture and closed doors. A robot anywhere on the map only has to step toward a neighbouring square with a smaller number. One flood works for any number of robots at once, which is why two dozen cost barely more than one. (This is called a flow field.) When a door opens, the squares in its doorway are unblocked and the next flood finds the new route by itself.
+
+**Not walking through each other.** Robots also push gently away from any robot that is too close, so a horde spreads out around furniture instead of merging into one.
 
 **Deciding what to do.** The robot's "brain" is a short list of states with plain rules, written separately from the graphics so it can be tested on its own:
 
-- *Chase*: walk toward the player. If the player is within reach, switch to attack.
+- *Chase*: walk (or run) toward the player. If the player is within reach, switch to attack.
 - *Attack*: swing. Partway through the swing, if the player is still in reach, they take damage. If they backed away in time, it misses.
 - *Stagger*: a hard enough hit interrupts whatever it was doing for a moment.
 - *Dead*: collapse briefly, then break apart.
+
+Two safety nets keep a round from stalling. Robots hurry across the yards outside and only slow to their own pace indoors. And a robot that makes no progress toward you for seven seconds is quietly taken out and sent in again.
 
 **Breaking apart.** Because the body is built from parts, it also comes apart into them: eleven rigid chunks (head, torso, upper and lower arms and legs). When a robot is destroyed, its animated body is swapped for those chunks at exactly the positions they were in, and they are thrown outward with simple physics: gravity, bouncing off the floor, being pushed out of walls, then tipping over to lie flat.
 
@@ -68,26 +101,34 @@ There are no bullet objects flying through the air. When you fire, the game draw
 1. Where does that line first hit the level?
 2. Does it hit a robot before that?
 
-For the second question, each robot is approximated by a handful of simple invisible shapes that follow its skeleton: a ball for the head and pill shapes for the torso and limbs. Testing a line against those is fast and exact, and it tells the game which body part was hit. The head is the weak point and takes 2.4 times the damage.
+For the second question, each robot is approximated by a handful of simple invisible shapes that follow its skeleton: a ball for the head and pill shapes for the torso and limbs. Testing a line against those is fast and exact, and it tells the game which body part was hit. The head is the weak point: a hit there does more than double the damage with the sidearm and the carbine, and half as much again with the shotgun.
+
+The shotgun is the same thing nine times over in a wider cone, with damage that falls away quickly with distance. The melee strike asks a different question: is a robot within about two metres, in the arc in front of you?
 
 Whatever was hit gets the matching effect: a crater and dust on concrete, a bright dent and sparks on steel, sparks and a clang on a robot. The streak of light you see (the tracer), the muzzle flash, the kick of the gun and the shell casing are all cosmetic and happen after the game already knows the result.
 
-**The rifle you see.** The gun on screen is drawn at a quarter of its real size, a quarter of the distance from your eye, which looks identical but stops it poking through walls. It is drawn through its own, narrower lens so it is not stretched the way things close to a wide lens are. And it carries its own soft light, worked out so that it only tops up what the room's lamps leave dark: without it, a dark gun in a dark room is just a black shape in front of you.
+**The gun you see.** The gun on screen is drawn at a quarter of its real size, a quarter of the distance from your eye, which looks identical but stops it poking through walls. It is drawn through its own, narrower lens so it is not stretched the way things close to a wide lens are. And it carries its own soft light, worked out so that it only tops up what the room's lamps leave dark: without it, a dark gun in a dark room is just a black shape in front of you.
 
-**The sight.** The rifle's sight is a small glass window with a glowing ring and dot. A real sight of this kind projects its mark "at infinity", so the mark stays on the target even when the gun shakes. The game does the same thing in a simple way: the mark is always drawn exactly where the bullets will go, and the window only decides how much of it you can see. The gun moves around the mark, not the mark with the gun.
+**The sight.** The carbine's sight is a small glass window with a glowing ring and dot. A real sight of this kind projects its mark "at infinity", so the mark stays on the target even when the gun shakes. The game does the same thing in a simple way: the mark is always drawn exactly where the bullets will go, and the window only decides how much of it you can see. The gun moves around the mark, not the mark with the gun.
+
+## How the player moves
+
+Two things act on you as you walk. Friction drags your speed toward zero all the time, which is what stops you when you let go of the keys. Holding a direction pushes your speed toward the speed you are aiming for: walking, sprinting, or slower while aiming.
+
+This is worth knowing about because it hid a bug for two stages. The push was the same strength whatever speed was being aimed for, while friction gets stronger the faster you go. The two balanced out at about 4.2 metres a second, and it did not matter whether the target was a walk or a sprint. Holding Shift widened the view and lowered the gun, and felt like sprinting, and was not. The push is now sized to the target speed, so the target is always reached: 4.3 metres a second walking, 6.4 sprinting.
 
 ## How the sound works
 
-All sounds are real recordings from free libraries. Each gunshot blends two microphone positions from a real rifle recording, a close one for the crack and a distant one for the body, and the game adds a short low thump underneath. Four slightly different versions are shuffled with small random pitch changes so automatic fire never sounds like one sample repeating.
+All sounds are real recordings from free libraries. Each gunshot blends two microphone positions from a real recording, a close one for the crack and a distant one for the body, and the game adds a short low thump underneath. Four slightly different versions are shuffled with small random pitch changes so automatic fire never sounds like one sample repeating.
 
-Sounds that come from somewhere in the room (robot footsteps, impacts, casings hitting the floor) are placed in 3D by the browser's audio system, so with headphones you can hear which side a robot is on. Everything is fed into a simulated echo of a hard concrete room, which is what makes the gunfire ring.
+Sounds that come from somewhere in the room (robot footsteps, impacts, casings hitting the floor, a door grinding open) are placed in 3D by the browser's audio system, so with headphones you can hear which side a robot is on. Everything is fed into a simulated echo of a hard concrete room, which is what makes the gunfire ring.
 
 ## Where the assets come from, and why the licenses are safe
 
-Almost nothing in the game was drawn or recorded for it. The exceptions are made by the game's own code: the robot's body, the rifle's sight, the signs and the monitor screens. Everything else is free, openly licensed material, and each item is tracked from download to credit:
+Almost nothing in the game was drawn or recorded for it. The exceptions are made by the game's own code: the robot's body, the carbine's sight, the signs, the monitor screens and the rack lights. Everything else is free, openly licensed material, and each item is tracked from download to credit:
 
 - A single list (the asset manifest) names every source and its license.
-- A script downloads them and another set converts them into small game files: textures to WebP, 3D models to compressed GLB, sounds to MP3. The whole game is about 16 MB.
+- A script downloads them and another set converts them into small game files: textures to WebP, 3D models to compressed GLB, sounds to MP3. The whole game is about 17 MB.
 - `CREDITS.md` and the in-game credits screen are generated from that same list, so they cannot fall out of date.
 - An automated check fails if any shipped file does not trace back to a credited source, if the credits disagree with the list of pages the models were downloaded from, or if a raw download ends up in the repository.
 
@@ -95,17 +136,22 @@ Only public-domain (CC0) and attribution (CC-BY) material is used, plus the Mixa
 
 ## How I know it works without playing it
 
-The code was written by an AI agent that cannot hold a mouse, so the project carries its own proof:
+The code was written by an AI agent that cannot hold a mouse, so the project carries its own proof. There are four kinds, and the interesting part is what each one caught that the others could not.
 
-- **Unit tests** check the rule modules in isolation: fire rate at different frame rates, reloading, robot decisions, path-finding around walls, collision, hit detection. (They caught two real bugs during Stage 0.)
-- **An end-to-end test** opens the finished game in an invisible browser and drives it through hidden debug controls: start, watch the robot walk in, shoot it, confirm it breaks apart, reload, get hit, go down, pause and resume. It also measures the picture itself: that the room is equally bright at every quality level, that the shadows are not solid black, that the brightness setting works, that the muzzle flash is over in an instant, and that raising the rifle brings up the sight's reticle.
-- **A screenshot script** re-stages the same moments every time, so any change can be compared against the approved look.
-- **A performance report** measures frame rate at each quality level and the total download size.
+- **Unit tests** check the rule modules in isolation, with no graphics: how rounds grow, what every kind of kill pays, what every purchase does to your scrap and your two weapon slots, which areas connect when which doors are open, fire rate at different frame rates, robot decisions, path-finding, collision, and how the player's speed builds up.
+
+- **An end-to-end test** opens the finished game in an invisible browser and drives it through hidden debug controls with time stepped by hand, so every result is exact. It makes every kind of purchase and checks what each one charged, sends a robot through each of the eight entrances and waits for it to reach the player in each of the four areas, goes down without god mode, and restarts three times in a row looking for leftover robots, timers still running, or one click firing twice. It also measures the picture itself: equally bright at every quality level, shadows not solid black, the muzzle flash over in an instant.
+
+- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and buys the first weapon or door it can afford. The test lets it play three whole rounds. It is a crude player, which is the point: it wanders into situations nobody scripted.
+
+- **Real input.** The debug controls press the game's buttons from the inside, which cannot notice a key that is wired to nothing, or a menu button that fails to capture the mouse. So the last part of the test uses the real thing: real clicks on Play, Resume and Play Again with the browser really capturing and releasing the mouse, and every key on the controls list really pressed. This found the sprint bug described above, and that choosing "Auto" quality after trying another level did nothing. Finally the browser's processor is slowed sixteen times over to imitate a weak computer, and the test waits for the game to notice and lower its own quality.
+
+Alongside these, **a screenshot script** re-stages the same moments every time so any change can be compared with the approved look, and **a performance report** measures frame rate at each quality level, the download size, and smoothness: not the average frame, which can hide stutter, but the slowest frames. That report is how the stalling monitors were found; the average had looked fine.
 
 ## Still to come
 
 These parts are designed but not built yet. This document will grow as they are.
 
-- **Rounds and scrap** (Stage 1): how many robots each round sends, how they get tougher, what earns scrap and what it buys.
 - **The mission** (Stage 2): power, the three override keys, the final stand, the kill switch.
 - **ARGUS, the AI that studies you** (Stage 3): during each round the game counts things about how you play, such as which weapon does most of your damage, how long you stay in one spot, and how many head shots you land. Between rounds, a set of plain rules turns those counts into one or two counters and tells you about them. It is rule-based game AI, not machine learning: there is no training and no neural network, just "if the player does X a lot, respond with Y", and every response is visible and beatable.
+- **The full economy** (Stage 4): shutters to repair, boost stations, a prototype crate, an overclock bench, pickups, swarm rounds, grenades.
