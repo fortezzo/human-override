@@ -17,7 +17,7 @@ Used under the Adobe Mixamo terms. Only the skeleton and the recorded movements 
 
 | Asset | Author | License |
 | --- | --- | --- |
-| [Sci-Fi Rifle](https://sketchfab.com/3d-models/sci-fi-rifle-a78881c37ceb4303814279c0807f2f0f) — Changes: re-centred and scaled; its folding sight removed and replaced with a reflex sight made for the game; textures re-packed and compressed; paint lightened in the game. | Slayver | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| [Sci-Fi Rifle](https://sketchfab.com/3d-models/sci-fi-rifle-a78881c37ceb4303814279c0807f2f0f) — Changes: re-centred and scaled; its folding sight and two side knobs removed, and a reflex sight made for the game mounted where the old sight stood; textures re-packed and compressed; paint lightened in the game. | Slayver | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Props and fixtures
 

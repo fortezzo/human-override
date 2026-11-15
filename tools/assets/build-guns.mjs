@@ -153,7 +153,12 @@ async function buildRifle() {
   // through comfortably. Its eight little pieces are taken off here, leaving
   // the block they stood on; the game mounts its own raised reflex sight on
   // that block (see src/entities/weapon/ReflexSight.ts).
-  const removed = removeShells(mesh, (min, max) => min[1] > 0.15 && min[2] > 0.03 && max[2] < 0.09 && min[0] > -0.02 && max[0] < 0.02);
+  const oldSight = removeShells(mesh, (min, max) => min[1] > 0.15 && min[2] > 0.03 && max[2] < 0.09 && min[0] > -0.02 && max[0] < 0.02);
+  // Two knurled knobs (and the short shafts they turn on) stick out of the
+  // sides of the receiver. Seen from behind when aiming they sit either
+  // side of the sight and pull the eye away from it, so they come off too.
+  const knobs = removeShells(mesh, (min, max) => min[2] > -0.03 && max[2] < -0.005 && min[1] > 0.105 && max[1] < 0.132 && (min[0] > 0.025 || max[0] < -0.025));
+  const removed = oldSight + knobs;
 
   const tex = path.join(src, 'textures');
   const SIZE = 2048;
@@ -211,7 +216,7 @@ async function buildRifle() {
   await doc.transform(weld(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const out = path.join(OUT_DIR, 'rifle.glb');
   await io.write(out, doc);
-  console.log(`  rifle: ${mesh.indices.length / 3} tris (${removed} removed with the old sight), ${(fs.statSync(out).size / 1024).toFixed(0)} KB`);
+  console.log(`  rifle: ${mesh.indices.length / 3} tris (${removed} removed: the old sight and two side knobs), ${(fs.statSync(out).size / 1024).toFixed(0)} KB`);
   return true;
 }
 

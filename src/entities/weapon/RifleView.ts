@@ -13,8 +13,9 @@
 //    a separate lens is how shooters keep the gun's proportions natural.
 // 3. It carries its own soft light. The room is dark on purpose, and a gun
 //    lit only by the room turns into a black shape in front of the player,
-//    so a small fill light travels with it (stronger when it is raised to
-//    the eye, where it faces away from every lamp in the room).
+//    so a small fill light travels with it. Raised to the eye, the gun is
+//    also shaded from the room's lamps, as it would be by the shooter's own
+//    head and shoulders, so it stays darker than whatever is being aimed at.
 
 import * as THREE from 'three';
 import { FX, RIFLE } from '../../config';
@@ -30,7 +31,7 @@ const SCALE = 0.25;
 const VIEW_FOV = 48;
 /** Strength of the gun's own fill light at the hip and when aiming. */
 const FILL_HIP = 1.6;
-const FILL_AIM = 2.2;
+const FILL_AIM = 1.9;
 /** The rifle's paint is close to black; this lifts it to a dark gunmetal that can hold light. */
 const PAINT_LIFT = 1.9;
 
@@ -97,16 +98,35 @@ const RELOAD_BACK: Array<[number, number]> = [
   [1, 0],
 ];
 
+/** Uniforms shared by every lit part of the gun. */
+interface GunLight {
+  /** Strength of the gun's own fill light. */
+  fill: { value: number };
+  /** 0 at the hip, 1 with the rifle raised to the eye. */
+  raised: { value: number };
+}
+
 /**
- * The gun's own fill light, worked out in the shader so that it touches
- * nothing else in the room. It only tops up what the room's lamps leave
- * dark. Two parts, both fixed to the player's view:
- * a soft lamp above and a little behind the left shoulder, and a pale glow
- * overhead that flat surfaces mirror when seen at a shallow angle (which is
- * what makes dark metal look like metal instead of a hole in the picture).
+ * How the gun is lit, on top of the room's own lamps. Worked out in the
+ * shader so that it touches nothing else in the room.
+ *
+ * 1. Its own shadow. Raised to the eye, the back half of a rifle sits in
+ *    the shade of the shooter's head and shoulders, which are between it
+ *    and every lamp. Without this, a lamp behind the player glares off the
+ *    top of the gun and the sight, and the eye goes there instead of to
+ *    the target.
+ * 2. Its own fill light, which only tops up what is left dark: a soft lamp
+ *    above and a little behind the left shoulder, and a pale glow overhead
+ *    that flat surfaces mirror when seen at a shallow angle (which is what
+ *    makes dark metal look like metal instead of a hole in the picture).
  */
-const FILL_LIGHT = /* glsl */ `
+const GUN_LIGHT = /* glsl */ `
 {
+  float ownShade = uWeaponRaised * (1.0 - 0.25 * smoothstep(${(0.26 * SCALE).toFixed(4)}, ${(0.75 * SCALE).toFixed(4)}, vViewPosition.z));
+  reflectedLight.directDiffuse *= 1.0 - 0.6 * ownShade;
+  reflectedLight.directSpecular *= 1.0 - 0.86 * ownShade;
+  reflectedLight.indirectSpecular *= 1.0 - 0.4 * ownShade;
+
   vec3 fillToEye = normalize(vViewPosition);
   vec3 fillToLamp = normalize(vec3(-0.3, 0.8, 0.52));
   float fillWrap = saturate(dot(normal, fillToLamp) * 0.55 + 0.45);
@@ -120,9 +140,9 @@ const FILL_LIGHT = /* glsl */ `
   // seen end-on when aiming, washes out to pale grey).
   vec3 fillShine = (fillMirror + (1.0 - fillMirror) * fillGraze * (1.0 - roughnessFactor)) * fillSky * (1.0 - roughnessFactor * 0.72);
   vec3 fillLight = vec3(0.8, 0.88, 1.0) * uWeaponFill * (diffuseColor.rgb * fillWrap * 0.6 + fillShine * 0.5);
-  // A fill light tops up what the room leaves dark. Where a lamp already
-  // lights this part of the gun well, it adds little or nothing, so the
-  // rifle is never black in a dark corner and never bleached under a lamp.
+  // Where a lamp already lights this part of the gun well, the fill adds
+  // little or nothing, so the rifle is never black in a dark corner and
+  // never bleached under a lamp.
   vec3 fillAlready = reflectedLight.directDiffuse + reflectedLight.directSpecular;
   float fillNeed = clamp(1.0 - dot(fillAlready, vec3(0.3333)) / (dot(fillLight, vec3(0.3333)) * 1.6 + 0.0001), 0.0, 1.0);
   reflectedLight.indirectDiffuse += fillLight * fillNeed;
@@ -131,21 +151,23 @@ const FILL_LIGHT = /* glsl */ `
 
 /**
  * Make a material draw through the gun's lens instead of the world
- * camera's. With `fill`, it is also lit by the gun's own fill light (only
- * for materials that react to light).
+ * camera's. With `light`, it is also lit the way the gun is (only for
+ * materials that react to light).
  */
-function useViewLens(material: THREE.Material, lens: { value: THREE.Matrix4 }, fill?: { value: number }): void {
+function useViewLens(material: THREE.Material, lens: { value: THREE.Matrix4 }, light?: GunLight): void {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uViewLens = lens;
     const header = 'uniform mat4 uViewLens;\n';
     const project = '#include <project_vertex>\ngl_Position = uViewLens * mvPosition;';
     shader.vertexShader = header + shader.vertexShader.replace('#include <project_vertex>', project);
-    if (fill) {
-      shader.uniforms.uWeaponFill = fill;
-      shader.fragmentShader = 'uniform float uWeaponFill;\n' + shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + FILL_LIGHT);
+    if (light) {
+      shader.uniforms.uWeaponFill = light.fill;
+      shader.uniforms.uWeaponRaised = light.raised;
+      shader.fragmentShader =
+        'uniform float uWeaponFill;\nuniform float uWeaponRaised;\n' + shader.fragmentShader.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + GUN_LIGHT);
     }
   };
-  material.customProgramCacheKey = () => (fill ? 'view-lens-lit' : 'view-lens');
+  material.customProgramCacheKey = () => (light ? 'view-lens-lit' : 'view-lens');
 }
 
 export class RifleView {
@@ -169,7 +191,7 @@ export class RifleView {
   private time = 0;
 
   private readonly lens = { value: new THREE.Matrix4() };
-  private readonly fill = { value: FILL_HIP };
+  private readonly light: GunLight = { fill: { value: FILL_HIP }, raised: { value: 0 } };
   private readonly toView = new THREE.Matrix4();
   private readonly worldMuzzle = new THREE.Vector3();
   private readonly worldPort = new THREE.Vector3();
@@ -186,11 +208,11 @@ export class RifleView {
       material.envMapIntensity = 1.35;
       material.color.setScalar(PAINT_LIFT);
       material.roughness = 0.86;
-      useViewLens(material, this.lens, this.fill);
+      useViewLens(material, this.lens, this.light);
     });
     this.gun.add(model);
 
-    this.sight = new ReflexSight(this.lens, (material) => useViewLens(material, this.lens, this.fill));
+    this.sight = new ReflexSight(assets, this.lens, (material) => useViewLens(material, this.lens, this.light));
     this.gun.add(this.sight.group);
 
     this.flash = new MuzzleFlash((material) => useViewLens(material, this.lens));
@@ -231,7 +253,9 @@ export class RifleView {
     const top = camera.near * Math.tan(THREE.MathUtils.degToRad(VIEW_FOV) / 2);
     const right = top * camera.aspect;
     this.lens.value.makePerspective(-right, right, top, -top, camera.near, camera.far, camera.coordinateSystem);
-    this.fill.value = lerp(FILL_HIP, FILL_AIM, aim);
+    this.light.fill.value = lerp(FILL_HIP, FILL_AIM, aim);
+    // In the shade of the shooter while raised; back in the open during a reload.
+    this.light.raised.value = aim * (1 - Math.min(1, reload * 6));
 
     // Recoil eases back to rest.
     this.kickBack = damp(this.kickBack, 0, RIFLE.kickRecovery, dt);

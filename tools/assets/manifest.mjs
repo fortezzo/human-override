@@ -217,7 +217,7 @@ export const SKETCHFAB = [
   {
     key: 'rifle',
     shipped: true,
-    changes: 'Changes: re-centred and scaled; its folding sight removed and replaced with a reflex sight made for the game; textures re-packed and compressed; paint lightened in the game.',
+    changes: 'Changes: re-centred and scaled; its folding sight and two side knobs removed, and a reflex sight made for the game mounted where the old sight stood; textures re-packed and compressed; paint lightened in the game.',
     title: 'Sci-Fi Rifle',
     author: 'Slayver',
     license: 'CC-BY 4.0',

@@ -1,4 +1,5 @@
-// The rifle's sight: an open reflex sight on a riser, with a glowing reticle.
+// The rifle's sight: a small open reflex sight on a riser, with a glowing
+// reticle.
 //
 // The downloaded rifle only has a tiny folding ring, set so low that aiming
 // through it fills the view with the top of the gun. The asset pipeline
@@ -7,6 +8,10 @@
 // higher, the gun drops lower in the frame, and the target is seen through
 // clear glass with a bright mark on it.
 //
+// Everything about the housing is there to keep the eye on the mark: it is
+// one compact shape in the same dark, scratched metal as the rifle, with no
+// bright faces and nothing fiddly near the window.
+//
 // The mark behaves like the real thing. A reflex sight projects its reticle
 // "at infinity", so it stays on the point of aim even when the gun shakes;
 // the frame moves around the mark, not the mark with the frame. Here that
@@ -14,22 +19,26 @@
 // of the view) and the window only decides how much of it can be seen.
 
 import * as THREE from 'three';
+import type { Assets } from '../../core/assets';
 import { addsLightOnly } from '../../render/glow';
-import { box, hull, merge, rect, row, tube, vec } from '../../render/shapes';
+import { box, hull, merge, rect, tube, vec } from '../../render/shapes';
 
 /** Height of the line of sight above the rifle model's origin, in metres. */
 export const SIGHT_HEIGHT = 0.208;
 
 /** Where the window stands along the rifle (model coordinates, + is toward the stock). */
-const WINDOW_Z = 0.02;
-const WINDOW_WIDTH = 0.046;
-const WINDOW_HEIGHT = 0.036;
+const WINDOW_Z = 0.016;
+const WINDOW_WIDTH = 0.04;
+const WINDOW_HEIGHT = 0.031;
 /** Thickness of the bars around the window. */
-const FRAME = 0.0024;
+const FRAME = 0.0026;
 /** Half the width of the reticle picture, as a slope from the line of sight. */
 const RETICLE_SPAN = 0.052;
+/** How often the metal texture repeats across the housing, in metres. */
+const TEXTURE_TILE = 0.045;
 
 const UP = vec(0, 1, 0);
+const BACK = vec(0, 0, 1);
 
 function reticleTexture(): THREE.Texture {
   const size = 256;
@@ -71,55 +80,122 @@ function housing(): THREE.BufferGeometry {
   const y = SIGHT_HEIGHT;
   const z = WINDOW_Z;
   const sill = y - WINDOW_HEIGHT / 2;
+  const top = y + WINDOW_HEIGHT / 2;
   const post = WINDOW_WIDTH / 2 + FRAME / 2;
   const outer = WINDOW_WIDTH + FRAME * 2;
-  const DEPTH = 0.01;
-  const SILL = 0.004;
+  const HOOD_DEPTH = 0.013;
+  const DECK = 0.0055;
 
-  // Clamp over the rail where the old sight stood, sloped at both ends.
+  // Clamp over the block where the old sight stood, sloped at both ends.
   const clamp = hull(
     [
-      { at: vec(0, 0.15, 0.106), section: rect(0.036, 0.008, 0.002) },
-      { at: vec(0, 0.1545, 0.09), section: rect(0.042, 0.017, 0.003) },
-      { at: vec(0, 0.1545, 0.004), section: rect(0.042, 0.017, 0.003) },
-      { at: vec(0, 0.152, -0.008), section: rect(0.036, 0.012, 0.002) },
+      { at: vec(0, 0.1505, 0.102), section: rect(0.044, 0.009, 0.002) },
+      { at: vec(0, 0.1545, 0.089), section: rect(0.05, 0.02, 0.003) },
+      { at: vec(0, 0.1545, 0.004), section: rect(0.05, 0.02, 0.003) },
+      { at: vec(0, 0.152, -0.007), section: rect(0.044, 0.012, 0.002) },
     ],
     UP,
   );
+  // Two cross-bolts hold it on; only their hexagonal heads show.
   const bolts = merge(
-    tube(vec(-0.0235, 0.154, 0.03), vec(0.0235, 0.154, 0.03), 0.0036, 0.0036, 6),
-    tube(vec(-0.0235, 0.154, 0.07), vec(0.0235, 0.154, 0.07), 0.0036, 0.0036, 6),
+    tube(vec(-0.0268, 0.1535, 0.028), vec(0.0268, 0.1535, 0.028), 0.0032, 0.0032, 6),
+    tube(vec(-0.0268, 0.1535, 0.066), vec(0.0268, 0.1535, 0.066), 0.0032, 0.0032, 6),
   );
-  // Fine ridges across the top of the clamp, the kind machined into a
-  // sight to stop it glinting in the shooter's eye.
-  const ridges = row(6, (i) => box(vec(0, 0.1637, 0.059 + i * 0.0062), vec(0.03, 0.0016, 0.0034), 0.0005));
 
-  // Riser: two cheek plates that lift the window clear of the gun, with a
-  // battery tray between them and daylight above it.
-  const foot = 0.162;
-  const head = sill - SILL;
-  const cheek = (x: number) =>
+  // Riser: an open A-frame, two plates leaning in and forward from the
+  // edges of the clamp to the underside of the deck, tied by a cross-pin.
+  // Seen from behind it is two thin dark legs with daylight between them.
+  const leg = (side: number) =>
     hull(
       [
-        { at: vec(x, foot, 0.027), section: rect(0.0034, 0.05, 0.001) },
-        { at: vec(x, head, z + 0.003), section: rect(0.0034, 0.018, 0.001) },
+        { at: vec(side * 0.0215, 0.162, 0.036), section: rect(0.003, 0.05, 0.001) },
+        { at: vec(side * 0.0165, sill - DECK + 0.001, z + 0.011), section: rect(0.003, 0.032, 0.001) },
       ],
-      vec(0, 0, 1),
+      vec(0, 0, -1),
     );
-  const tray = box(vec(0, foot + 0.0065, 0.027), vec(0.0245, 0.013, 0.04), 0.0015);
-  const cap = tube(vec(0, foot + 0.0065, 0.046), vec(0, foot + 0.0065, 0.0505), 0.0048, 0.0042, 8);
-  const dial = tube(vec(0.0145, foot + 0.008, 0.03), vec(0.0215, foot + 0.008, 0.03), 0.0058, 0.0058, 10);
+  const pin = tube(vec(-0.019, 0.1745, 0.026), vec(0.019, 0.1745, 0.026), 0.0026, 0.0026, 6);
+  const riser = merge(leg(1), leg(-1), pin);
 
-  // Window frame: a sill, two posts and a top bar, as thin as will hold glass.
-  const frame = merge(
-    box(vec(0, sill - SILL / 2, z + 0.003), vec(outer, SILL, DEPTH + 0.008), 0.001),
-    box(vec(post, y, z), vec(FRAME, WINDOW_HEIGHT, DEPTH), 0.0006),
-    box(vec(-post, y, z), vec(FRAME, WINDOW_HEIGHT, DEPTH), 0.0006),
-    box(vec(0, y + WINDOW_HEIGHT / 2 + FRAME / 2, z), vec(outer, FRAME, DEPTH), 0.0006),
+  // Deck: the body of the sight itself, under the window, tapering away
+  // toward the shooter, with the small housing of the lamp that projects
+  // the reticle sitting on it.
+  const deck = hull(
+    [
+      { at: vec(0, sill - DECK / 2, z - HOOD_DEPTH / 2 - 0.001), section: rect(outer, DECK, 0.0014) },
+      { at: vec(0, sill - DECK / 2, z + 0.024), section: rect(outer, DECK, 0.0014) },
+      { at: vec(0, sill - DECK / 2 - 0.0012, z + 0.034), section: rect(outer - 0.008, DECK - 0.0024, 0.001) },
+    ],
+    UP,
+  );
+  const emitter = box(vec(0, sill + 0.0012, z + 0.024), vec(0.011, 0.0034, 0.011), 0.001);
+
+  // Hood: two posts and a top bar around the glass, as thin as will hold it.
+  const hood = merge(
+    hull(
+      [
+        { at: vec(post, y, z + HOOD_DEPTH / 2), section: rect(FRAME, WINDOW_HEIGHT + 0.001, 0.0006) },
+        { at: vec(post, y, z - HOOD_DEPTH / 2), section: rect(FRAME, WINDOW_HEIGHT + 0.001, 0.0006) },
+      ],
+      UP,
+    ),
+    hull(
+      [
+        { at: vec(-post, y, z + HOOD_DEPTH / 2), section: rect(FRAME, WINDOW_HEIGHT + 0.001, 0.0006) },
+        { at: vec(-post, y, z - HOOD_DEPTH / 2), section: rect(FRAME, WINDOW_HEIGHT + 0.001, 0.0006) },
+      ],
+      UP,
+    ),
+    hull(
+      [
+        { at: vec(0, top + FRAME / 2, z + HOOD_DEPTH / 2), section: rect(outer, FRAME, [0.0018, 0.0018, 0, 0]) },
+        { at: vec(0, top + FRAME / 2, z - HOOD_DEPTH / 2), section: rect(outer, FRAME, [0.0018, 0.0018, 0, 0]) },
+      ],
+      UP,
+    ),
+  );
+  // Braces from the top corners forward and down to the deck. They splay
+  // outward a little, which keeps them hidden behind the posts from the
+  // shooter's eye, so they shape the sight from the side without adding
+  // anything to the view through it.
+  const brace = (side: number) =>
+    hull(
+      [
+        { at: vec(side * post, top - 0.001, z - HOOD_DEPTH / 2 + 0.001), section: rect(FRAME, 0.0034, 0.0006) },
+        { at: vec(side * (post + 0.0032), sill - 0.002, z - 0.03), section: rect(FRAME, 0.0034, 0.0006) },
+      ],
+      BACK,
+    );
+  const nose = hull(
+    [
+      { at: vec(0, sill - DECK / 2, z - HOOD_DEPTH / 2 - 0.001), section: rect(outer, DECK, 0.0014) },
+      { at: vec(0, sill - DECK / 2 - 0.001, z - 0.033), section: rect(outer + 0.0064, DECK - 0.002, 0.0012) },
+    ],
+    UP,
   );
 
-  const geometry = merge(clamp, bolts, ridges, cheek(0.0138), cheek(-0.0138), tray, cap, dial, frame);
+  return merge(clamp, bolts, riser, deck, emitter, hood, brace(1), brace(-1), nose);
+}
+
+/**
+ * Gives a kit shape what a textured material needs: flat-shaded normals and
+ * texture coordinates laid on by "box projection" (each face takes its
+ * coordinates from whichever two axes it lies most nearly along), so the
+ * metal's scratches are the same size everywhere on the housing.
+ */
+function textured(geometry: THREE.BufferGeometry, tile: number): THREE.BufferGeometry {
   geometry.computeVertexNormals();
+  const position = geometry.attributes.position as THREE.BufferAttribute;
+  const normal = geometry.attributes.normal as THREE.BufferAttribute;
+  const uv = new Float32Array(position.count * 2);
+  for (let i = 0; i < position.count; i++) {
+    const nx = Math.abs(normal.getX(i));
+    const ny = Math.abs(normal.getY(i));
+    const nz = Math.abs(normal.getZ(i));
+    const [u, v] = nx >= ny && nx >= nz ? [position.getZ(i), position.getY(i)] : ny >= nz ? [position.getX(i), position.getZ(i)] : [position.getX(i), position.getY(i)];
+    uv[i * 2] = u / tile;
+    uv[i * 2 + 1] = v / tile;
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
   return geometry;
 }
 
@@ -132,10 +208,29 @@ export class ReflexSight {
    * @param lens the rifle's own projection, shared with the rest of the gun
    * @param prepare applied to the metal so it is drawn and lit like the rifle
    */
-  constructor(lens: { value: THREE.Matrix4 }, prepare: (material: THREE.Material) => void) {
-    const metal = new THREE.MeshStandardMaterial({ color: 0x2f3036, metalness: 0.85, roughness: 0.5, envMapIntensity: 1.35 });
+  constructor(assets: Assets, lens: { value: THREE.Matrix4 }, prepare: (material: THREE.Material) => void) {
+    // The same dark, scratched gunmetal as the rifle's own body: its
+    // typical color, its satin finish, and a steel texture for the fine
+    // scratches. Rough enough that no face of it can flash white.
+    const steel = assets.surface('Metal046B');
+    const metal = new THREE.MeshStandardMaterial({
+      name: 'sight',
+      map: steel.color,
+      normalMap: steel.normal,
+      // The steel texture's own roughness and metal values are for bare
+      // polished steel; these multipliers bring their averages to the
+      // rifle's satin finish (roughness about 0.72, metalness about 0.6)
+      // while keeping the texture's scratches.
+      roughnessMap: steel.orm,
+      metalnessMap: steel.orm,
+      roughness: 2.05,
+      metalness: 0.72,
+      color: new THREE.Color(0.56, 0.52, 0.66),
+      envMapIntensity: 0.9,
+    });
+    metal.normalScale.setScalar(1.6);
     prepare(metal);
-    const body = new THREE.Mesh(housing(), metal);
+    const body = new THREE.Mesh(textured(housing(), TEXTURE_TILE), metal);
     body.frustumCulled = false;
     body.receiveShadow = true;
 
