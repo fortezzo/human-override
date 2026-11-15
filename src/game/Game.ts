@@ -7,6 +7,7 @@
 
 import * as THREE from 'three';
 import { acceleratedRaycast } from 'three-mesh-bvh';
+import { Sight } from './Sight';
 import { AudioEngine } from '../audio/AudioEngine';
 import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
@@ -33,7 +34,7 @@ import { createWallet, earn, type Wallet } from '../sim/economy';
 import { floodFrom } from '../sim/navGrid';
 import { ROOM, PLAYER_START } from '../world/lobby/plan';
 import { developScreens } from '../world/lobby/ScreenBank';
-import { AREA_CENTRES, AREA_IDS, type AreaId } from '../world/plan';
+import { AREA_CENTRES, AREA_IDS, type AreaId, type EntryPlan } from '../world/plan';
 import { World } from '../world/World';
 import { Combat, type HitResult } from './Combat';
 import { Director } from './Director';
@@ -69,6 +70,8 @@ export class Game {
   world!: World;
   lights!: LightRig;
   director!: Director;
+  /** What the player can see from where they stand (robots are never created in view). */
+  sight!: Sight;
   interactions!: Interactions;
   /** Scrap, and what happened this run. */
   wallet: Wallet = createWallet(SCRAP.start);
@@ -83,6 +86,8 @@ export class Game {
   onHit: (hit: HitResult) => void = () => {};
   /** The player was hurt; `angle` is the attacker's bearing relative to the view. */
   onPlayerHurt: (angle: number) => void = () => {};
+  /** The rounds have just created a robot at an entry (`forced` = by a debug order). */
+  onArrival: (robot: Robot, entry: EntryPlan, forced: boolean) => void = () => {};
   /**
    * A round has started (`amount` is how many robots it will send) or been
    * cleared (`amount` is the scrap earned during it).
@@ -212,7 +217,8 @@ export class Game {
     this.camera.add(this.view.root);
     this.scene.add(this.view.muzzleLight);
 
-    this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits));
+    this.sight = new Sight(this.camera, () => this.world.solids);
+    this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits), this.sight);
     this.combat = new Combat(this.world, this.robots, this.player, this.camera, this.view, this.effects, this.casings, this.audio);
     this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet);
     this.wireEvents();
@@ -269,6 +275,7 @@ export class Game {
       if (hit) this.stats.shotsHit++;
     };
 
+    director.onArrival = (robot, entry, forced) => this.onArrival(robot, entry, forced);
     // The sound and the announcement on the HUD start on the same call, so
     // the lettering lands on the sting's opening burst.
     director.onRoundStart = (round) => {

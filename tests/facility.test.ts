@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ROBOT } from '../src/config';
-import { neighbours, pickEntry, reachableAreas, type DoorLink } from '../src/sim/facility';
+import { neighbours, pickEntry, pickUnseenEntry, reachableAreas, type DoorLink } from '../src/sim/facility';
 import { cellAt, createNavGrid, floodFrom, refreshRegion } from '../src/sim/navGrid';
 import { makeCollider } from '../src/sim/collision';
 import { AREA_CENTRES, AREA_IDS, DOOR_PLANS, ENTRY_PLANS, NAV_BOUNDS, RACK_PLANS, WALKABLE, areaAt, inRect, type AreaId } from '../src/world/plan';
@@ -59,6 +59,55 @@ describe('where robots come in', () => {
 
   it('opens round 1 with a single entry in front of the player', () => {
     expect(ENTRY_PLANS.filter((e) => e.area === 'lobby' && e.fromRound <= 1).map((e) => e.id)).toEqual(['yard']);
+  });
+});
+
+describe('robots never come in where the player would see them appear', () => {
+  const entries = ENTRY_PLANS.map((e) => ({ id: e.id, area: e.area, fromRound: e.fromRound }));
+  const everywhere = new Set<AreaId>(AREA_IDS);
+  const rolls = Array.from({ length: 200 }, (_, i) => (i + 0.5) / 200);
+
+  it('uses any entry in play when none of them is being watched', () => {
+    const used = new Set(rolls.map((roll) => pickUnseenEntry(entries, 5, 'hall', everywhere, () => true, roll)!.id));
+    expect([...used].sort()).toEqual(entries.map((e) => e.id).sort());
+  });
+
+  it('never uses an entry the player could see a robot appear at', () => {
+    const watched = new Set(['yard', 'hallVent', 'dock']);
+    for (const roll of rolls) {
+      const entry = pickUnseenEntry(entries, 5, 'hall', everywhere, (e) => !watched.has(e.id), roll)!;
+      expect(watched.has(entry.id), entry.id).toBe(false);
+    }
+  });
+
+  it('still favours the area the player is in, among the entries left', () => {
+    let own = 0;
+    for (const roll of rolls) if (pickUnseenEntry(entries, 5, 'hall', everywhere, (e) => e.id !== 'hallVent', roll)!.area === 'hall') own++;
+    // The dock is the only way left into the hall: likelier than any one other entry, but not the only one used.
+    expect(own / rolls.length).toBeGreaterThan(0.25);
+    expect(own / rolls.length).toBeLessThan(0.75);
+  });
+
+  it('keeps to the entries in play for the round while one of them is unwatched', () => {
+    const lobbyOnly = new Set<AreaId>(['lobby']);
+    for (const roll of rolls) expect(pickUnseenEntry(entries, 1, 'lobby', lobbyOnly, () => true, roll)!.id).toBe('yard');
+  });
+
+  it('brings a later entry in early rather than let a watched one stop the round', () => {
+    const lobbyOnly = new Set<AreaId>(['lobby']);
+    // Round 1, the player standing in the yard looking at where robots walk in from.
+    for (const roll of rolls) expect(pickUnseenEntry(entries, 1, 'lobby', lobbyOnly, (e) => e.id !== 'yard', roll)!.id).toBe('lobbyVent');
+  });
+
+  it('makes the robot wait when every entry is being watched', () => {
+    expect(pickUnseenEntry(entries, 5, 'hall', everywhere, () => false, 0.5)).toBeNull();
+    expect(pickUnseenEntry(entries, 5, 'hall', new Set<AreaId>(), () => true, 0.5)).toBeNull();
+  });
+
+  it('asks about an entry only if it could be used at all', () => {
+    const asked: string[] = [];
+    pickUnseenEntry(entries, 1, 'lobby', new Set<AreaId>(['lobby']), (e) => (asked.push(e.id), true), 0.5);
+    expect(asked).toEqual(['yard']);
   });
 });
 

@@ -308,6 +308,12 @@ export const ROUNDS = {
   countGrowth: 4,
   /** Most robots on the map at once; the rest wait their turn. */
   maxActive: 24,
+  /**
+   * A robot is only let in somewhere the player cannot see it appear. If the
+   * player somehow has every entry in sight at once, it waits this many
+   * seconds and then comes in behind them.
+   */
+  arrivalPatience: 5,
   /** Seconds between arrivals in round 1, shrinking by `spawnQuicken` a round down to a floor. */
   spawnInterval: 2.3,
   spawnQuicken: 0.18,
@@ -372,8 +378,11 @@ export const ROBOT = {
   stuckTime: 7,
   /** Seconds a robot dropping from a vent takes to find its feet. */
   landingTime: 0.55,
-  /** How far below the ceiling a dropping robot starts (inside the vent shaft). */
-  dropStart: 0.5,
+  /**
+   * How far above the ceiling a dropping robot starts: wholly above the
+   * vent's dark lining, so nothing of it can be seen until it falls out.
+   */
+  dropStart: 0.05,
   /** Robots hurry across the yard at least this fast, then slow to their own pace indoors. */
   arrivalSpeed: 3.3,
   eyeColor: 0xff3a1a,

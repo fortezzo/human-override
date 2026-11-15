@@ -20,6 +20,9 @@
 //     what is behind it
 //   - no room's reflection photograph has a broken pixel, and one broken
 //     pixel cannot black out a room if it ever does
+//   - no robot is ever created in view: the places robots walk in from
+//     cannot be seen from indoors, and with the player standing and staring
+//     at each entry in turn the rounds use another one
 //   - a robot from every entry point reaches the player in every area
 //   - the round announcement: the number snaps in behind a scan line, is
 //     held above the crosshair while the game carries on, and flies to the
@@ -835,6 +838,7 @@ try {
     const ho = window.__HO;
     ho.restart();
     ho.god(true);
+    ho.spawnAudit(true);
     ho.autopilot(true);
   });
   let played = await run();
@@ -844,6 +848,12 @@ try {
     played = await run();
   }
   check('the autopilot plays through three rounds by itself', played.round >= 4 && played.kills >= 6 + 8 + 10, `round ${played.round}, ${played.kills} destroyed in ${(frames / 3600).toFixed(1)} game minutes`);
+  const autoAudit = await ev(() => window.__HO.spawnAudit());
+  check(
+    'in those rounds no robot was created in view either',
+    autoAudit.created >= 6 + 8 + 10 && autoAudit.seen.length === 0 && autoAudit.lastResorts === 0,
+    autoAudit.seen.length ? autoAudit.seen.slice(0, 3).map((seen) => `one appeared in view at the ${seen.entry} entry`).join(' | ') : `${autoAudit.created} created: ${Object.entries(autoAudit.byEntry).map(([entry, count]) => `${count} at ${entry}`).join(', ')}`,
+  );
   check('it earns scrap and spends it', played.earned > 1000 && played.spent > 0 && played.slots[1] !== null, `earned ${played.earned}, spent ${played.spent}, carrying ${played.slots.join(' + ')}`);
 
   // When only a few robots are left, they are marked.
@@ -1132,6 +1142,75 @@ try {
       ? faint.map((s) => `${s.where}: only ${Math.round(s.share * 100)}% of it stands out`).join(' | ')
       : `${standing.length} robots measured; the faintest (${weakest.where}, ${weakest.distance.toFixed(1)} m away) has ${Math.round(weakest.share * 100)}% of itself standing out; without the edge light ${blind} of them would fail`,
   );
+
+  // Robots must never be seen to appear. Those that walk in are created
+  // outside, in the gap behind a shipping container: from nowhere inside
+  // the building is there a line of sight to those gaps.
+  const sightlines = await ev(() => window.__HO.spawnSightlines());
+  const exposed = Object.entries(sightlines).filter(([, count]) => count > 0);
+  check(
+    'the places robots walk in from cannot be seen from anywhere indoors',
+    Object.keys(sightlines).length === 3 && exposed.length === 0,
+    exposed.length ? exposed.map(([entry, count]) => `${entry}: ${count} clear lines of sight`).join(', ') : `${Object.keys(sightlines).join(', ')}: looked for from every half metre of floor, every door open`,
+  );
+
+  // And wherever the player stands, however hard they stare at an entry,
+  // no robot is created in the picture on screen: the rounds use another
+  // entry, and the robots still come. Each line below is a fresh run with
+  // the player held in one place for half a minute. (The count is kept by
+  // the debug tools, separately from the rule that is meant to prevent it.)
+  const stances = [
+    ['at the start, looking out through the entrance', [], 0, 4.6, 0, 0],
+    ['in the outer doorway, looking into the yard', [], 0, -12.9, 0, 0],
+    ['in the yard, staring into the gap robots come from', [], 5.2, -14.2, 0, 0],
+    ['in the far corner of the yard', [], -5.2, -19.0, -80, 0],
+    ['in the lobby, staring at its vent', ['lobbyHall'], -4.6, 0.6, 122, 14],
+    ['in the server hall, staring at its vent', ['lobbyHall'], 2.4, 24.2, -58, 10],
+    ['in the server hall, looking out through the dock', ['lobbyHall'], -8.2, 16.5, 90, 0],
+    ['in the dock yard, staring into the gap robots come from', ['lobbyHall'], -17.7, 14.6, 180, 0],
+    ['in the power room, staring at its vent', ['lobbyPower'], 16.8, 7.4, 136, 10],
+    ['in the power room, looking out through the breach', ['lobbyPower'], 20.5, 4.5, -90, 0],
+    ['in the transformer yard, staring into the gap robots come from', ['lobbyPower'], 29.7, 2.6, 180, 0],
+    ['in the core, with both its vents in view', ['lobbyHall', 'hallCore'], -1, 27.2, 180, 8],
+  ];
+  const sightings = [];
+  let arrivals = 0;
+  let starved = 0;
+  let resorts = 0;
+  for (const [where, doors, x, z, yaw, pitch] of stances) {
+    const stood = await ev(
+      ([doors, x, z, yaw, pitch]) => {
+        const ho = window.__HO;
+        ho.restart();
+        ho.god(true);
+        for (const id of doors) ho.openDoor(id);
+        ho.step(1 / 60, 140);
+        ho.spawnAudit(true);
+        for (let i = 0; i < 30 * 60; i++) {
+          ho.place(x, z, yaw, pitch);
+          ho.step(1 / 60, 1);
+        }
+        return ho.spawnAudit();
+      },
+      [doors, x, z, yaw, pitch],
+    );
+    arrivals += stood.created;
+    resorts += stood.lastResorts;
+    if (stood.created < 6) starved++;
+    for (const seen of stood.seen) sightings.push(`${where}: one appeared in view at the ${seen.entry} entry`);
+  }
+  check(
+    'no robot is ever created in view, wherever the player stands and stares',
+    sightings.length === 0 && starved === 0 && resorts === 0,
+    sightings.length ? sightings.slice(0, 4).join(' | ') : starved ? `${starved} of the ${stances.length} positions kept the robots from coming at all` : `${arrivals} robots created over ${stances.length} awkward positions, none of them in view, and no round held up`,
+  );
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+  });
 
   // The reflections each room is lit by are made from a photograph of it.
   // One broken pixel in that photograph (a shader's "not a number") used to

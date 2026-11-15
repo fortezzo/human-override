@@ -20,7 +20,7 @@
 
 import type { WeaponId } from '../config';
 import { DOORS } from '../config';
-import { BLAST_DOOR, POWER_DOOR, ROOM } from './lobby/plan';
+import { BLAST_DOOR, POWER_DOOR, ROBOT_SPAWN, ROOM } from './lobby/plan';
 
 export type AreaId = 'lobby' | 'hall' | 'power' | 'core';
 export const AREA_IDS: AreaId[] = ['lobby', 'hall', 'power', 'core'];
@@ -103,7 +103,8 @@ export interface EntryPlan {
   id: string;
   area: AreaId;
   /**
-   * 'walk': robots appear out of sight outside and walk in through an opening.
+   * 'walk': robots appear outside, behind a shipping container where they
+   *         cannot be seen from indoors, and walk in through an opening.
    * 'drop': robots drop from a torn-open vent in the ceiling.
    */
   kind: 'walk' | 'drop';
@@ -124,12 +125,19 @@ export const EAST_BREACH = { z0: 2.8, z1: 6.2, top: 3.1, depth: 7.5 } as const;
 /** Size of the hole a ceiling vent leaves. */
 export const VENT_SIZE = 1.5;
 
+/**
+ * The middle of the gap behind the container in a yard built by
+ * `approach` (build/room.ts): between the container and the yard's end
+ * wall, at the far end from where the container stops.
+ */
+const pocket = (wallX: number, out: 1 | -1, depth: number, z0: number, z1: number): [number, number] => [wallX + out * (depth - 0.775), (z0 + z1) / 2 + 1.55];
+
 export const ENTRY_PLANS: EntryPlan[] = [
-  { id: 'yard', area: 'lobby', kind: 'walk', at: [0, -14.8], spread: 1.2, fromRound: 1 },
+  { id: 'yard', area: 'lobby', kind: 'walk', at: [ROBOT_SPAWN.x, ROBOT_SPAWN.z], spread: ROBOT_SPAWN.spread, fromRound: 1 },
   { id: 'lobbyVent', area: 'lobby', kind: 'drop', at: [-7.9, 2.75], spread: 0.25, height: LOBBY.height, fromRound: 3 },
-  { id: 'dock', area: 'hall', kind: 'walk', at: [HALL.x0 - WALL - DOCK.depth + 1.3, (DOCK.z0 + DOCK.z1) / 2], spread: 0.9, fromRound: 1 },
+  { id: 'dock', area: 'hall', kind: 'walk', at: pocket(HALL.x0 - WALL, -1, DOCK.depth, DOCK.z0, DOCK.z1), spread: 0.3, fromRound: 1 },
   { id: 'hallVent', area: 'hall', kind: 'drop', at: [5.4, 21.9], spread: 0.25, height: HALL.height, fromRound: 1 },
-  { id: 'eastBreach', area: 'power', kind: 'walk', at: [POWER.x1 + WALL + EAST_BREACH.depth - 1.4, (EAST_BREACH.z0 + EAST_BREACH.z1) / 2], spread: 0.9, fromRound: 1 },
+  { id: 'eastBreach', area: 'power', kind: 'walk', at: pocket(POWER.x1 + WALL, 1, EAST_BREACH.depth, EAST_BREACH.z0, EAST_BREACH.z1), spread: 0.3, fromRound: 1 },
   { id: 'powerVent', area: 'power', kind: 'drop', at: [13.4, 10.9], spread: 0.25, height: POWER.height, fromRound: 1 },
   { id: 'coreVentWest', area: 'core', kind: 'drop', at: [-4.4, 30.5], spread: 0.25, height: CORE.height, fromRound: 1 },
   { id: 'coreVentEast', area: 'core', kind: 'drop', at: [2.4, 33.5], spread: 0.25, height: CORE.height, fromRound: 1 },

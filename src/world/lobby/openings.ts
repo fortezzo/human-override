@@ -6,7 +6,7 @@
 // whichever side a door is seen.
 
 import type { LevelBuilder } from '../build/LevelBuilder';
-import { BLAST_DOOR, BREACH, POWER_DOOR, ROOM, VESTIBULE, WINDOW, WINDOWS } from './plan';
+import { BLAST_DOOR, BREACH, POWER_DOOR, ROOM, VESTIBULE, WINDOW, WINDOWS, YARD_CONTAINER } from './plan';
 
 const HALF_PI = Math.PI / 2;
 
@@ -80,10 +80,20 @@ function buildVestibule(b: LevelBuilder): void {
   b.blocker([6, 0, -20.6], [6.6, 3, -12.6]);
   b.blocker([-6.6, 0, -20.6], [6.6, 3, -20]);
 
+  // A shipping container against the east side of the yard. Robots appear
+  // in the gap behind it and come out round its near end (see plan.ts).
+  const c = YARD_CONTAINER;
+  b.box('rustedSteel', [c.x0, 0, c.z0], [c.x1, c.height, c.z1]);
+  for (const y of [0.3, c.height - 0.42]) b.box('darkSteel', [c.x0 - 0.04, y, c.z0 - 0.04], [c.x1 + 0.04, y + 0.12, c.z1 + 0.04], { collide: false, cast: false });
+  // Its doors, at the end facing the building: two leaves and their lock rods.
+  const cx = (c.x0 + c.x1) / 2;
+  b.box('darkSteel', [cx - 0.015, 0.1, c.z1], [cx + 0.015, c.height - 0.1, c.z1 + 0.03], { collide: false, cast: false });
+  for (const dx of [-0.42, -0.2, 0.2, 0.42]) b.tube('darkSteel', [cx + dx, 0.12, c.z1 + 0.035], [cx + dx, c.height - 0.12, c.z1 + 0.035], 0.018, false);
+
   // Wreckage in the entry.
   b.prop('concrete_road_barrier', { at: [1.25, 0, -10.6], rotY: 1.15, kind: 'concrete' });
   b.prop('concrete_road_barrier', { at: [-3.4, 0, -15.2], rotY: 0.3, kind: 'concrete' });
-  b.prop('concrete_road_barrier', { at: [3.9, 0, -16.4], rotY: -0.5, kind: 'concrete' });
+  b.prop('concrete_road_barrier', { at: [1.5, 0, -17.3], rotY: -0.5, kind: 'concrete' });
   b.prop('Barrel_01', { at: [-2.2, 0.29, -9.1], rot: [HALF_PI, 0.7, 0] });
 }
 

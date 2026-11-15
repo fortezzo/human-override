@@ -63,8 +63,16 @@ export const COLUMN_SIZE = 0.7;
 
 export const PLAYER_START = { x: 0, z: 4.6, yaw: 0 } as const;
 
-/** Where robots appear, out in the fog beyond the vestibule. */
-export const ROBOT_SPAWN = { x: 0, z: -14.8 } as const;
+/**
+ * A shipping container standing against the east side of the yard. Robots
+ * appear in the gap behind it, which cannot be seen from the entrance or
+ * from most of the yard, and walk out round its near end. (They used to
+ * appear in the middle of the yard, in plain view through the entrance.)
+ */
+export const YARD_CONTAINER = { x0: 2.9, x1: 4.4, z0: -19.95, z1: -15.5, height: 2.6 } as const;
+
+/** Where robots appear: in the gap between that container and the yard's east side. */
+export const ROBOT_SPAWN = { x: 5.2, z: -17.7, spread: 0.3 } as const;
 
 /** Area robots are allowed to walk in (used to size the navigation grid). */
 export const NAV_BOUNDS = { x0: -10, x1: 10, z0: -20, z1: 8 } as const;

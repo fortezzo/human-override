@@ -14,7 +14,8 @@ import type { Game } from '../game/Game';
 import type { SurfaceKind } from '../render/materials';
 import { remaining } from '../sim/rounds';
 import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
-import { BREACH } from '../world/lobby/plan';
+import { cellAt } from '../sim/navGrid';
+import { BREACH, VESTIBULE } from '../world/lobby/plan';
 import { AREA_IDS, DOCK, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
@@ -126,6 +127,24 @@ export interface DebugApi {
    * doorways in it.
    */
   doorwayObstructions(): Record<string, number>;
+  /**
+   * Every robot the rounds have created since the count was last reset, and
+   * each one the player could see at the moment it was created: inside the
+   * picture on screen, with a clear line to some part of it (or, for one
+   * dropping from a vent, to the space it is about to fall through).
+   * `seen` should stay empty. (Robots placed by debug orders are left
+   * out.) Pass true to start the count again.
+   */
+  spawnAudit(reset?: boolean): { created: number; seen: Array<{ entry: string; x: number; y: number; z: number; eye: [number, number, number] }>; byEntry: Record<string, number>; waiting: number; lastResorts: number };
+  /**
+   * Whether the places robots walk in from can be seen from indoors. From
+   * every half metre of floor inside the building (rooms, doorways, the
+   * entry corridor and the thresholds of the dock and the breach), with
+   * every door open, it looks toward each of those places, at the height of
+   * a robot's feet, chest and head, and reports how many of those lines of
+   * sight are clear. Every count should be zero.
+   */
+  spawnSightlines(): Record<string, number>;
   /** Broken pixels in each room's reflection photograph, at every size in use. All should be zero. */
   brokenReflections(): Record<string, number>;
   /**
@@ -184,6 +203,49 @@ export function installDebugApi(game: Game): DebugTools {
   game.input.onKey(KEYS.scrap, () => game.grantScrap(FREE_SCRAP));
   game.input.onKey(KEYS.skip, () => game.skipRound());
   game.input.onKey(KEYS.autopilot, () => setAutopilot(!game.autopilot));
+
+  // Was each robot the rounds created in the player's view as it appeared?
+  // This is worked out here, separately from the rule that is meant to
+  // prevent it (game/Sight.ts), from the camera as it actually is: the
+  // exact picture on screen, with no margin, and the robot as a column of
+  // points from its feet to its head.
+  const audit = { created: 0, seen: [] as Array<{ entry: string; x: number; y: number; z: number; eye: [number, number, number] }>, byEntry: {} as Record<string, number> };
+  {
+    const raycaster = new THREE.Raycaster();
+    raycaster.firstHitOnly = true;
+    const frustum = new THREE.Frustum();
+    const matrix = new THREE.Matrix4();
+    const eye = new THREE.Vector3();
+    const point = new THREE.Vector3();
+    const direction = new THREE.Vector3();
+    game.onArrival = (robot, entry, forced) => {
+      if (forced) return;
+      audit.created += 1;
+      audit.byEntry[entry.id] = (audit.byEntry[entry.id] ?? 0) + 1;
+      const camera = game.camera;
+      camera.updateMatrixWorld();
+      frustum.setFromProjectionMatrix(matrix.copy(camera.matrixWorld).invert().premultiply(camera.projectionMatrix));
+      camera.getWorldPosition(eye);
+      const at = robot.root.position;
+      // A robot that walks in: the robot itself, where it was created. One
+      // that drops from a vent is created above the ceiling and cannot be
+      // seen there, so what counts is the space it is about to fall
+      // through, from the ceiling to the floor.
+      const heights = entry.kind === 'drop' ? Array.from({ length: Math.ceil(at.y / 0.4) + 1 }, (_, i) => Math.min(at.y - 0.06, i * 0.4) - at.y) : [0.1, 0.5, 0.9, 1.3, 1.7, 1.95];
+      for (const up of heights) {
+        for (const [dx, dz] of [[0, 0], [0.3, 0], [-0.3, 0], [0, 0.3], [0, -0.3]] as const) {
+          point.set(at.x + dx, at.y + up, at.z + dz);
+          if (!frustum.containsPoint(point)) continue;
+          const distance = eye.distanceTo(point);
+          raycaster.set(eye, direction.copy(point).sub(eye).divideScalar(distance));
+          raycaster.far = distance - 0.02;
+          if (raycaster.intersectObjects(game.world.solids, false).length) continue;
+          audit.seen.push({ entry: entry.id, x: at.x, y: at.y, z: at.z, eye: [eye.x, eye.y, eye.z] });
+          return;
+        }
+      }
+    };
+  }
 
   window.__HO = {
     ready: false,
@@ -336,6 +398,66 @@ export function installDebugApi(game: Game): DebugTools {
       }
       for (const door of game.world.doors) door.settle();
       return gaps;
+    },
+    spawnAudit(reset = false) {
+      const report = { created: audit.created, seen: audit.seen.slice(), byEntry: { ...audit.byEntry }, waiting: game.director.waiting, lastResorts: game.director.lastResorts };
+      if (reset) {
+        audit.created = 0;
+        audit.seen.length = 0;
+        audit.byEntry = {};
+      }
+      return report;
+    },
+    spawnSightlines() {
+      const raycaster = new THREE.Raycaster();
+      raycaster.firstHitOnly = true;
+      for (const door of game.world.doors) door.pose(1);
+      // Everywhere indoors a player can stand: [rectangle, skip squares robots cannot stand on].
+      const t = WALL;
+      const indoors: Array<[[number, number, number, number], boolean]> = [
+        ...AREA_IDS.map((id): [[number, number, number, number], boolean] => [[...ROOM_RECTS[id]] as [number, number, number, number], true]),
+        ...game.world.doors.map((door): [[number, number, number, number], boolean] => [[...door.rect] as [number, number, number, number], false]),
+        // The entry corridor, from the lobby wall out to its outer doorway.
+        [[VESTIBULE.x0, VESTIBULE.z0 - 0.5, VESTIBULE.x1, LOBBY.z0], false],
+        [[HALL.x0 - t, DOCK.z0, HALL.x0, DOCK.z1], false],
+        [[POWER.x1, EAST_BREACH.z0, POWER.x1 + t, EAST_BREACH.z1], false],
+      ];
+      const nav = game.world.nav;
+      const eyes: THREE.Vector3[] = [];
+      for (const [[x0, z0, x1, z1], furnished] of indoors) {
+        for (let x = x0 + 0.3; x <= x1 - 0.3 + 1e-6; x += 0.5) {
+          for (let z = z0 + 0.3; z <= z1 - 0.3 + 1e-6; z += 0.5) {
+            if (furnished) {
+              const cell = cellAt(nav, x, z);
+              if (cell < 0 || nav.blocked[cell] || nav.mask[cell]) continue;
+            }
+            eyes.push(new THREE.Vector3(x, PLAYER.eyeHeight, z));
+          }
+        }
+      }
+      const clear: Record<string, number> = {};
+      const target = new THREE.Vector3();
+      const direction = new THREE.Vector3();
+      for (const entry of ENTRY_PLANS) {
+        if (entry.kind !== 'walk') continue;
+        let count = 0;
+        const spots: Array<[number, number]> = [[entry.at[0], entry.at[1]]];
+        for (let i = 0; i < 6; i++) spots.push([entry.at[0] + Math.cos(i * 1.047) * entry.spread, entry.at[1] + Math.sin(i * 1.047) * entry.spread]);
+        for (const eye of eyes) {
+          for (const [sx, sz] of spots) {
+            for (const up of [0.15, 1.0, 1.85]) {
+              target.set(sx, up, sz);
+              const distance = eye.distanceTo(target);
+              raycaster.set(eye, direction.copy(target).sub(eye).divideScalar(distance));
+              raycaster.far = distance - 0.02;
+              if (!raycaster.intersectObjects(game.world.solids, false).length) count++;
+            }
+          }
+        }
+        clear[entry.id] = count;
+      }
+      for (const door of game.world.doors) door.settle();
+      return clear;
     },
     doorwayObstructions() {
       const raycaster = new THREE.Raycaster();

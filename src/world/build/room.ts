@@ -187,7 +187,10 @@ export function approach(b: LevelBuilder, spec: ApproachSpec, lights: LightDef[]
   b.box('concreteDark', [ea, 0, z0 - side - 0.5], [eb, height, z1 + side + 0.5]);
   b.box('concreteDark', [xa - 0.5, height, z0 - side - 0.5], [xb + 0.5, height + 0.3, z1 + side + 0.5], { collide: false });
 
-  // A steel container near the far end: robots appear behind it.
+  // A steel container near the far end. Robots appear in the gap between
+  // it and the end wall (the entry's position in plan.ts is the middle of
+  // that gap), where they cannot be seen from indoors, and walk out round
+  // the end of it.
   const cx = wallX + out * (depth - 2.3);
   b.box('rustedSteel', [cx - 0.75, 0, mid - 0.15], [cx + 0.75, 2.5, z1 + side - 0.25]);
   b.box('darkSteel', [cx - 0.79, 0.3, mid - 0.19], [cx + 0.79, 0.42, z1 + side - 0.2], { collide: false, cast: false });
