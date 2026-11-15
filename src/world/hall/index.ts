@@ -277,6 +277,7 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   });
   lights.push({ name: 'hallRacksW', area: 'hall', kind: 'point', color: BLUE, intensity: 4, position: [-7.2, 1.3, 16.4], distance: 8 });
   lights.push({ name: 'hallRacksSW', area: 'hall', kind: 'point', color: 0xff5a3a, intensity: 3, position: [-7.4, 1.3, 21.6], distance: 7 });
+  lights.push({ name: 'hallServiceDoor', area: 'hall', kind: 'point', color: 0xffe2b8, intensity: 4, position: [x1 - 0.7, 2.8, (servicePlan.from + servicePlan.to) / 2], distance: 4.5 });
   // The uplink corner: warm light from the console, cold from above.
   lights.push({ name: 'hallUplink', area: 'hall', kind: 'point', color: AMBER, intensity: 4.5, position: [ux, 1.9, uz - 1.0], distance: 6 });
   // Red lamps either side of the core door and of the dock.

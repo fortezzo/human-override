@@ -34,20 +34,32 @@ console.log(`Start-up: ${((Date.now() - started) / 1000).toFixed(1)} s to title 
 const timings = await page.evaluate(() => window.__HO.game.loadTimings);
 for (const [name, ms] of Object.entries(timings)) console.log(`  ${name}: ${ms} ms`);
 
-// Heaviest moment available in this stage: a fire-fight with robots in the
-// room, debris from a destroyed one, and a burst of sparks and smoke.
+// The heaviest moment the game can produce: a full horde (the most robots
+// ever allowed on the map at once) closing on the player in the server
+// hall, with every door open so three areas are in view, the carbine
+// firing without pause, robots being destroyed and their debris piling up.
 await page.evaluate(() => {
   const ho = window.__HO;
   ho.play();
   ho.god(true);
+  ho.holdRounds(true);
   ho.clearRobots();
-  ho.place(0, 4.6, 0, -4);
+  for (const id of ['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+  ho.scrap(5000);
+  // Buy the carbine at its rack, then stand in the aisle facing the lobby.
+  ho.place(1.6, 10.1, 180);
+  ho.step(1 / 60, 140);
+  ho.tap('interact');
+  ho.step(1 / 60, 40);
+  ho.place(-1, 17.5, 0, -2);
 });
 const stress = () =>
   page.evaluate(() => {
     const ho = window.__HO;
     ho.clearRobots();
-    for (let i = 0; i < 6; i++) ho.spawnRobot(-2.5 + i, -2 - (i % 2) * 1.5, 0, false);
+    // 24 robots, tough enough to last the measurement, some of them runners.
+    for (let i = 0; i < 24; i++) ho.spawnRobot(-3.2 + (i % 6) * 0.9, 8.6 + Math.floor(i / 6) * 1.7, 180, false, i % 3 === 0 ? 3.0 : 1.6, i % 4 === 0 ? 150 : 1500);
+    ho.game.weapons.state.reserve = 9000;
     ho.press('fire', true);
   });
 

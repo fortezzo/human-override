@@ -28,6 +28,16 @@ export const CREDITS: CreditGroup[] = [
         "title": "Sci-Fi Rifle",
         "author": "Slayver",
         "license": "CC-BY 4.0"
+      },
+      {
+        "title": "Sci-fi Pistol [PBR]",
+        "author": "StarGames studio",
+        "license": "CC-BY 4.0"
+      },
+      {
+        "title": "Sci-fi Super Shotgun",
+        "author": "tnnv",
+        "license": "CC-BY 4.0"
       }
     ]
   },

@@ -334,6 +334,8 @@ export class Game {
         this.scene.environment = first;
         this.scene.environmentIntensity = LOOKDEV.environmentIntensity;
         environment = bakeReflectionProbe(this.renderer.three, this.scene, centre, preset.reflectionProbeSize, hidden);
+        // Never leave the scene pointing at a picture that has been thrown away.
+        this.scene.environment = environment;
         first.dispose();
       }
       this.environments.set(id, environment);
@@ -452,7 +454,6 @@ export class Game {
    * screen. The run begins the moment the mouse is captured again.
    */
   restart(capture = true): void {
-    if (this.state === 'playing') return;
     this.state = 'over';
     if (capture) this.requestPlay();
   }

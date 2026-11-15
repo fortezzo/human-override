@@ -44,8 +44,9 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     paint: 1.15,
     roughness: 1,
     hip: { x: 0.17, y: -0.165, z: -0.47, yaw: 0.07, pitch: 0.03, roll: 0 },
-    // Eye level with the tops of the sights, front post on the point of aim.
-    aim: { x: 0, y: -0.0612, z: -0.43, yaw: 0, pitch: 0, roll: 0 },
+    // The front post on the point of aim, the muzzle tipped up a touch so
+    // the back of the slide drops out of the way of the target.
+    aim: { x: 0, y: -0.0625, z: -0.43, yaw: 0, pitch: 0.022, roll: 0 },
     sprint: { x: 0.14, y: -0.2, z: -0.4, yaw: 0.35, pitch: 0.55, roll: 0.1 },
     muzzles: [[0, 0.04, -0.104]],
     ejectionPort: [0.014, 0.05, -0.02],
@@ -58,8 +59,9 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     paint: 1.9,
     roughness: 1,
     hip: { x: 0.19, y: -0.2, z: -0.56, yaw: 0.08, pitch: 0.03, roll: 0 },
-    // Looking along the rib, the bead on the point of aim.
-    aim: { x: 0, y: -0.0745, z: -0.53, yaw: 0, pitch: 0, roll: 0 },
+    // The bead on the point of aim, looking down the rib from a little
+    // above it so the receiver sits low in the view.
+    aim: { x: 0, y: -0.0862, z: -0.53, yaw: 0, pitch: 0.036, roll: 0 },
     sprint: { x: 0.12, y: -0.24, z: -0.45, yaw: 0.6, pitch: -0.12, roll: 0.16 },
     muzzles: [
       [-0.017, 0.04, -0.334],

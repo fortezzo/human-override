@@ -95,7 +95,7 @@ export class Hud {
   private bannerTimer = 0;
   private hintTimer = 16;
   private shownScrap = -1;
-  private last = { ammo: -1, reserve: -1, weapon: '', round: -1, sub: '', slots: '', fps: '', prompt: '', debug: '' };
+  private last = { ammo: -1, reserve: -1, weapon: '', round: -1, sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '' };
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud', parent);
@@ -280,9 +280,11 @@ export class Hud {
       const gap = state.scrap - this.shownScrap;
       const step = Math.sign(gap) * Math.max(1, Math.ceil(Math.abs(gap) * Math.min(1, dt * 12)));
       this.shownScrap = Math.abs(step) >= Math.abs(gap) ? state.scrap : this.shownScrap + step;
-      this.scrap.textContent = this.shownScrap.toLocaleString('en-US');
-    } else if (this.scrap.textContent === '') {
-      this.scrap.textContent = '0';
+    }
+    const scrapText = this.shownScrap.toLocaleString('en-US');
+    if (scrapText !== last.scrap) {
+      last.scrap = scrapText;
+      this.scrap.textContent = scrapText;
     }
 
     if (state.round !== last.round) {

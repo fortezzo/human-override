@@ -80,7 +80,10 @@ async function boot(): Promise<void> {
   // ---- Interface -> game
   screens.onStart = () => game.requestPlay();
   screens.onResume = () => game.requestPlay();
-  screens.onRestart = () => game.restart();
+  screens.onRestart = () => {
+    hud.reset();
+    game.restart();
+  };
   screens.onQuit = () => game.toTitle();
   screens.onQuality = (choice) => {
     if (choice === 'auto') screens.setQuality(game.qualityLevel, 'auto');

@@ -226,6 +226,8 @@ export const SKETCHFAB = [
   },
   {
     key: 'pistol',
+    shipped: true,
+    changes: 'Changes: only the pistol itself is used (its display magazine and loose rounds are left out); levelled, re-centred and scaled; textures re-packed and compressed.',
     title: 'Sci-fi Pistol [PBR]',
     author: 'StarGames studio',
     license: 'CC-BY 4.0',
@@ -234,6 +236,8 @@ export const SKETCHFAB = [
   },
   {
     key: 'shotgun',
+    shipped: true,
+    changes: 'Changes: re-centred and scaled; textures re-packed and compressed; paint lightened in the game.',
     title: 'Sci-fi Super Shotgun',
     author: 'tnnv',
     license: 'CC-BY 4.0',

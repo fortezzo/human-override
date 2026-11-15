@@ -217,6 +217,7 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
     [13.6, 4.4, false],
     [18.6, 7.4, true],
     [13.2, -1.6, false],
+    [16.6, 11.6, false],
   ];
   stripAt.forEach(([sx, sz, faulty], i) => {
     const fixture = b.prop('caged_hanging_light', { at: [sx, h, sz], rotY: i === 1 ? HALF_PI : 0, collide: false, unique: true });
@@ -225,7 +226,7 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
       area: 'power',
       kind: 'point',
       color: SODIUM,
-      intensity: i === 2 ? 12 : 20,
+      intensity: i === 2 ? 12 : i === 3 ? 16 : 20,
       position: [sx, h - 0.68, sz],
       distance: 11,
       flicker: faulty ? 'faulty' : undefined,
@@ -242,11 +243,13 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
     const out: Vec3 = [at[0] + Math.sin(rotY) * 0.35, at[1], at[2] + Math.cos(rotY) * 0.35];
     lights.push({ name: `powerBeacon${i}`, area: 'power', kind: 'point', color: AMBER, intensity: 12, position: out, distance: 9, flicker: i === 1 ? 'pulse' : 'beacon', glow: { materials: fixture, color: AMBER, intensity: 9 } });
   });
+  // Small lamps over the two doors on the west side.
+  lights.push({ name: 'powerLobbyDoor', area: 'power', kind: 'point', color: SODIUM, intensity: 4, position: [x0 + 0.7, 2.75, 3.6], distance: 4.5 });
+  lights.push({ name: 'powerServiceDoor', area: 'power', kind: 'point', color: SODIUM, intensity: 4, position: [x0 + 0.7, 2.8, (service.from + service.to) / 2], distance: 4.5 });
   lights.push({ name: 'breakerLamp', area: 'power', kind: 'point', color: RED, intensity: 5, position: [bx + 1.26, 2.5, z1 - 1.0], distance: 5.5, flicker: 'pulse' });
   lights.push({ name: 'cageLamp', area: 'power', kind: 'point', color: AMBER, intensity: 3.5, position: [21.0, 1.9, 12.5], distance: 4.5 });
   lights.push({ name: 'powerBounce', area: 'power', kind: 'point', color: 0xffc890, intensity: 15, position: [16, 2.4, 8.4], distance: 13 });
   lights.push({ name: 'powerBounceN', area: 'power', kind: 'point', color: 0xffc890, intensity: 12, position: [16, 2.6, 0.2], distance: 12 });
-  lights.push({ name: 'powerPanels', area: 'power', kind: 'point', color: 0xff7a5c, intensity: 2.5, position: [15.9, 1.3, 3.2], distance: 5 });
   dustBeams.push({ position: [13.6, h - 0.68, 4.4], target: [13.6, 0, 4.4], angle: 0.8, color: SODIUM, strength: 0.4 });
 
   const built = b.build();
