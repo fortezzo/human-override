@@ -47,10 +47,11 @@ export interface LightDef {
   flicker?: 'faulty' | 'pulse' | 'beacon';
   /**
    * When the light is lit at all: only while the main power is out, only
-   * once it is back on, or only while ARGUS is still running. Left out, it
-   * is always lit.
+   * once it is back on, only while ARGUS is still running (it dims as
+   * ARGUS dies), or only once ARGUS is off (it comes up as ARGUS dies).
+   * Left out, it is always lit.
    */
-  when?: 'powerOut' | 'powerOn' | 'argusAwake';
+  when?: 'powerOut' | 'powerOn' | 'argusAwake' | 'argusOff';
   /** Parts of a lamp model that should glow with this light. */
   glow?: { materials: THREE.MeshStandardMaterial[]; color: number; intensity: number };
 }
@@ -86,9 +87,13 @@ export class LightRig {
   readonly group = new THREE.Group();
   /** Hold every lamp at full brightness (for repeatable screenshots and measurements). */
   steady = false;
-  /** The main power is on, and ARGUS is still running: some lights depend on one or the other (see LightDef.when). */
+  /**
+   * The main power is on, and how awake ARGUS is (1 = running, 0 = off):
+   * some lights depend on one or the other (see LightDef.when). ARGUS's
+   * own lights dim with it as it dies, instead of being switched off.
+   */
   power = false;
-  argusAwake = true;
+  argusLevel = 1;
   private readonly lives: Live[];
   private slots: Slot[] = [];
   private lastTime = 0;
@@ -152,7 +157,7 @@ export class LightRig {
       const weight = areas.get(live.def.area) ?? 0;
       if (weight <= 0 || live.def.intensity <= 0) return 0;
       const when = live.def.when;
-      if ((when === 'powerOut' && this.power) || (when === 'powerOn' && !this.power) || (when === 'argusAwake' && !this.argusAwake)) return 0;
+      if ((when === 'powerOut' && this.power) || (when === 'powerOn' && !this.power) || (when === 'argusAwake' && this.argusLevel <= 0) || (when === 'argusOff' && this.argusLevel >= 1)) return 0;
       const reach = live.def.distance + 4;
       const distance = live.focus.distanceTo(position);
       // Lights already live are favoured a little, so two lights of similar
@@ -278,7 +283,9 @@ export class LightRig {
 
   private apply(): void {
     for (const slot of this.slots) {
-      slot.light.intensity = slot.live ? slot.live.def.intensity * slot.live.level * slot.fade : 0;
+      const live = slot.live;
+      const share = !live ? 0 : live.def.when === 'argusAwake' ? this.argusLevel : live.def.when === 'argusOff' ? 1 - this.argusLevel : 1;
+      slot.light.intensity = live ? live.def.intensity * live.level * slot.fade * share : 0;
     }
   }
 

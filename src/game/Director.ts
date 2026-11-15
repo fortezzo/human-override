@@ -89,9 +89,14 @@ export class Director {
    * the player can see every entry: the caller tries again. `health` is
    * a multiple of an ordinary robot's in the current round; `speed`, if
    * given, is in metres per second (otherwise it walks or runs as that
-   * round's robots do).
+   * round's robots do). `entries`, if given, names the only ways in it may
+   * use (ARGUS's Proxy is too big for some of them).
    */
-  sendExtra(areas: readonly AreaId[], make: { health?: number; speed?: number } & Pick<RobotTraits, 'role' | 'attackDamage' | 'staggerDamage' | 'flinchTime'> = {}): Robot | null {
+  sendExtra(
+    areas: readonly AreaId[],
+    make: { health?: number; speed?: number } & Pick<RobotTraits, 'role' | 'attackDamage' | 'staggerDamage' | 'flinchTime'> = {},
+    entries?: readonly string[],
+  ): Robot | null {
     const reachable = this.world.reachable;
     const spots = new Map<EntryPlan, [number, number]>();
     const unseen = (entry: EntryPlan): boolean => {
@@ -99,8 +104,9 @@ export class Director {
       if (spot) spots.set(entry, spot);
       return spot !== null;
     };
-    const wanted = ENTRY_PLANS.filter((entry) => areas.includes(entry.area) && reachable.has(entry.area) && unseen(entry));
-    const others = wanted.length ? [] : ENTRY_PLANS.filter((entry) => !areas.includes(entry.area) && reachable.has(entry.area) && unseen(entry));
+    const open = (entry: EntryPlan): boolean => (!entries || entries.includes(entry.id)) && reachable.has(entry.area) && unseen(entry);
+    const wanted = ENTRY_PLANS.filter((entry) => areas.includes(entry.area) && open(entry));
+    const others = wanted.length ? [] : ENTRY_PLANS.filter((entry) => !areas.includes(entry.area) && open(entry));
     const pool = wanted.length ? wanted : others;
     if (!pool.length) return null;
     const entry = pool[Math.floor(Math.random() * pool.length)]!;

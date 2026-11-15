@@ -17,6 +17,10 @@ export interface RobotDesign {
   glow: { at: [number, number, number]; size: [number, number] };
   /** Colour of everything on it that glows (the standard red if left out). */
   eyeColor?: number;
+  /** Its own edge light, where it differs from the usual one: [red, green, blue], strength, lift, power, fade. */
+  edge?: { color?: [number, number, number]; strength?: number; lift?: number; power?: number; fadeBy?: number };
+  /** A light that travels with it, lighting it and the floor round it: colour, brightness in candela, reach in metres. */
+  lamp?: { color: number; intensity: number; distance: number };
   /** Somewhere on the body an object can be hung: relative to a joint, riding on that joint's bone. */
   carry?: { bone: string; at: [number, number, number] };
   /** Adds every part of the body to the builder. */

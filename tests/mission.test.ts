@@ -26,11 +26,15 @@ import {
 
 const rules: MissionRules = { custodianFromRound: 6, uplinkSeconds: 60, armSeconds: 75, bossAfter: 10 };
 
-/** Run the clock on for `seconds`, in sixtieths, and say what happened along the way. */
-function run(state: MissionState, seconds: number, holdingUplink = true) {
+/**
+ * Run the clock on for `seconds`, in sixtieths, and say what happened
+ * along the way. `holding` says whether the player is where they have to
+ * be for a clock to run (by the uplink, or in the core).
+ */
+function run(state: MissionState, seconds: number, holding = true) {
   const seen = { uplinkDone: 0, sendBoss: 0, armedNow: 0 };
   for (let i = 0; i < Math.round(seconds * 60); i++) {
-    const tick = updateMission(state, rules, 1 / 60, holdingUplink);
+    const tick = updateMission(state, rules, 1 / 60, holding, holding);
     if (tick.uplinkDone) seen.uplinkDone++;
     if (tick.armedNow) seen.armedNow++;
     if (tick.sendBoss) {
@@ -67,7 +71,7 @@ describe('the mission: power', () => {
     expect(openCore(m)).toBe(false);
     expect(armSwitch(m)).toBe(false);
     expect(pullSwitch(m)).toBe(false);
-    expect(objective(m, rules, false).target).toBe('breaker');
+    expect(objective(m, rules, false, false).target).toBe('breaker');
   });
 
   it('is restored once, at the breaker', () => {
@@ -84,7 +88,7 @@ describe('the mission: three keys, in any order', () => {
     const m = createMission();
     restorePower(m);
     expect(keyAvailable(m, 'cage')).toBe(true);
-    expect(objective(m, rules, false).target).toBe('cage');
+    expect(objective(m, rules, false, false).target).toBe('cage');
     expect(collectKey(m, 'cage')).toBe(true);
     expect(keysHeld(m)).toBe(1);
     // It cannot be taken twice.
@@ -109,10 +113,10 @@ describe('the mission: three keys, in any order', () => {
     restorePower(m);
     expect(custodianDestroyed(m)).toBe(false); // not on the map yet
     custodianSent(m);
-    expect(objective({ ...m, keys: { ...m.keys, cage: true } }, rules, false).target).toBe('custodian');
+    expect(objective({ ...m, keys: { ...m.keys, cage: true } }, rules, false, false).target).toBe('custodian');
     expect(keyAvailable(m, 'custodian')).toBe(false);
     expect(custodianDestroyed(m)).toBe(true);
-    expect(objective(m, rules, false).target).toBe('custodianKey');
+    expect(objective(m, rules, false, false).target).toBe('custodianKey');
     expect(collectKey(m, 'custodian')).toBe(true);
     expect(collectKey(m, 'custodian')).toBe(false);
     expect(custodianDestroyed(m)).toBe(false);
@@ -143,8 +147,8 @@ describe('the mission: three keys, in any order', () => {
     run(m, 300, false);
     expect(m.uplinkHeld).toBeCloseTo(20, 1);
     expect(m.keys.uplink).toBe(false);
-    expect(objective(m, rules, false).title).toContain('GET BACK');
-    expect(objective(m, rules, true).title).toBe('HOLD THE UPLINK');
+    expect(objective(m, rules, false, false).title).toContain('GET BACK');
+    expect(objective(m, rules, true, false).title).toBe('HOLD THE UPLINK');
     run(m, 40.1);
     expect(m.keys.uplink).toBe(true);
   });
@@ -188,11 +192,11 @@ describe('the mission: three keys, in any order', () => {
     restorePower(m);
     collectKey(m, 'cage');
     // Before the Custodian is due: the uplink.
-    expect(objective(m, rules, false).target).toBe('uplink');
+    expect(objective(m, rules, false, false).target).toBe('uplink');
     startUplink(m);
     run(m, rules.uplinkSeconds + 0.5);
     // Two keys, the Custodian not here yet: nowhere to go, but it says why.
-    const waiting = objective(m, rules, false);
+    const waiting = objective(m, rules, false, false);
     expect(waiting.target).toBeNull();
     expect(waiting.title).toContain('CUSTODIAN');
     expect(waiting.detail).toContain(String(rules.custodianFromRound));
@@ -212,12 +216,12 @@ describe('the mission: the core and the kill switch', () => {
 
   it('unseals the core with the keys, then arms, then can be pulled', () => {
     const m = withKeys();
-    expect(objective(m, rules, false).target).toBe('coreDoor');
+    expect(objective(m, rules, false, false).target).toBe('coreDoor');
     // The switch cannot be armed through a sealed door.
     expect(armSwitch(m)).toBe(false);
     expect(openCore(m)).toBe(true);
     expect(openCore(m)).toBe(false);
-    expect(objective(m, rules, false).target).toBe('killSwitch');
+    expect(objective(m, rules, false, false).target).toBe('killSwitch');
     expect(pullSwitch(m)).toBe(false); // not armed yet
     expect(armSwitch(m)).toBe(true);
     expect(armSwitch(m)).toBe(false);
@@ -243,10 +247,38 @@ describe('the mission: the core and the kill switch', () => {
     const early = run(m, rules.armSeconds - 1);
     expect(early.armedNow).toBe(0);
     expect(pullSwitch(m)).toBe(false);
-    expect(objective(m, rules, false).detail).toBe('0:01');
+    expect(objective(m, rules, false, true).detail).toBe('0:01');
     expect(run(m, 1.1).armedNow).toBe(1);
     expect(m.phase).toBe('armed');
-    expect(objective(m, rules, false).title).toBe('PULL THE KILL SWITCH');
+    expect(objective(m, rules, false, true).title).toBe('PULL THE KILL SWITCH');
+  });
+
+  it('only arms while the player is in the core, and keeps what it has when they leave', () => {
+    const m = withKeys();
+    openCore(m);
+    armSwitch(m);
+    run(m, 20);
+    expect(m.armed).toBeCloseTo(20, 1);
+    // Ten minutes of running laps of the map: nothing.
+    const away = run(m, 600, false);
+    expect(m.armed).toBeCloseTo(20, 1);
+    expect(away.armedNow).toBe(0);
+    expect(m.phase).toBe('arming');
+    expect(pullSwitch(m)).toBe(false);
+    expect(objective(m, rules, false, false).title).toBe('GET BACK TO THE CORE');
+    expect(objective(m, rules, false, false).detail).toContain('CLOCK STOPPED');
+    expect(objective(m, rules, false, true).title).toBe('HOLD THE CORE WHILE THE SWITCH ARMS');
+    // Back in the core it carries on from where it was.
+    expect(run(m, rules.armSeconds - 20 + 0.1).armedNow).toBe(1);
+    expect(m.phase).toBe('armed');
+  });
+
+  it("does not send ARGUS's own unit while the player is outside the core", () => {
+    const m = withKeys();
+    openCore(m);
+    armSwitch(m);
+    expect(run(m, 120, false).sendBoss).toBe(0);
+    expect(run(m, rules.bossAfter + 0.1).sendBoss).toBe(1);
   });
 
   it('records how long the run had lasted when the switch was pulled, and then is over', () => {
@@ -262,8 +294,8 @@ describe('the mission: the core and the kill switch', () => {
     // The clock keeps running for the endless rounds; the record does not move.
     run(m, 30);
     expect(m.savedAt).toBeCloseTo(before, 5);
-    expect(objective(m, rules, false).title).toBe('HUMANITY SAVED');
-    expect(objective(m, rules, false).target).toBeNull();
+    expect(objective(m, rules, false, false).title).toBe('HUMANITY SAVED');
+    expect(objective(m, rules, false, false).target).toBeNull();
   });
 });
 

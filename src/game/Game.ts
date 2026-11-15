@@ -158,6 +158,12 @@ export class Game {
   /** The robots the player can bump into this frame. */
   private readonly obstacles: Array<{ x: number; z: number }> = [];
 
+  /**
+   * The light that travels with a robot whose design carries one (ARGUS's
+   * Proxy). One lamp, always in the scene and dark when there is no such
+   * robot, so that the count of lights never changes mid-game.
+   */
+  private readonly escort = new THREE.PointLight(0xffffff, 0, 6, 2);
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
 
@@ -234,6 +240,7 @@ export class Game {
     this.view = new WeaponView(this.assets);
     this.camera.add(this.view.root);
     this.scene.add(this.view.muzzleLight);
+    this.scene.add(this.escort);
 
     this.sight = new Sight(this.camera, () => this.world.solids);
     this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits), this.sight);
@@ -843,9 +850,11 @@ export class Game {
     this.soundClock.servo -= dt;
     this.soundClock.step -= dt;
 
+    let lit: Robot | null = null;
     for (let i = this.robots.length - 1; i >= 0; i--) {
       const robot = this.robots[i]!;
       const events = robot.update(dt, target, playing && player.alive, this.world.nav, this.world.colliders, this.robots);
+      if (robot.model.lamp && robot.alive && !robot.poweredDown) lit = robot;
 
       // With a crowd on the map, not every footfall needs a sound.
       if (events.footstep && this.soundClock.step <= 0) {
@@ -886,6 +895,23 @@ export class Game {
         else this.director.recalled();
       }
     }
+
+    // The lamp that travels with ARGUS's Proxy sits above its head and a
+    // little to the player's side of it, so the side the player sees is lit
+    // and so is the floor round it. It dies with the robot.
+    const lamp = lit && !lit.removed ? lit.model.lamp : null;
+    if (lit && lamp) {
+      const chest = lit.chest(this.tmpB);
+      const dx = this.camera.position.x - chest.x;
+      const dz = this.camera.position.z - chest.z;
+      const distance = Math.hypot(dx, dz);
+      const reach = Math.min(1.1, distance * 0.4) / Math.max(distance, 0.001);
+      this.escort.position.set(chest.x + dx * reach, chest.y + 0.9, chest.z + dz * reach);
+      this.escort.color.setHex(lamp.color);
+      this.escort.distance = lamp.distance;
+    }
+    this.escort.intensity = damp(this.escort.intensity, lamp ? lamp.intensity : 0, 5, dt);
+    if (this.escort.intensity < 0.02) this.escort.intensity = 0;
   }
 
   private hurtPlayer(amount: number, robot: Robot): void {

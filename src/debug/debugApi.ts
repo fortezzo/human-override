@@ -80,7 +80,7 @@ export interface DebugApi {
   freeze(frozen: boolean): void;
   /** Remove every robot, or add one at a spot facing `headingDeg`. */
   clearRobots(): void;
-  spawnRobot(x: number, z: number, headingDeg?: number, hold?: boolean, speed?: number, health?: number): void;
+  spawnRobot(x: number, z: number, headingDeg?: number, hold?: boolean, speed?: number, health?: number, role?: 'custodian' | 'proxy'): void;
   setQuality(level: QualityLevel): void;
   god(on: boolean): void;
   /** Free scrap. */
@@ -154,6 +154,10 @@ export interface DebugApi {
     objective: { title: string; detail: string; target: string | null };
     marker: { x: number; y: number; onScreen: boolean; distance: number } | null;
     holdingUplink: boolean;
+    /** True while the player is in the core (the kill switch only arms while they are). */
+    holdingCore: boolean;
+    /** How awake ARGUS is, 1 to 0: its eye, its red light, its face on the monitors. */
+    argus: number;
     boss: { name: string; health: number } | null;
     /** Robots of the mission's own on the map, and the elites among them (with where they are). */
     extras: number;
@@ -377,9 +381,9 @@ export function installDebugApi(game: Game): DebugTools {
     clearRobots() {
       game.clearRobots();
     },
-    spawnRobot(x, z, headingDeg = 0, hold = false, speed, health) {
+    spawnRobot(x, z, headingDeg = 0, hold = false, speed, health, role) {
       const plan = game.director.rounds.plan;
-      const robot = game.addRobot(x, z, THREE.MathUtils.degToRad(headingDeg), { health: health ?? plan.health, speed: speed ?? plan.walkSpeed });
+      const robot = game.addRobot(x, z, THREE.MathUtils.degToRad(headingDeg), { health: health ?? plan.health, speed: speed ?? plan.walkSpeed, ...(role ? { role, extra: true } : {}) });
       robot.hold = hold;
       robot.root.rotation.y = THREE.MathUtils.degToRad(headingDeg);
     },
@@ -483,6 +487,8 @@ export function installDebugApi(game: Game): DebugTools {
         objective: mission.objective,
         marker: game.objectiveMarker(),
         holdingUplink: mission.holdingUplink,
+        holdingCore: mission.holdingCore,
+        argus: game.lights.argusLevel,
         boss: mission.boss,
         extras: game.robots.filter((robot) => robot.alive && robot.extra).length,
         elites: game.robots.filter((robot) => robot.alive && robot.role).map((robot) => ({ role: robot.role!, x: robot.position.x, z: robot.position.z, health: robot.healthLeft })),

@@ -319,6 +319,15 @@ export const MISSION = {
   /** Seconds the kill switch takes to arm, and how far into that ARGUS's own unit arrives. */
   armSeconds: 75,
   bossAfter: 10,
+  /**
+   * The ways in that ARGUS's Proxy may use, best first. It stands half as
+   * tall again as the rest: too big for a ceiling duct or for the power
+   * room's doors. So it comes in on foot through the loading dock (or the
+   * front of the building, should the player be able to see the dock) and
+   * walks in through the core's door, which gives the player the length of
+   * the room to see it coming.
+   */
+  proxyEntries: ['dock', 'yard'],
   /** During the final stand a robot is sent in this often (seconds), on top of whatever the round still owes. */
   standInterval: 1.5,
   standMax: 16,

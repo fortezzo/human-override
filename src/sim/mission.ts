@@ -9,8 +9,10 @@
 //          the power is on and the rounds have reached a set number
 //        - one issued by the uplink in the server hall, to whoever holds
 //          the ground around it for a minute
-//   3. Unseal the core with the keys, arm the kill switch, and survive the
-//      final stand while it arms.
+//   3. Unseal the core with the keys, arm the kill switch, and hold the
+//      core while it arms: the final stand. The switch only arms while the
+//      player is in the core, as the uplink only counts while they stand
+//      by it, so the stand cannot be won by running laps of the map.
 //   4. Pull the switch.
 //
 // After that the mission is over and the rounds go on for as long as the
@@ -38,7 +40,7 @@ export interface MissionRules {
   custodianFromRound: number;
   /** Seconds the ground round the uplink has to be held. */
   uplinkSeconds: number;
-  /** Seconds the kill switch takes to arm. */
+  /** Seconds the kill switch takes to arm, counted only while the player is in the core. */
   armSeconds: number;
   /** How far into the final stand ARGUS's own unit arrives, in seconds. */
   bossAfter: number;
@@ -194,10 +196,11 @@ export interface MissionTick {
 
 /**
  * Advance the mission by `dt` seconds. `holdingUplink` says whether the
- * player is standing on the ground round the uplink: its clock only runs
- * while they are.
+ * player is standing on the ground round the uplink, and `holdingCore`
+ * whether they are in the core: the uplink's clock and the kill switch's
+ * only run while they are, and each keeps what it has when they leave.
  */
-export function updateMission(state: MissionState, rules: MissionRules, dt: number, holdingUplink: boolean): MissionTick {
+export function updateMission(state: MissionState, rules: MissionRules, dt: number, holdingUplink: boolean, holdingCore: boolean): MissionTick {
   const tick: MissionTick = { uplinkDone: false, sendBoss: false, armedNow: false };
   state.time += dt;
 
@@ -210,7 +213,7 @@ export function updateMission(state: MissionState, rules: MissionRules, dt: numb
     }
   }
 
-  if (state.phase === 'arming') {
+  if (state.phase === 'arming' && holdingCore) {
     state.armed = Math.min(rules.armSeconds, state.armed + dt);
     if (!state.bossSent && state.armed >= rules.bossAfter) tick.sendBoss = true;
     if (state.armed >= rules.armSeconds) {
@@ -248,7 +251,7 @@ const clock = (seconds: number): string => {
  * then the cage, then an uplink already being held, then the Custodian if
  * it is on the map, then the uplink.
  */
-export function objective(state: MissionState, rules: MissionRules, holdingUplink: boolean): Objective {
+export function objective(state: MissionState, rules: MissionRules, holdingUplink: boolean, holdingCore: boolean): Objective {
   const keys = `OVERRIDE KEYS ${keysHeld(state)} / ${KEY_IDS.length}`;
   switch (state.phase) {
     case 'power':
@@ -266,8 +269,10 @@ export function objective(state: MissionState, rules: MissionRules, holdingUplin
     }
     case 'core':
       return state.coreOpen ? { title: 'ARM THE KILL SWITCH', detail: 'THE CORE', target: 'killSwitch' } : { title: 'UNSEAL THE CORE', detail: `${keys} · SERVER HALL, FAR END`, target: 'coreDoor' };
-    case 'arming':
-      return { title: 'SURVIVE WHILE THE SWITCH ARMS', detail: clock(rules.armSeconds - state.armed), target: 'killSwitch' };
+    case 'arming': {
+      const left = clock(rules.armSeconds - state.armed);
+      return holdingCore ? { title: 'HOLD THE CORE WHILE THE SWITCH ARMS', detail: left, target: 'killSwitch' } : { title: 'GET BACK TO THE CORE', detail: `${left} LEFT · CLOCK STOPPED`, target: 'killSwitch' };
+    }
     case 'armed':
       return { title: 'PULL THE KILL SWITCH', detail: 'ARMED', target: 'killSwitch' };
     case 'saved':

@@ -1078,6 +1078,20 @@ try {
     for (let i = 0; i < out.length; i++) out[i] = 0.2126 * data[i * 3] + 0.7152 * data[i * 3 + 1] + 0.0722 * data[i * 3 + 2];
     return { out, width: info.width, height: info.height };
   };
+  /** The average colour of the picture on screen, or of part of it (given as shares of its width and height): [red, green, blue], each out of 255. */
+  const colourOf = async (x0 = 0, y0 = 0, x1 = 1, y1 = 1) => {
+    const { data, info } = await sharp(await page.screenshot()).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const sum = [0, 0, 0];
+    let count = 0;
+    for (let y = Math.floor(y0 * info.height); y < y1 * info.height; y++) {
+      for (let x = Math.floor(x0 * info.width); x < x1 * info.width; x++) {
+        const k = (y * info.width + x) * 3;
+        for (let c = 0; c < 3; c++) sum[c] += data[k + c];
+        count++;
+      }
+    }
+    return sum.map((value) => value / count);
+  };
   const qualityBefore = (await stats()).quality;
   const standing = [];
   for (const level of ['low', 'high']) {
@@ -1175,6 +1189,90 @@ try {
     faint.length
       ? faint.map((s) => `${s.where}: only ${Math.round(s.share * 100)}% of it stands out`).join(' | ')
       : `${standing.length} robots measured; the faintest (${weakest.where}, ${weakest.distance.toFixed(1)} m away) has ${Math.round(weakest.share * 100)}% of itself standing out; without the edge light ${blind} of them would fail`,
+  );
+
+  // ARGUS's Proxy has to read as the boss at fighting distance: from eight
+  // metres off in the core, against the red wall, in the room's own light.
+  // It is measured the same way as the robots above, facing the player,
+  // side on and from behind, and against one of the horde standing on the
+  // same spot: how much of it stands out from what is behind it, and how
+  // much brighter than the background the whole of it is on average.
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.missionJump('core');
+    ho.openDoor('hallCore');
+    ho.clearRobots();
+    ho.setQuality('high');
+    ho.step(1 / 60, 160);
+    ho.photoMode(true);
+    ho.steadyLights(true);
+    ho.grain(false);
+    ho.view(-3.4, 1.64, 26.8, 180, 2, 74);
+    ho.step(1 / 60, 40);
+  });
+  await page.waitForTimeout(200);
+  const coreEmpty = await brightnessOf();
+  const figures = [];
+  for (const role of ['horde', 'proxy']) {
+    for (const [facing, heading] of [['facing the player', 180], ['side on', 90], ['from behind', 0]]) {
+      const box = await ev(
+        ([role, heading]) => {
+          const ho = window.__HO;
+          ho.clearRobots();
+          ho.step(1 / 60, 30);
+          ho.spawnRobot(-4.4, 34.6, heading, true, 1.5, 5000, role === 'proxy' ? 'proxy' : undefined);
+          ho.step(1 / 60, 60);
+          return ho.robotBoxes()[0];
+        },
+        [role, heading],
+      );
+      await page.waitForTimeout(200);
+      const picture = await brightnessOf();
+      const scale = coreEmpty.width / 1280;
+      const x0 = Math.max(0, Math.floor(box.x0 * scale));
+      const x1 = Math.min(coreEmpty.width - 1, Math.ceil(box.x1 * scale));
+      const y0 = Math.max(0, Math.floor(box.y0 * scale));
+      const y1 = Math.min(coreEmpty.height - 1, Math.ceil(box.y1 * scale));
+      let covers = 0;
+      let stands = 0;
+      let gain = 0;
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const k = y * coreEmpty.width + x;
+          const change = picture.out[k] - coreEmpty.out[k];
+          if (Math.abs(change) >= 4) {
+            covers++;
+            gain += change;
+          }
+          if (change >= 9 || change <= -30) stands++;
+        }
+      }
+      const area = Math.max(covers, 0.35 * (x1 - x0 + 1) * (y1 - y0 + 1));
+      figures.push({ role, facing, share: stands / area, gain: gain / area, distance: box.distance, height: y1 - y0 + 1 });
+    }
+  }
+  await ev((quality) => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.grain(true);
+    ho.photoMode(false);
+    ho.steadyLights(false);
+    ho.releaseView();
+    ho.setQuality(quality);
+    ho.step(1 / 60, 30);
+  }, qualityBefore);
+  const proxies = figures.filter((f) => f.role === 'proxy');
+  const horde = figures.filter((f) => f.role === 'horde');
+  const dimmest = proxies.reduce((a, b) => (a.gain <= b.gain ? a : b));
+  const hordeBrightest = horde.reduce((a, b) => (a.gain >= b.gain ? a : b));
+  check(
+    "ARGUS's Proxy reads as the boss at fighting distance: from eight metres, most of it stands out from the core behind it, and it is nearly twice as bright as one of the horde or more",
+    proxies.length === 3 && proxies.every((f) => f.share >= 0.7 && f.gain >= 38 && f.gain >= 1.8 * Math.max(1, hordeBrightest.gain) && f.height > 1.25 * horde[0].height),
+    proxies.map((f) => `${f.facing}: ${Math.round(f.share * 100)}% of it stands out, ${f.gain.toFixed(0)} steps brighter than the background on average`).join('; ') +
+      `; one of the horde on the same spot: ${horde.map((f) => `${Math.round(f.share * 100)}% and ${f.gain.toFixed(0)} steps`).join(', ')}; ${dimmest.distance.toFixed(1)} m away`,
   );
 
   // Every way in has to be joined to every room on the map of the floor
@@ -1330,7 +1428,8 @@ try {
           const p = game.player.position;
           ho.place(p.x, p.z, (Math.atan2(-dx, -dz) * 180) / Math.PI, (Math.atan2(head.y - eye.y, Math.hypot(dx, dz)) * 180) / Math.PI);
           ho.press('fire', true);
-          if (frames % 40 === 0 && Math.hypot(dx, dz) < 1.9) ho.tap('melee');
+          // (A strike interrupts a reload, so it waits for the reload to finish.)
+          if (frames % 40 === 0 && Math.hypot(dx, dz) < 1.9 && !game.weapons.reloading) ho.tap('melee');
         }
         // The scripted run does not stop to shop: it is handed ammunition.
         const weapon = game.weapons.state;
@@ -1499,21 +1598,68 @@ try {
   await tap('interact'); // too early: it is still arming
   const stand = await ev(() => {
     const ho = window.__HO;
-    const out = { extras: 0, bossAt: -1, phases: new Set() };
+    const out = { extras: 0, bossAt: -1, bossEntry: '', bossHigh: 0, phases: new Set() };
     for (let i = 0; i < 60 * 14; i++) {
       ho.step(1 / 60, 1);
       const state = ho.mission();
       out.extras = Math.max(out.extras, state.extras);
       out.phases.add(state.phase);
       if (out.bossAt < 0 && state.boss) out.bossAt = state.armed;
+      const proxy = ho.game.robots.find((robot) => robot.role === 'proxy');
+      if (proxy) {
+        out.bossEntry = proxy.entry;
+        out.bossHigh = Math.max(out.bossHigh, proxy.root.position.y);
+      }
     }
-    return { extras: out.extras, bossAt: out.bossAt, phases: [...out.phases], suspended: ho.mission().suspended, round: ho.run().round };
+    return { extras: out.extras, bossAt: out.bossAt, bossEntry: out.bossEntry, bossHigh: out.bossHigh, phases: [...out.phases], suspended: ho.mission().suspended, round: ho.run().round };
   });
   m = await mission();
   check(
-    'arming the kill switch starts the final stand: the rounds stand aside and ARGUS sends a horde and its Proxy',
-    armPrompt?.text === 'Arm the kill switch' && early?.usable === false && stand.phases.join() === 'arming' && stand.suspended && stand.extras >= 6 && stand.bossAt > 9 && stand.bossAt < 13 && m.boss?.name === 'ARGUS PROXY' && (await page.locator('.hud-boss').isVisible()),
-    `${stand.extras} robots on the map 14 s in; the Proxy arrived ${stand.bossAt.toFixed(1)} s in`,
+    'arming the kill switch starts the final stand: the rounds stand aside and ARGUS sends a horde and its Proxy, which comes in on foot through the loading dock (it is too big for the ducts)',
+    armPrompt?.text === 'Arm the kill switch' && early?.usable === false && stand.phases.join() === 'arming' && stand.suspended && stand.extras >= 6 && stand.bossAt > 9 && stand.bossAt < 13 && stand.bossEntry === 'dock' && stand.bossHigh < 0.3 && m.boss?.name === 'ARGUS PROXY' && (await page.locator('.hud-boss').isVisible()),
+    `${stand.extras} robots on the map 14 s in; the Proxy arrived ${stand.bossAt.toFixed(1)} s in, at the ${stand.bossEntry}`,
+  );
+  // The switch only arms while the core is held: step out through the door
+  // and the clock stops, and the tracker says so; step back in and it runs.
+  const shownObjective = async () => {
+    await page.waitForTimeout(150);
+    return ev(() => ({ title: document.querySelector('.hud-objective-title').textContent, detail: document.querySelector('.hud-objective-detail').textContent }));
+  };
+  const leftCore = await ev(() => {
+    const ho = window.__HO;
+    const p = ho.game.player.position;
+    const before = ho.mission().armed;
+    const from = [p.x, p.z];
+    const door = ho.mission().places.coreDoor.stand;
+    ho.place(door[0], door[1], 180, 0);
+    ho.step(1 / 60, 600);
+    const now = ho.mission();
+    return { before, from, armed: now.armed, holding: now.holdingCore, area: ho.run().area, title: now.objective.title, detail: now.objective.detail };
+  });
+  const shownOutside = await shownObjective();
+  const backInCore = await ev((from) => {
+    const ho = window.__HO;
+    ho.place(from[0], from[1], 180, 0);
+    ho.step(1 / 60, 120);
+    const now = ho.mission();
+    return { armed: now.armed, holding: now.holdingCore, title: now.objective.title, phase: now.phase };
+  }, leftCore.from);
+  const shownInside = await shownObjective();
+  check(
+    'the switch only arms while the player holds the core: ten seconds outside it stop the clock, and the tracker says so',
+    !leftCore.holding &&
+      leftCore.area !== 'core' &&
+      Math.abs(leftCore.armed - leftCore.before) < 0.02 &&
+      leftCore.title === 'GET BACK TO THE CORE' &&
+      leftCore.detail.includes('CLOCK STOPPED') &&
+      shownOutside.title === leftCore.title &&
+      shownOutside.detail === leftCore.detail &&
+      backInCore.holding &&
+      Math.abs(backInCore.armed - leftCore.armed - 2) < 0.1 &&
+      backInCore.title === 'HOLD THE CORE WHILE THE SWITCH ARMS' &&
+      shownInside.title === backInCore.title &&
+      backInCore.phase === 'arming',
+    `the clock stood at ${leftCore.before.toFixed(1)} s on leaving and ${leftCore.armed.toFixed(1)} s ten seconds later, in the ${leftCore.area} ("${shownOutside.title}", "${shownOutside.detail}"); two seconds back inside it read ${backInCore.armed.toFixed(1)} s`,
   );
   const proxyFight = await destroy('proxy');
   m = await mission();
@@ -1530,6 +1676,18 @@ try {
   await standAt('killSwitch');
   const pullPrompt = (await run()).prompt;
   const before4 = await run();
+  // (Watched from a fixed camera facing the wall ARGUS's eye is on, so that
+  // the picture before the pull can be compared with the one after it.)
+  const argusAlive = await ev(() => {
+    const ho = window.__HO;
+    ho.photoMode(true);
+    ho.view(-1, 2.4, 30.4, 180, 6, 70);
+    ho.step(1 / 60, 2);
+    return { argus: ho.mission().argus, eye: ho.game.world.areas.get('core').argus.awake };
+  });
+  await page.waitForTimeout(200);
+  const eyeBefore = await colourOf(0.42, 0.3, 0.6, 0.58);
+  const roomBefore = await colourOf();
   await tap('interact');
   await step(60);
   const after4 = await run();
@@ -1539,6 +1697,40 @@ try {
     pullPrompt?.text === 'PULL THE KILL SWITCH' && m.phase === 'saved' && before4.robots.filter((q) => q.alive).length >= 6 && after4.robots.filter((q) => q.alive).length === 0 && after4.robots.length === before4.robots.length,
     `${before4.robots.filter((q) => q.alive).length} robots working before, none after; ${after4.robots.length} wrecks where they stood`,
   );
+  // ARGUS dies with them. A second and a half after the pull its eye is
+  // dark, its red light has left the room and the cold working lights are
+  // up: measured from the picture as well as from the game's own state.
+  await step(30);
+  const argusDead = await ev(() => {
+    const ho = window.__HO;
+    return { argus: ho.mission().argus, eye: ho.game.world.areas.get('core').argus.awake, lights: ho.run().lights, state: ho.run().state };
+  });
+  await page.waitForTimeout(200);
+  const eyeAfter = await colourOf(0.42, 0.3, 0.6, 0.58);
+  const roomAfter = await colourOf();
+  const redness = (c) => c[0] / Math.max(1, c[2]);
+  check(
+    'and ARGUS dies with them: its eye goes dark and its red light leaves the core',
+    argusAlive.argus === 1 &&
+      argusAlive.eye === 1 &&
+      argusDead.argus === 0 &&
+      argusDead.eye === 0 &&
+      argusDead.state === 'playing' &&
+      argusDead.lights.includes('coreAfterWest') &&
+      argusDead.lights.includes('coreAfterEast') &&
+      eyeBefore[0] > 90 &&
+      redness(eyeBefore) > 2 &&
+      eyeAfter[0] < 40 &&
+      redness(eyeAfter) < 1.05 &&
+      redness(roomBefore) > 1.4 &&
+      redness(roomAfter) < 1,
+    `the eye measured ${eyeBefore[0].toFixed(0)} of red out of 255 before the pull and ${eyeAfter[0].toFixed(0)} a second and a half after it; the whole picture was ${redness(roomBefore).toFixed(2)} times as red as blue before and ${redness(roomAfter).toFixed(2)} times after`,
+  );
+  await ev(() => {
+    const ho = window.__HO;
+    ho.photoMode(false);
+    ho.releaseView();
+  });
   await step(150);
   const ending = await ev(() => ({
     state: window.__HO.run().state,

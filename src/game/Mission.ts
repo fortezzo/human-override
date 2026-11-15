@@ -12,6 +12,7 @@ import { MISSION, ROBOT } from '../config';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { Player } from '../entities/Player';
 import type { Robot } from '../entities/robot/Robot';
+import { settings } from '../core/settings';
 import type { LightRig } from '../render/lighting';
 import {
   armSwitch,
@@ -40,6 +41,8 @@ import {
   type MissionTarget,
   type Objective,
 } from '../sim/mission';
+import { setArgusGlow } from '../world/build/LedBank';
+import { setArgusOnline } from '../world/lobby/ScreenBank';
 import { MISSION_PLACES, UPLINK, type MissionPlace } from '../world/plan';
 import type { World } from '../world/World';
 import type { Director } from './Director';
@@ -48,9 +51,39 @@ import type { Prompt } from './Interactions';
 /** How close the player must be to something of the mission's to use it (metres). */
 const REACH = 2.5;
 /** Seconds between the switch being pulled and the ending being shown: long enough to watch them fall. */
-const ENDING_DELAY = 2.6;
-/** Seconds ARGUS's eye takes to go out. */
-const EYE_FADE = 1.8;
+const ENDING_DELAY = 3.0;
+
+/**
+ * How ARGUS dies when the switch is pulled: how brightly its eye, the red
+ * light it throws on the core and the red lights on its machines burn, so
+ * many seconds after the pull. It gutters twice and is out in a little
+ * over a second: bright, almost out, bright again, almost out, a last
+ * half-glow, gone. (Two flashes in a second is inside what is safe to show;
+ * with "reduce screen shake and flashing" on it simply fades.)
+ */
+const DYING: ReadonlyArray<readonly [number, number]> = [
+  [0, 1],
+  [0.05, 0.12],
+  [0.17, 0.12],
+  [0.22, 0.9],
+  [0.38, 0.9],
+  [0.43, 0.06],
+  [0.6, 0.06],
+  [0.66, 0.5],
+  [0.82, 0.45],
+  [1.2, 0],
+];
+function dying(seconds: number, calm: boolean): number {
+  if (calm) return Math.max(0, 1 - seconds / 1.2);
+  for (let i = 1; i < DYING.length; i++) {
+    const [t1, v1] = DYING[i]!;
+    if (seconds <= t1) {
+      const [t0, v0] = DYING[i - 1]!;
+      return v0 + ((v1 - v0) * (seconds - t0)) / (t1 - t0);
+    }
+  }
+  return 0;
+}
 
 /** A step the debug tools can jump the mission to. */
 export type MissionStep = 'power' | 'keys' | 'core' | 'arming' | 'armed' | 'saved';
@@ -84,6 +117,8 @@ export class Mission {
   private standClock = 0;
   /** Counting down to the ending after the switch is pulled (-1 when not). */
   private ending = -1;
+  /** Seconds since the switch was pulled (-1 before). */
+  private sincePull = -1;
   /** Debug: part of this run's mission was skipped, so its time is not a record. */
   skipped = false;
 
@@ -107,16 +142,29 @@ export class Mission {
     this.waveClock = 0;
     this.standClock = 0;
     this.ending = -1;
+    this.sincePull = -1;
     this.skipped = false;
     this.director.suspended = false;
     this.world.mission.reset();
     this.lights.power = false;
-    this.lights.argusAwake = true;
+    this.setArgus(1);
+  }
+
+  /** How awake ARGUS is, 1 to 0: its eye, its red light in the core, the red lights on its machines, its face on the monitors. */
+  private setArgus(level: number): void {
     const argus = this.world.areas.get('core')!.argus;
-    if (argus) argus.awake = 1;
+    if (argus) argus.awake = level;
+    this.lights.argusLevel = level;
+    setArgusGlow(level);
+    setArgusOnline(level > 0.5);
   }
 
   // ------------------------------------------------------------- the clock
+
+  /** True while the player is in the core: the kill switch only arms while they are. */
+  get holdingCore(): boolean {
+    return this.world.playerArea === 'core';
+  }
 
   /** True while the player is standing on the ground round the uplink. */
   get holdingUplink(): boolean {
@@ -127,7 +175,7 @@ export class Mission {
   update(dt: number): void {
     const state = this.state;
     const set = this.world.mission;
-    const tick = updateMission(state, MISSION, dt, this.holdingUplink);
+    const tick = updateMission(state, MISSION, dt, this.holdingUplink, this.holdingCore);
 
     if (tick.uplinkDone) this.keyTaken('uplink');
     if (tick.sendBoss) {
@@ -164,10 +212,12 @@ export class Mission {
       }
     }
 
-    // After the switch: the eye goes out, and then the ending.
+    // After the switch: ARGUS gutters and goes out, and then the ending.
     if (state.phase === 'saved') {
-      const argus = this.world.areas.get('core')!.argus;
-      if (argus && argus.awake > 0) argus.awake = Math.max(0, argus.awake - dt / EYE_FADE);
+      if (this.sincePull >= 0 && this.sincePull < 2) {
+        this.sincePull += dt;
+        this.setArgus(dying(this.sincePull, settings.value.reducedMotion));
+      }
       if (this.ending >= 0) {
         this.ending -= dt;
         if (this.ending < 0) this.onSaved();
@@ -175,7 +225,7 @@ export class Mission {
     }
 
     set.setUplink(state.uplink, state.uplinkHeld / MISSION.uplinkSeconds);
-    set.setSwitch(state.phase === 'arming' || state.phase === 'armed' || state.phase === 'saved', state.armed / MISSION.armSeconds, state.phase === 'armed', state.phase === 'saved');
+    set.setSwitch(state.phase === 'arming' || state.phase === 'armed' || state.phase === 'saved', state.armed / MISSION.armSeconds, state.phase === 'armed', state.phase === 'saved', state.phase === 'arming' && !this.holdingCore);
   }
 
   /** Robots of the mission's own that are on the map and working. */
@@ -204,7 +254,7 @@ export class Mission {
   }
 
   private sendProxy(): void {
-    const robot = this.director.sendExtra(['core'], elite('proxy'));
+    const robot = this.director.sendExtra(['hall'], elite('proxy'), MISSION.proxyEntries);
     if (!robot) return;
     this.proxyPending = false;
     this.proxy = robot;
@@ -299,7 +349,7 @@ export class Mission {
     }
     if (this.near(MISSION_PLACES.killSwitch)) {
       if (state.phase === 'core' && state.coreOpen) return say('Arm the kill switch', 'ARGUS will send everything it has', () => this.arm());
-      if (state.phase === 'arming') return say('Kill switch: arming', 'Survive until it is armed', null);
+      if (state.phase === 'arming') return say('Kill switch: arming', 'Hold the core until it is armed', null);
       if (state.phase === 'armed') return say('PULL THE KILL SWITCH', '', () => this.pull());
     }
     return null;
@@ -361,7 +411,7 @@ export class Mission {
     this.standClock = 1;
     this.audio.play('missionAlarm');
     const seconds = MISSION.armSeconds;
-    this.onNotice('KILL SWITCH ARMING', `SURVIVE FOR ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
+    this.onNotice('KILL SWITCH ARMING', `HOLD THE CORE FOR ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
   }
 
   private pull(): void {
@@ -370,7 +420,7 @@ export class Mission {
     this.proxyPending = false;
     this.custodian = null;
     this.proxy = null;
-    this.lights.argusAwake = false;
+    this.sincePull = 0;
     this.audio.play('missionSwitch');
     this.player.addShake(0.35);
     // Whatever was left of the round is over, and so is everything on the map.
@@ -387,7 +437,7 @@ export class Mission {
   // ------------------------------------------------- what to tell the player
 
   get objective(): Objective {
-    return objective(this.state, MISSION, this.holdingUplink);
+    return objective(this.state, MISSION, this.holdingUplink, this.holdingCore);
   }
 
   /** Where the HUD's marker should point right now (false if nowhere). */

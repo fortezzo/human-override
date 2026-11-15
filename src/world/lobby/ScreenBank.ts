@@ -42,9 +42,32 @@ const LOG_LINES = [
   '> CORE SEAL ........ ENGAGED',
 ];
 
+/** What the log screens show once the kill switch has been pulled. */
+const OFFLINE_LINES = [
+  '> MANUAL OVERRIDE .. ENGAGED',
+  '> ARGUS NODE 04 .... OFFLINE',
+  '> UNITS ............ NO SIGNAL',
+  '> PERIMETER ........ UNHELD',
+  '> OPERATOR ACCESS .. RESTORED',
+  '> CORE SEAL ........ OPEN',
+  '> HUMAN PRESENCE ... 1',
+  '> ',
+  '> ',
+];
+
 /** Size of one block of static, and how many ready-made frames of it to keep. */
 const NOISE_BLOCK = 4;
 const NOISE_FRAMES = 8;
+
+/** False once the kill switch has been pulled: the feeds change to say so. */
+let argusOnline = true;
+
+/** Tell every monitor in the building whether ARGUS is still running. */
+export function setArgusOnline(online: boolean): void {
+  if (online === argusOnline) return;
+  argusOnline = online;
+  feeds?.repaint();
+}
 
 /** The one picture of all four feeds. */
 class Feeds {
@@ -162,12 +185,19 @@ class Feeds {
     g.fillStyle = '#050607';
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
-    this.cell(0, 0, () => this.drawEye(time));
+    // With ARGUS off: its eye is gone from the screens (static), the log
+    // says so, and the lockdown notice gives way to the override's.
+    this.cell(0, 0, () => (argusOnline ? this.drawEye(time) : this.drawStatic()));
     this.cell(1, 0, () => this.drawLog());
     this.cell(0, 1, () => this.drawStatic());
-    this.cell(1, 1, () => this.drawLockdown(time));
+    this.cell(1, 1, () => (argusOnline ? this.drawLockdown(time) : this.drawOverride()));
     this.painted.needsUpdate = true;
     this.fresh = true;
+  }
+
+  /** Paint the picture again at the next opportunity (what the feeds show has changed). */
+  repaint(): void {
+    this.nextDraw = 0;
   }
 
   /** Hand a freshly painted picture to the graphics card and develop it. */
@@ -212,9 +242,10 @@ class Feeds {
     g.fillRect(0, 0, CELL_W, CELL_H);
     g.fillStyle = '#58ff9a';
     g.font = '400 13px "Share Tech Mono", monospace';
-    const start = Math.floor(this.frame / 7);
+    const lines = argusOnline ? LOG_LINES : OFFLINE_LINES;
+    const start = argusOnline ? Math.floor(this.frame / 7) : 0;
     for (let i = 0; i < 9; i++) {
-      const line = LOG_LINES[(start + i) % LOG_LINES.length]!;
+      const line = lines[(start + i) % lines.length]!;
       g.globalAlpha = i === 8 ? 1 : 0.55 + i * 0.04;
       g.fillText(line, 12, 24 + i * 18);
     }
@@ -241,6 +272,22 @@ class Feeds {
     g.font = '700 20px "Share Tech Mono", monospace';
     g.textAlign = 'center';
     g.fillText('SIGNAL LOST', CELL_W / 2, 103);
+    g.textAlign = 'left';
+  }
+
+  /** What the lockdown screens show once the kill switch has been pulled. */
+  private drawOverride(): void {
+    const g = this.g;
+    g.fillStyle = '#031116';
+    g.fillRect(0, 0, CELL_W, CELL_H);
+    g.fillStyle = '#4fe6ff';
+    g.fillRect(0, 26, CELL_W, 3);
+    g.fillRect(0, CELL_H - 29, CELL_W, 3);
+    g.textAlign = 'center';
+    g.font = '700 34px "Barlow Condensed", sans-serif';
+    g.fillText('ARGUS OFFLINE', CELL_W / 2, CELL_H / 2 + 2);
+    g.font = '400 13px "Share Tech Mono", monospace';
+    g.fillText('MANUAL OVERRIDE ENGAGED', CELL_W / 2, CELL_H / 2 + 28);
     g.textAlign = 'left';
   }
 

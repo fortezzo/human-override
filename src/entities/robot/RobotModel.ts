@@ -34,6 +34,8 @@ export class RobotModel {
   readonly girth: number;
   /** Colour of everything on it that glows. */
   readonly eyeColor: number;
+  /** A light that travels with this kind of robot, or null. */
+  readonly lamp: { color: number; intensity: number; distance: number } | null;
   /** Where an object can be hung on it: a bone, and a position in that bone's own space. Null if nowhere. */
   readonly carry: { bone: string; at: THREE.Vector3 } | null;
   /** Triangles in the body, for the performance report. */
@@ -62,7 +64,9 @@ export class RobotModel {
     this.weakPoint = { centre: inHead(design.weakPoint.centre), radius: design.weakPoint.radius * design.scale };
     this.glow = { at: inHead(design.glow.at), size: new THREE.Vector2(...design.glow.size) };
 
-    this.material = createRobotMaterial(assets);
+    const { color: edgeColor, ...edge } = design.edge ?? {};
+    this.material = createRobotMaterial(assets, edgeColor ? { ...edge, color: new THREE.Color(...edgeColor) } : edge);
+    this.lamp = design.lamp ?? null;
     const skeleton = new THREE.Skeleton(rig.bones);
     const body = new THREE.SkinnedMesh(built.body, this.material);
     body.name = 'body';

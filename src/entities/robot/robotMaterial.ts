@@ -40,16 +40,34 @@ export const EDGE_LIGHT = {
   fadeBy: 0.09,
 };
 
-/** The edge light as the shader sees it: strength, lift, power, fade. Shared by every robot. */
-const edgeUniform = { value: new THREE.Vector4(EDGE_LIGHT.strength, EDGE_LIGHT.lift, EDGE_LIGHT.power, EDGE_LIGHT.fadeBy) };
-
-/** Switch the edge light off and on (so a check can show what it is worth). */
-export function setEdgeLight(on: boolean): void {
-  edgeUniform.value.x = on ? EDGE_LIGHT.strength : 0;
-  edgeUniform.value.y = on ? EDGE_LIGHT.lift : 0;
+/** An edge light's settings: its colour, and how it behaves (see EDGE_LIGHT). */
+export interface EdgeLight {
+  color: THREE.Color;
+  strength: number;
+  lift: number;
+  power: number;
+  fadeBy: number;
 }
 
-export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial {
+/** Every robot type's edge light as its shader sees it (strength, lift, power, fade), with what it is set to. */
+const edges: Array<{ uniform: { value: THREE.Vector4 }; light: EdgeLight }> = [];
+
+/** Switch the edge lights off and on (so a check can show what they are worth). */
+export function setEdgeLight(on: boolean): void {
+  for (const { uniform, light } of edges) {
+    uniform.value.x = on ? light.strength : 0;
+    uniform.value.y = on ? light.lift : 0;
+  }
+}
+
+/**
+ * @param edge this robot type's own edge light, where it differs from the
+ * usual one (ARGUS's Proxy glows at its edges whatever light it is in)
+ */
+export function createRobotMaterial(assets: Assets, edge: Partial<EdgeLight> = {}): THREE.MeshStandardMaterial {
+  const light: EdgeLight = { ...EDGE_LIGHT, ...edge };
+  const edgeUniform = { value: new THREE.Vector4(light.strength, light.lift, light.power, light.fadeBy) };
+  edges.push({ uniform: edgeUniform, light });
   const steel = assets.surface('Metal046B');
   const rust = assets.surface('rusty_metal_04');
 
@@ -70,7 +88,7 @@ export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial 
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uRustMap = { value: rust.color };
-    shader.uniforms.uEdgeColor = { value: EDGE_LIGHT.color };
+    shader.uniforms.uEdgeColor = { value: light.color };
     shader.uniforms.uEdge = edgeUniform;
 
     shader.vertexShader = shader.vertexShader
@@ -122,6 +140,7 @@ export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial 
       );
   };
   material.customProgramCacheKey = () => 'robot-surface';
+  material.name = 'robot';
   return material;
 }
 

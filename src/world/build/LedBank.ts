@@ -125,6 +125,16 @@ function paintPictures(): Pictures {
   return { base, groupsA: groups(channels[0]!), groupsB: groups(channels[1]!) };
 }
 
+/** How brightly the red lights (the machines ARGUS has taken) burn: 1 while it runs, 0 once it is off. Shared by every rack. */
+const argusGlow = { value: 1 };
+/** The red groups are the last ones in the list. */
+const FIRST_RED = GROUPS.findIndex((group) => group.kind === 'red');
+
+/** Dim the red rack lights with ARGUS (1 = running, 0 = off). */
+export function setArgusGlow(level: number): void {
+  argusGlow.value = level;
+}
+
 export class LedBank {
   readonly object = new THREE.Group();
   private readonly quads: THREE.BufferGeometry[] = [];
@@ -158,6 +168,7 @@ export class LedBank {
     material.color.setScalar(2.2);
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uLedTime = this.clock;
+      shader.uniforms.uLedArgus = argusGlow;
       shader.uniforms.uLedGroupsA = { value: groupsA };
       shader.uniforms.uLedGroupsB = { value: groupsB };
       shader.uniforms.uLedColor = { value: GROUPS.map((group) => new THREE.Color(COLOR[group.kind])) };
@@ -172,6 +183,7 @@ export class LedBank {
           '#include <common>',
           /* glsl */ `#include <common>
           uniform float uLedTime;
+          uniform float uLedArgus;
           uniform sampler2D uLedGroupsA;
           uniform sampler2D uLedGroupsB;
           uniform vec3 uLedColor[${GROUPS.length}];
@@ -202,7 +214,7 @@ export class LedBank {
               // Lit for between a quarter and most of each cycle.
               float duty = 0.25 + 0.6 * ledHash(s + 2.1);
               float phase = ledHash(s + 4.3);
-              ledLight += uLedColor[k] * ledCover[k] * step(fract(uLedTime * rate + phase), duty);
+              ledLight += uLedColor[k] * ledCover[k] * step(fract(uLedTime * rate + phase), duty) * (k >= ${FIRST_RED} ? uLedArgus : 1.0);
             }
             diffuseColor.rgb += diffuse * ledLight;
           }`,

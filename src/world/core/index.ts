@@ -4,7 +4,6 @@
 
 import * as THREE from 'three';
 import type { Assets } from '../../core/assets';
-import { settings } from '../../core/settings';
 import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import { addsLightOnly } from '../../render/glow';
 import type { LightDef } from '../../render/lighting';
@@ -22,7 +21,7 @@ const RED = 0xff2a12;
 const COLD = 0xcfe0ff;
 
 /** ARGUS's eye: a broken outer ring, an almond outline and an iris, all glowing. */
-function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; material: THREE.MeshStandardMaterial; halo: THREE.MeshBasicMaterial } {
+function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; material: THREE.MeshStandardMaterial; halo: THREE.MeshBasicMaterial; hot: THREE.MeshBasicMaterial } {
   const object = new THREE.Group();
   object.position.set(...centre);
   // It hangs on the south wall, facing north into the room.
@@ -74,7 +73,7 @@ function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; mater
   object.traverse((o) => {
     o.castShadow = false;
   });
-  return { object, iris, material, halo: halo.material };
+  return { object, iris, material, halo: halo.material, hot };
 }
 
 export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild {
@@ -188,10 +187,14 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'coreHighWest', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 20, position: [x0 + 2.2, 5.6, 30.5], distance: 12 });
   lights.push({ name: 'coreHighEast', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 20, position: [x1 - 2.2, 5.6, 33.5], distance: 12 });
   lights.push({ name: 'coreDoor', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 8, position: [(door.from + door.to) / 2, 3.0, z0 + 1.4], distance: 8 });
+  // What is left when ARGUS goes out: cold working light, coming up as its
+  // red dies, so the room and what is lying in it can be seen.
+  lights.push({ name: 'coreAfterWest', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 30, position: [x0 + 3.0, 4.2, 29.5], distance: 13, when: 'argusOff' });
+  lights.push({ name: 'coreAfterEast', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 30, position: [x1 - 3.0, 4.2, 34.0], distance: 13, when: 'argusOff' });
   lights.push({ name: 'coreConsole', area: 'core', kind: 'point', color: 0xffb060, intensity: 2.5, position: [cx, 1.5, cz - 0.6], distance: 4 });
 
   const built = b.build();
-  // How awake ARGUS is, 1 to 0: the mission turns this down when the kill
+  // How awake ARGUS is, 1 to 0: the mission brings this down when the kill
   // switch is pulled, and the eye on the wall goes out with it.
   const argus = { awake: 1 };
   return {
@@ -207,13 +210,11 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
       // The iris drifts as if searching, and the whole eye breathes.
       eye.iris.position.x = Math.sin(time * 0.37) * 0.42;
       eye.iris.position.y = Math.sin(time * 0.53 + 1.2) * 0.14;
-      // Going out, it wavers as it fades: a slow, smooth swell, about twice
-      // a second (a shape this large and bright must never flash quickly),
-      // and a plain fade with "reduce screen shake and flashing" on.
-      const waver = settings.value.reducedMotion ? 1 : 0.65 + 0.35 * Math.sin(time * 13);
-      const level = argus.awake >= 1 ? 1 : argus.awake <= 0 ? 0 : argus.awake * waver;
+      // (How it goes out, flicker and all, is the mission's doing: see game/Mission.ts.)
+      const level = Math.min(1, Math.max(0, argus.awake));
       eye.material.emissiveIntensity = (2.2 + 0.6 * Math.sin(time * 2.1)) * level;
       eye.iris.visible = level > 0.02;
+      eye.hot.color.setRGB(5 * level, 0.9 * level, 0.35 * level);
       eye.halo.opacity = level;
     },
   };

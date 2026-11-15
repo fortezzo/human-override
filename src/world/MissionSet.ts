@@ -105,6 +105,7 @@ export class MissionSet {
   private armed = 0;
   private ready = false;
   private pulled = false;
+  private stalled = false;
   private switchAngle = SWITCH_READY;
 
   constructor(assets: Assets, materials: MaterialLibrary) {
@@ -273,14 +274,15 @@ export class MissionSet {
 
   /**
    * The kill switch: whether the keys are in their slots, how far it has
-   * armed (0..1), whether it is armed and waiting, and whether it has been
-   * pulled.
+   * armed (0..1), whether it is armed and waiting, whether it has been
+   * pulled, and whether the arming is stalled (the player has left the core).
    */
-  setSwitch(keysIn: boolean, armed: number, ready: boolean, pulled: boolean): void {
+  setSwitch(keysIn: boolean, armed: number, ready: boolean, pulled: boolean, stalled = false): void {
     for (const key of this.slotKeys) key.object.visible = keysIn;
     this.armed = armed;
     this.ready = ready;
     this.pulled = pulled;
+    this.stalled = stalled;
   }
 
   /** A new run: the power out, the cage shut with its key in it, nothing started. */
@@ -338,8 +340,9 @@ export class MissionSet {
     this.daisLights.forEach((material, i) => {
       if (this.pulled) material.color.set(MISSION_COLOR).multiplyScalar(0.5);
       else if (this.ready) material.color.set(MISSION_COLOR).multiplyScalar(1.8 + 1.4 * Math.sin(time * 6));
-      else if (i < filled) material.color.set(MISSION_COLOR).multiplyScalar(2.4);
-      else if (i === filled && this.armed > 0) material.color.set(MISSION_COLOR).multiplyScalar(Math.sin(time * 9) > 0 ? 1.4 : 0.1);
+      // Stalled (the player has left the core): what has been armed so far dims and waits.
+      else if (i < filled) material.color.set(MISSION_COLOR).multiplyScalar(this.stalled ? 0.7 + 0.3 * Math.sin(time * 3) : 2.4);
+      else if (i === filled && this.armed > 0 && !this.stalled) material.color.set(MISSION_COLOR).multiplyScalar(Math.sin(time * 9) > 0 ? 1.4 : 0.1);
       else material.color.set(0x0a0605);
     });
     for (const key of this.slotKeys) key.level = this.pulled ? 0.3 : 1;
