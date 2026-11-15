@@ -2,12 +2,19 @@
 // motions (head bob, recoil, shake, landing dip) that make it feel physical.
 
 import * as THREE from 'three';
-import { LOADOUT, LOOK, PLAYER } from '../config';
+import { LOADOUT, LOOK, PLAYER, STAMINA } from '../config';
 import type { Input } from '../core/input';
 import { clamp, damp } from '../core/math';
 import { settings } from '../core/settings';
 import { groundHeight, resolveCircle, type CircleBody, type Collider } from '../sim/collision';
 import { accelerate, groundStep } from '../sim/movement';
+import { createStamina, updateStamina, type Stamina } from '../sim/stamina';
+
+/** Something round the player cannot walk through (a robot). */
+export interface Obstacle {
+  x: number;
+  z: number;
+}
 
 export class Player {
   /** Position of the feet. */
@@ -21,6 +28,8 @@ export class Player {
   /** 0 = hip, 1 = fully aimed down sights. */
   aim = 0;
   sprinting = false;
+  /** What sprinting draws on. */
+  stamina: Stamina = createStamina();
   /** Horizontal speed as a fraction of walking speed (drives bob and sway). */
   speedFraction = 0;
   /** Advances with distance walked; the weapon model bobs in step with it. */
@@ -58,6 +67,8 @@ export class Player {
     this.yaw = yaw;
     this.pitch = 0;
     this.health = PLAYER.maxHealth;
+    this.sinceDamage = 99;
+    this.stamina = createStamina();
   }
 
   get alive(): boolean {
@@ -81,9 +92,13 @@ export class Player {
     this.shakeTrauma = Math.min(1, this.shakeTrauma + amount * scale);
   }
 
-  /** Take a hit. `fromX/Z` is where it came from, to tilt the view away. */
-  damage(amount: number, fromX: number, fromZ: number): void {
-    if (!this.alive) return;
+  /**
+   * Take a hit. `fromX/Z` is where it came from, to tilt the view away.
+   * Returns false if the blow did not land (the player is already down, or
+   * was hit a moment ago: see PLAYER.mercy).
+   */
+  damage(amount: number, fromX: number, fromZ: number): boolean {
+    if (!this.alive || this.sinceDamage < PLAYER.mercy) return false;
     this.health = Math.max(0, this.health - amount);
     this.sinceDamage = 0;
     this.addShake(0.5);
@@ -93,13 +108,17 @@ export class Player {
     const side = toX * Math.cos(this.yaw) - toZ * Math.sin(this.yaw);
     this.hitRoll += THREE.MathUtils.degToRad(PLAYER.hitKick) * (side >= 0 ? -1 : 1) * (settings.value.reducedMotion ? 0.3 : 1);
     this.recoilPitch += THREE.MathUtils.degToRad(PLAYER.hitKick * 0.6);
+    return true;
   }
 
-  /** @param look mouse movement this frame, in pixels */
-  update(dt: number, colliders: readonly Collider[], wantAim: boolean, look: { x: number; y: number }): void {
+  /**
+   * @param look mouse movement this frame, in pixels
+   * @param obstacles robots standing in the way
+   */
+  update(dt: number, colliders: readonly Collider[], wantAim: boolean, look: { x: number; y: number }, obstacles: readonly Obstacle[] = []): void {
     this.time += dt;
     this.look(look);
-    this.move(dt, colliders, wantAim);
+    this.move(dt, colliders, wantAim, obstacles);
     this.regenerate(dt);
     this.updateCamera(dt);
   }
@@ -110,7 +129,7 @@ export class Player {
     this.pitch = clamp(this.pitch - look.y * sensitivity, -LOOK.pitchLimit, LOOK.pitchLimit);
   }
 
-  private move(dt: number, colliders: readonly Collider[], wantAim: boolean): void {
+  private move(dt: number, colliders: readonly Collider[], wantAim: boolean, obstacles: readonly Obstacle[]): void {
     const input = this.input;
     let ax = 0;
     let az = 0;
@@ -125,8 +144,10 @@ export class Player {
       az /= length;
     }
 
-    // Sprint only while moving mostly forward and not aiming.
-    this.sprinting = input.isDown('sprint') && az < -0.5 && !wantAim && this.onGround;
+    // Sprint only while moving mostly forward and not aiming, and only
+    // while there is stamina to pay for it.
+    const wantSprint = input.isDown('sprint') && az < -0.5 && !wantAim && this.onGround;
+    this.sprinting = updateStamina(this.stamina, STAMINA, wantSprint, dt);
     this.aim = damp(this.aim, wantAim && !this.sprinting ? 1 : 0, 1 / (this.aimTime * 0.35), dt);
 
     let maxSpeed = this.sprinting ? PLAYER.sprintSpeed : PLAYER.walkSpeed;
@@ -154,6 +175,26 @@ export class Player {
     // Integrate, then push out of anything solid.
     const p = this.position;
     p.addScaledVector(v, dt);
+    // Robots first: step back out of any that are too close, and lose the
+    // speed that was carrying the player into them. (Walls are dealt with
+    // afterwards, so a robot can never shove the player through one.)
+    if (p.y < 1.2) {
+      for (const robot of obstacles) {
+        const dx = p.x - robot.x;
+        const dz = p.z - robot.z;
+        const distance = Math.hypot(dx, dz);
+        if (distance >= PLAYER.robotGap || distance < 1e-4) continue;
+        const nx = dx / distance;
+        const nz = dz / distance;
+        p.x = robot.x + nx * PLAYER.robotGap;
+        p.z = robot.z + nz * PLAYER.robotGap;
+        const into = v.x * nx + v.z * nz;
+        if (into < 0) {
+          v.x -= nx * into;
+          v.z -= nz * into;
+        }
+      }
+    }
     const body = this.body;
     body.x = p.x;
     body.z = p.z;

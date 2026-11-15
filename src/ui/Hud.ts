@@ -31,6 +31,9 @@ export interface HudMarker {
 export interface HudState {
   health: number;
   maxHealth: number;
+  /** Stamina for sprinting, 0..1, and whether it has run dry and is still coming back. */
+  stamina: number;
+  winded: boolean;
   weapon: string;
   ammo: number;
   reserve: number;
@@ -66,6 +69,8 @@ export class Hud {
   private readonly damageArc: HTMLElement;
   private readonly healthFill: HTMLElement;
   private readonly healthBlock: HTMLElement;
+  private readonly staminaBar: HTMLElement;
+  private readonly staminaFill: HTMLElement;
   private readonly weaponName: HTMLElement;
   private readonly ammo: HTMLElement;
   private readonly reserve: HTMLElement;
@@ -134,6 +139,9 @@ export class Hud {
     el('div', 'hud-label', this.healthBlock, 'VITALS');
     const bar = el('div', 'hud-bar', this.healthBlock);
     this.healthFill = el('div', 'hud-bar-fill', bar);
+    // Stamina: a thin line under the vitals, bright while it is in use.
+    this.staminaBar = el('div', 'hud-stamina', this.healthBlock);
+    this.staminaFill = el('div', 'hud-stamina-fill', this.staminaBar);
 
     this.ammoBlock = el('div', 'hud-ammo', this.root);
     const scrapRow = el('div', 'hud-scrap', this.ammoBlock);
@@ -246,6 +254,9 @@ export class Hud {
     const health = Math.max(0, state.health / state.maxHealth);
     this.healthFill.style.transform = `scaleX(${health.toFixed(3)})`;
     this.healthBlock.classList.toggle('low', health < 0.4);
+    this.staminaFill.style.transform = `scaleX(${Math.max(0, Math.min(1, state.stamina)).toFixed(3)})`;
+    this.staminaBar.classList.toggle('resting', state.stamina >= 0.999);
+    this.staminaBar.classList.toggle('winded', state.winded);
 
     if (state.weapon !== last.weapon) {
       last.weapon = state.weapon;

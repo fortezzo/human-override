@@ -109,3 +109,54 @@ describe('navigation grid', () => {
     expect(marker).toBeGreaterThan(0);
   });
 });
+
+describe('pockets: open floor that robots cannot get to', () => {
+  // A small room in the north-east corner whose only way in is a gap 0.7 m
+  // wide: enough for a person, not for a robot.
+  const pocket = (): Collider[] => [
+    // West wall of the room, with the narrow gap at its south end (z = 4 .. 4.7).
+    makeCollider(4, 7.35, 0.15, 2.65, 0, 0, 3),
+    // South wall.
+    makeCollider(7, 4, 3.15, 0.15, 0, 0, 3),
+  ];
+  const entries: Array<[number, number]> = [[-6, -6]];
+  const build = () => createNavGrid(bounds, 0.3, pocket(), 0.42, 0.3, 1.8, undefined, entries);
+
+  it('knows the room is out of reach although its floor is open', () => {
+    const grid = build();
+    const inside = cellAt(grid, 7, 7);
+    expect(grid.blocked[inside]).toBe(0);
+    expect(grid.reach[inside]).toBe(0);
+    expect(grid.reach[cellAt(grid, 0, 0)]).toBe(1);
+  });
+
+  it('sends robots as close as they can get when the player stands in it', () => {
+    const grid = build();
+    // Before pockets were understood, flooding from inside the room reached
+    // nothing outside it, and every robot on the map stood still.
+    expect(floodFrom(grid, 7, 7)).toBe(true);
+    expect(grid.reach[grid.goal]).toBe(1);
+    const waypoint = nextWaypoint(grid, -6, -6);
+    expect(waypoint).not.toBeNull();
+    expect(Number.isFinite(waypoint!.remaining)).toBe(true);
+    // And the square they are sent to is right outside the room, not across the map.
+    const c = grid.goal % grid.cols;
+    const r = (grid.goal - c) / grid.cols;
+    const gx = grid.x0 + (c + 0.5) * grid.cell;
+    const gz = grid.z0 + (r + 0.5) * grid.cell;
+    expect(Math.hypot(gx - 7, gz - 7)).toBeLessThan(4.5);
+  });
+
+  it('walks a robot that has been shoved into the room back out toward open floor', () => {
+    const grid = build();
+    floodFrom(grid, -5, 5);
+    const waypoint = nextWaypoint(grid, 5.2, 4.9);
+    expect(waypoint).not.toBeNull();
+    expect(grid.reach[cellAt(grid, waypoint!.x, waypoint!.z)]).toBe(1);
+  });
+
+  it('counts all open floor as reachable when no entries are given', () => {
+    const grid = createNavGrid(bounds, 0.3, pocket(), 0.42, 0.3, 1.8);
+    expect(grid.reach[cellAt(grid, 7, 7)]).toBe(1);
+  });
+});

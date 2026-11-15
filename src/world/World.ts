@@ -16,7 +16,7 @@ import { buildCore } from './core';
 import { Door } from './Door';
 import { buildHall } from './hall';
 import { buildLobby } from './lobby';
-import { AREA_IDS, AREA_RECTS, CORE, DOOR_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
+import { AREA_IDS, AREA_RECTS, CORE, DOOR_PLANS, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
 import { buildPower } from './power';
 
 export class World {
@@ -66,7 +66,16 @@ export class World {
     }
 
     this.rebuildColliders();
-    this.nav = createNavGrid(NAV_BOUNDS, 0.3, this.colliders, ROBOT.radius + 0.06, 0.3, 1.8, WALKABLE);
+    this.nav = createNavGrid(
+      NAV_BOUNDS,
+      0.3,
+      this.colliders,
+      ROBOT.radius + 0.06,
+      0.3,
+      1.8,
+      WALKABLE,
+      ENTRY_PLANS.map((entry) => entry.at),
+    );
     this.refreshVisibility();
   }
 
@@ -107,6 +116,11 @@ export class World {
       }
     }
     return best;
+  }
+
+  /** The map with every door open (for checks that ask what could ever be walked to). */
+  get openColliders(): readonly Collider[] {
+    return this.fixed;
   }
 
   private rebuildColliders(): void {

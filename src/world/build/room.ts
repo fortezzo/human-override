@@ -3,7 +3,7 @@
 // approaches they walk in along, and the wall racks that weapons hang on.
 
 import * as THREE from 'three';
-import { WEAPONS, type WeaponId } from '../../config';
+import { LOADOUT, WEAPONS, type WeaponId } from '../../config';
 import type { Assets } from '../../core/assets';
 import { createFogCard, type ConeShaft, type DustBeam, type FogCard } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
@@ -256,7 +256,14 @@ export function weaponRack(b: LevelBuilder, atlas: SignAtlas, assets: Assets, pl
   const normal: Vec3 = [nx, 0, nz];
   const label = atlas.text(def.name.toUpperCase(), { size: 64, color: PAINT.white, wear: 0.25 });
   b.decal(atlas.texture, point(0, 0.7, 0), normal, 0.62, 0.62 / label.aspect, { uvRect: label.uv, opacity: 0.9 });
-  const price = atlas.text(String(def.price), { size: 90, color: PAINT.yellow, wear: 0.15 });
+  // The player starts with the sidearm, so its rack is where its
+  // ammunition is bought: the board says so above the price.
+  const starting = plan.weapon === LOADOUT.starting;
+  if (starting) {
+    const note = atlas.text('AMMUNITION', { size: 44, color: PAINT.white, wear: 0.2 });
+    b.decal(atlas.texture, point(0.036, -0.4, 0), normal, 0.34, 0.34 / note.aspect, { uvRect: note.uv, opacity: 0.85 });
+  }
+  const price = atlas.text(String(starting ? def.ammoPrice : def.price), { size: 90, color: PAINT.yellow, wear: 0.15 });
   b.decal(atlas.texture, point(0.036, -0.495, 0), normal, 0.24, 0.24 / price.aspect, { uvRect: price.uv, opacity: 0.95 });
 
   // A small amber lamp over the board, so the rack can be found in the dark.

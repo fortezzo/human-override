@@ -275,6 +275,26 @@ body {
 .hud-health.low .hud-bar-fill {
   background: var(--red);
 }
+/* Stamina: a thin line under the vitals. Dim while full, bright in use,
+   red while winded (run dry and not yet ready to sprint again). */
+.hud-stamina {
+  margin-top: 4px;
+  height: 3px;
+  background: rgba(233, 230, 222, 0.16);
+  overflow: hidden;
+  transition: opacity 0.5s ease;
+}
+.hud-stamina.resting {
+  opacity: 0.35;
+}
+.hud-stamina-fill {
+  height: 100%;
+  background: var(--amber);
+  transform-origin: left center;
+}
+.hud-stamina.winded .hud-stamina-fill {
+  background: var(--red);
+}
 .hud-health.low .hud-label {
   color: var(--red);
 }

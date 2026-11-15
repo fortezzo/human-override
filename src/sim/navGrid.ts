@@ -21,6 +21,14 @@ export interface NavGrid {
   blocked: Uint8Array;
   /** 1 where nothing may ever walk (outside the allowed regions), whatever the obstacles. */
   mask: Uint8Array;
+  /**
+   * 1 where a robot can actually get to: open floor joined to one of the
+   * places robots come in. A gap too narrow for a robot can leave a patch
+   * of open floor cut off from the rest (a "pocket"); those squares are 0.
+   */
+  reach: Uint8Array;
+  /** The places robots come in (their squares), which is what "can get to" is measured from. */
+  anchors: number[];
   /** Walking distance to the current goal, or Infinity if unreachable. */
   distance: Float32Array;
   /** Goal square of the last flood (-1 before the first). */
@@ -45,7 +53,9 @@ export type NavRect = readonly [number, number, number, number];
  * Build the grid. A square is blocked when its centre is within
  * `agentRadius` of any obstacle tall enough to stop a walking robot. With
  * `walkable`, squares outside every one of those rectangles are blocked
- * too, which keeps robots to the approaches built for them.
+ * too, which keeps robots to the approaches built for them. `anchors` are
+ * the places robots come in; without any, all open floor counts as
+ * somewhere a robot can get to.
  */
 export function createNavGrid(
   bounds: NavBounds,
@@ -55,6 +65,7 @@ export function createNavGrid(
   stepHeight: number,
   agentHeight: number,
   walkable?: readonly NavRect[],
+  anchors: ReadonlyArray<readonly [number, number]> = [],
 ): NavGrid {
   const cols = Math.ceil((bounds.x1 - bounds.x0) / cell);
   const rows = Math.ceil((bounds.z1 - bounds.z0) / cell);
@@ -77,6 +88,8 @@ export function createNavGrid(
     rows,
     blocked: mask.slice(),
     mask,
+    reach: new Uint8Array(cols * rows),
+    anchors: [],
     distance: new Float32Array(cols * rows).fill(Infinity),
     goal: -1,
     agentRadius,
@@ -84,7 +97,44 @@ export function createNavGrid(
     agentHeight,
   };
   blockColliders(grid, colliders);
+  grid.anchors = anchors.map(([x, z]) => nearestOpenCell(grid, x, z)).filter((index) => index >= 0);
+  markReach(grid);
   return grid;
+}
+
+/**
+ * Work out which open squares a robot can actually get to: everything
+ * joined to a place robots come in. Called again whenever a door changes.
+ */
+export function markReach(grid: NavGrid): void {
+  const { cols, rows, blocked, reach } = grid;
+  if (!grid.anchors.length) {
+    for (let i = 0; i < reach.length; i++) reach[i] = blocked[i] ? 0 : 1;
+    return;
+  }
+  reach.fill(0);
+  const queue: number[] = [];
+  for (const anchor of grid.anchors) {
+    if (blocked[anchor] || reach[anchor]) continue;
+    reach[anchor] = 1;
+    queue.push(anchor);
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const index = queue[head]!;
+    const c = index % cols;
+    const r = (index - c) / cols;
+    for (let k = 0; k < 8; k++) {
+      const nc = c + DC[k]!;
+      const nr = r + DR[k]!;
+      if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
+      const next = nr * cols + nc;
+      if (blocked[next] || reach[next]) continue;
+      // The same rule as walking: never cut across the corner of an obstacle.
+      if (k >= 4 && (blocked[r * cols + nc] || blocked[nr * cols + c])) continue;
+      reach[next] = 1;
+      queue.push(next);
+    }
+  }
 }
 
 /** Mark the squares that each obstacle (grown by the robot's radius) covers. */
@@ -133,6 +183,7 @@ export function refreshRegion(grid: NavGrid, region: NavRect, colliders: readonl
   const r1 = Math.min(rows - 1, Math.floor((rect[3] - grid.z0) / cell));
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) grid.blocked[r * cols + c] = grid.mask[r * cols + c]!;
   blockColliders(grid, colliders, rect);
+  markReach(grid);
   // Whatever was flooded before is out of date.
   grid.goal = -1;
 }
@@ -152,6 +203,20 @@ export function cellCentre(grid: NavGrid, index: number): { x: number; z: number
 
 /** The nearest square that is not blocked, searching outward in rings. */
 export function nearestOpenCell(grid: NavGrid, x: number, z: number, maxRings = 8): number {
+  return nearestCell(grid, x, z, maxRings, grid.blocked, 0);
+}
+
+/**
+ * The nearest square a robot can get to. This is what "go to the player"
+ * aims for when the player is standing somewhere robots cannot go (inside
+ * a pocket, or tight against a wall): they come as close as they can.
+ */
+export function nearestReachableCell(grid: NavGrid, x: number, z: number, maxRings = 40): number {
+  return nearestCell(grid, x, z, maxRings, grid.reach, 1);
+}
+
+/** The nearest square where `flags` has the value `wanted`, searching outward in rings. */
+function nearestCell(grid: NavGrid, x: number, z: number, maxRings: number, flags: Uint8Array, wanted: number): number {
   const c0 = Math.min(grid.cols - 1, Math.max(0, Math.floor((x - grid.x0) / grid.cell)));
   const r0 = Math.min(grid.rows - 1, Math.max(0, Math.floor((z - grid.z0) / grid.cell)));
   let best = -1;
@@ -162,7 +227,7 @@ export function nearestOpenCell(grid: NavGrid, x: number, z: number, maxRings = 
         if (Math.max(Math.abs(r - r0), Math.abs(c - c0)) !== ring) continue;
         if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) continue;
         const i = r * grid.cols + c;
-        if (grid.blocked[i]) continue;
+        if (flags[i] !== wanted) continue;
         const cx = grid.x0 + (c + 0.5) * grid.cell - x;
         const cz = grid.z0 + (r + 0.5) * grid.cell - z;
         const d = cx * cx + cz * cz;
@@ -172,9 +237,11 @@ export function nearestOpenCell(grid: NavGrid, x: number, z: number, maxRings = 
         }
       }
     }
-    if (best >= 0) return best;
+    // A square found in this ring may still be beaten by one in the next
+    // (rings are square, distance is round), so look one ring further.
+    if (best >= 0 && (ring - 1) * grid.cell >= Math.sqrt(bestDist)) return best;
   }
-  return -1;
+  return best;
 }
 
 // Neighbour offsets: four straight, four diagonal.
@@ -189,7 +256,11 @@ const COST = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
  */
 export function floodFrom(grid: NavGrid, goalX: number, goalZ: number): boolean {
   let goal = cellAt(grid, goalX, goalZ);
-  if (goal < 0 || grid.blocked[goal]) goal = nearestOpenCell(grid, goalX, goalZ);
+  // A goal robots cannot get to (inside a wall's margin, or in a pocket of
+  // floor cut off by a gap too narrow for them) is swapped for the nearest
+  // square they can. Flooding from the pocket itself would reach nothing
+  // outside it, and every robot on the map would stand still.
+  if (goal < 0 || !grid.reach[goal]) goal = nearestReachableCell(grid, goalX, goalZ);
   if (goal < 0) return false;
   if (goal === grid.goal) return true;
   grid.goal = goal;
@@ -309,9 +380,10 @@ export interface Waypoint {
  */
 export function nextWaypoint(grid: NavGrid, x: number, z: number, lookahead = 6): Waypoint | null {
   let start = cellAt(grid, x, z);
-  if (start < 0 || grid.blocked[start]) {
-    // Shoved into a wall's margin: head for the nearest open square first.
-    start = nearestOpenCell(grid, x, z);
+  if (start < 0 || !grid.reach[start]) {
+    // Shoved into a wall's margin or a dead-end pocket: head for the
+    // nearest square with a way out first.
+    start = nearestReachableCell(grid, x, z, 8);
     if (start < 0) return null;
     const p = cellCentre(grid, start);
     return { x: p.x, z: p.z, remaining: grid.distance[start]! * grid.cell };

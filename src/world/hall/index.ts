@@ -25,13 +25,22 @@ const HALF_PI = Math.PI / 2;
 /** Size of one server rack: width along the row, depth across it, height. */
 const RACK = { width: 0.62, depth: 1.0, height: 2.15 };
 
-/** Rows of racks: [first rack's west edge, row centre z, number of racks, label]. */
+/**
+ * Rows of racks: [first rack's west edge, row centre z, number of racks, label].
+ *
+ * The west rows stand almost against the wall and stop well short of the
+ * columns by the central aisle. Both matter: a robot is wider than the
+ * player, so a gap the player can squeeze through and a robot cannot turns
+ * the aisle beyond it into a place where nothing can reach them. (With one
+ * more rack per row, a column sat in the mouth of the aisle between rows A
+ * and B and sealed it off: nine square metres of perfect safety.)
+ */
 const ROWS: Array<[number, number, number, string]> = [
-  [-10.2, 9.7, 9, 'A'],
-  [-10.2, 13.1, 9, 'B'],
+  [-10.55, 9.7, 8, 'A'],
+  [-10.55, 13.1, 8, 'B'],
   [-7.72, 16.5, 5, 'C'],
-  [-10.2, 19.9, 9, 'D'],
-  [-10.2, 23.3, 9, 'E'],
+  [-10.55, 19.9, 8, 'D'],
+  [-10.55, 23.3, 8, 'E'],
   [2.62, 9.5, 7, 'F'],
   [2.62, 13.9, 9, 'G'],
   [2.62, 17.3, 9, 'H'],

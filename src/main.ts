@@ -119,6 +119,8 @@ async function boot(): Promise<void> {
       hud.update(1 / Math.max(game.fps, 1), {
         health: player.health,
         maxHealth: PLAYER.maxHealth,
+        stamina: player.stamina.level,
+        winded: player.stamina.winded,
         weapon: def.name,
         ammo: weapons.state.ammo,
         reserve: weapons.state.reserve,

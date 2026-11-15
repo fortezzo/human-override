@@ -422,6 +422,134 @@ try {
   const sprinting = await speedAfterHalfASecond(true);
   check('sprinting is faster than walking, and both reach the speeds set for them', Math.abs(walking - 4.3) < 0.1 && Math.abs(sprinting - 6.4) < 0.15, `${walking.toFixed(2)} and ${sprinting.toFixed(2)} metres a second`);
 
+  // Sprinting is paid for with stamina: a full bar lasts about four
+  // seconds, running it dry leaves the player winded (walking pace only)
+  // until some of it has come back, and the thin bar by the vitals shows it.
+  const stamina = await ev(() => {
+    const ho = window.__HO;
+    const p = ho.game.player;
+    const speed = () => Math.hypot(p.velocity.x, p.velocity.z);
+    const bar = () => Number(/scaleX\(([\d.]+)\)/.exec(document.querySelector('.hud-stamina-fill')?.style.transform ?? '')?.[1] ?? -1);
+    const out = {};
+    // Up and down the long axis of the lobby, turning before each wall.
+    const run = (frames) => {
+      for (let i = 0; i < frames; i++) {
+        // (Turned by hand, not with place(): that starts the player afresh, stamina included.)
+        if (p.position.x > 5.5) p.yaw = Math.PI / 2;
+        if (p.position.x < -5.5) p.yaw = -Math.PI / 2;
+        ho.step(1 / 60, 1);
+      }
+    };
+    ho.place(-5, 5.6, -90);
+    // Start rested, whatever the checks before this one did.
+    Object.assign(p.stamina, { level: 1, idle: 99, winded: false });
+    ho.step(1 / 60, 5);
+    ho.press('forward', true);
+    ho.press('sprint', true);
+    run(60);
+    out.sprintSpeed = speed();
+    run(60);
+    out.levelAfterTwoSeconds = p.stamina.level;
+    run(200);
+    out.windedSpeed = speed();
+    out.winded = p.stamina.winded;
+    out.sprintingWhileWinded = p.sprinting;
+    ho.press('sprint', false);
+    run(60);
+    out.levelAfterRestStarts = p.stamina.level;
+    ho.press('forward', false);
+    ho.step(1 / 60, 60 * 7);
+    out.levelAfterLongRest = p.stamina.level;
+    out.windedAfterRest = p.stamina.winded;
+    return out;
+  });
+  await page.waitForTimeout(250);
+  const staminaBar = await ev(() => Number(/scaleX\(([\d.]+)\)/.exec(document.querySelector('.hud-stamina-fill')?.style.transform ?? '')?.[1] ?? -1));
+  check(
+    'sprinting drains stamina, a winded player can only walk, and the bar refills with rest',
+    stamina.sprintSpeed > 6.2 && Math.abs(stamina.levelAfterTwoSeconds - 0.5) < 0.06 && stamina.winded && !stamina.sprintingWhileWinded && stamina.windedSpeed < 4.5 && stamina.levelAfterLongRest === 1 && !stamina.windedAfterRest && staminaBar > 0.98,
+    `${stamina.sprintSpeed.toFixed(1)} m/s sprinting, ${Math.round(stamina.levelAfterTwoSeconds * 100)}% of the bar left after 2 s, ${stamina.windedSpeed.toFixed(1)} m/s once winded, ${Math.round(stamina.levelAfterLongRest * 100)}% after a rest (bar on screen ${Math.round(staminaBar * 100)}%)`,
+  );
+
+  // Robots are solid: the player cannot walk through one.
+  const blocked = await ev(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 4.6, 0);
+    ho.spawnRobot(0, 2.2, 180, true, 1.2, 5000);
+    ho.step(1 / 60, 10);
+    ho.press('forward', true);
+    ho.step(1 / 60, 120);
+    ho.press('forward', false);
+    const p = ho.game.player.position;
+    const robot = ho.game.robots[0].position;
+    const result = { gap: Math.hypot(p.x - robot.x, p.z - robot.z), z: p.z };
+    ho.clearRobots();
+    return result;
+  });
+  check('robots are solid: the player cannot walk through one', blocked.z > 2.2 && blocked.gap > 0.55, `stopped ${blocked.gap.toFixed(2)} m from its centre`);
+
+  // Blows cannot land in a flurry: after one lands there is a moment of
+  // grace, so three robots at once do not mean down in under a second.
+  const flurry = await ev(() => {
+    const ho = window.__HO;
+    const g = ho.game;
+    ho.clearRobots();
+    ho.god(false);
+    ho.place(0, 3, 0);
+    for (const [x, z] of [[0, 1.9], [1.0, 3.4], [-1.0, 3.4], [0, 4.1]]) ho.spawnRobot(x, z, 0, false, 1.5, 5000);
+    const drops = [];
+    let last = g.player.health;
+    for (let frame = 0; frame < 60 * 6 && g.player.health > 0; frame++) {
+      ho.step(1 / 60, 1);
+      if (g.player.health < last) drops.push(frame / 60);
+      last = g.player.health;
+    }
+    const gaps = drops.slice(1).map((t, i) => t - drops[i]);
+    const result = { blows: drops.length, shortest: gaps.length ? Math.min(...gaps) : 99, down: g.player.health <= 0, seconds: drops.length ? drops[drops.length - 1] - drops[0] : 0 };
+    ho.god(true);
+    ho.clearRobots();
+    return result;
+  });
+  // Going down ends the run; start a fresh one so the checks that follow have a player to work with.
+  if (flurry.down) {
+    await ev(() => {
+      const ho = window.__HO;
+      ho.restart();
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      for (const id of ['lobbyHall', 'hallPower', 'lobbyPower']) ho.openDoor(id);
+      ho.step(1 / 60, 130);
+    });
+  }
+  check('with four robots in reach it takes four blows, never closer together than the grace period, to go down', flurry.blows === 4 && flurry.shortest >= 0.44 && flurry.seconds >= 1.3, `${flurry.blows} blows over ${flurry.seconds.toFixed(1)} s, the closest two ${flurry.shortest.toFixed(2)} s apart`);
+
+  // The sidearm has a rack of its own in the lobby: there is always
+  // something cheap to buy, and an empty gun is never the end of a run.
+  const refill = await ev(() => {
+    const ho = window.__HO;
+    const g = ho.game;
+    ho.clearRobots();
+    g.wallet.scrap = 100;
+    const sidearm = g.weapons.loadout.slots.find((slot) => slot?.id === 'pistol');
+    sidearm.state.ammo = 0;
+    sidearm.state.reserve = 0;
+    ho.place(4.5, -0.9, 0);
+    ho.step(1 / 60, 4);
+    const prompt = ho.run().prompt;
+    ho.tap('interact');
+    ho.step(1 / 60, 20);
+    return { prompt, scrap: g.wallet.scrap, reserve: sidearm.state.reserve };
+  });
+  check('the sidearm rack in the lobby refills an empty sidearm for 100 scrap', refill.prompt?.text.includes('VK-9') && refill.prompt.cost === 100 && refill.prompt.usable && refill.scrap === 0 && refill.reserve === 96, `"${refill.prompt?.text}" ${refill.prompt?.cost}: reserve now ${refill.reserve}, scrap ${refill.scrap}`);
+
+  // Nowhere the player can stand is out of every robot's reach. (The player
+  // is narrower than a robot, so a gap can let one through and not the
+  // other; a whole aisle between the server racks was once safe that way.)
+  const safe = await ev(() => window.__HO.safeSpots());
+  check('there is nowhere the player can stand that no robot can reach', safe.length === 0, safe.length ? safe.map((s) => `${(s.squares * 0.0225).toFixed(1)} square metres around (${s.x.toFixed(1)}, ${s.z.toFixed(1)})`).join('; ') : 'checked every square the player can walk to');
+
   const outside = await sprintFrom(-0.6, -6, 0, 150);
   check('the player can step out into the yard', outside[1] < -13.5, `reached z ${outside[1].toFixed(1)}`);
   const pushes = [];
@@ -574,7 +702,7 @@ try {
     await step(120);
     played = await run();
   }
-  check('the autopilot plays through three rounds by itself', played.round >= 4 && played.kills >= 6 + 8 + 11, `round ${played.round}, ${played.kills} destroyed in ${(frames / 3600).toFixed(1)} game minutes`);
+  check('the autopilot plays through three rounds by itself', played.round >= 4 && played.kills >= 6 + 8 + 10, `round ${played.round}, ${played.kills} destroyed in ${(frames / 3600).toFixed(1)} game minutes`);
   check('it earns scrap and spends it', played.earned > 1000 && played.spent > 0 && played.slots[1] !== null, `earned ${played.earned}, spent ${played.spent}, carrying ${played.slots.join(' + ')}`);
 
   // When only a few robots are left, they are marked.

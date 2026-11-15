@@ -7,13 +7,15 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { WEAPONS } from '../config';
+import { PLAYER, ROBOT, WEAPONS } from '../config';
 import type { Action } from '../core/input';
 import type { Game } from '../game/Game';
 import type { SurfaceKind } from '../render/materials';
 import { remaining } from '../sim/rounds';
-import type { DoorPlan } from '../world/plan';
-import { Autopilot } from './Autopilot';
+import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
+import { ENTRY_PLANS, NAV_BOUNDS, WALKABLE, type DoorPlan } from '../world/plan';
+import { PLAYER_START } from '../world/lobby/plan';
+import { Autopilot, PILOTS, type PilotName } from './Autopilot';
 
 export interface DebugState {
   state: string;
@@ -76,14 +78,25 @@ export interface DebugApi {
   forceEntry(id: string | null): void;
   /** Stop the rounds from sending robots (for staged screenshots). */
   holdRounds(on: boolean): void;
-  /** Let the game play itself. */
-  autopilot(on: boolean): void;
+  /**
+   * Let the game play itself: as the "expert" that never misses (the
+   * default), or as the "firstTimer", a rough model of a beginner.
+   */
+  autopilot(on: boolean, pilot?: PilotName): void;
+  /** Advance the game without drawing it (much faster; for playing whole runs in a tool). */
+  simulate(dt: number, frames?: number): void;
   /**
    * Walk the player to a spot on foot (no teleport), then turn to face
    * (lookX, lookZ) if given. `walking()` is true until they have arrived.
    */
   walkTo(x: number, z: number, lookX?: number, lookZ?: number): void;
   walking(): boolean;
+  /**
+   * Places the player can stand that no robot can get within reach of,
+   * grouped into patches (centre, size in squares of floor, how far out of
+   * reach the deepest point is). There should be none.
+   */
+  safeSpots(): Array<{ x: number; z: number; squares: number; deepest: number }>;
   /** Broken pixels in each room's reflection photograph, at every size in use. All should be zero. */
   brokenReflections(): Record<string, number>;
   /**
@@ -120,8 +133,9 @@ export interface DebugTools {
 
 export function installDebugApi(game: Game): DebugTools {
   const pilot = new Autopilot(game);
-  const setAutopilot = (on: boolean) => {
+  const setAutopilot = (on: boolean, name: PilotName = 'expert') => {
     if (!on) pilot.release();
+    pilot.profile = PILOTS[name];
     game.autopilot = on ? pilot : null;
   };
   /** True while the pilot is only running an errand for a test, not playing. */
@@ -246,6 +260,23 @@ export function installDebugApi(game: Game): DebugTools {
     brokenReflections() {
       return game.brokenReflectionPixels();
     },
+    safeSpots() {
+      const cell = 0.15;
+      const spots = findSafeSpots(
+        NAV_BOUNDS,
+        game.world.nav.cell,
+        cell,
+        game.world.openColliders,
+        WALKABLE,
+        ENTRY_PLANS.map((entry) => entry.at),
+        { radius: ROBOT.radius + 0.06, stepHeight: 0.3, height: 1.8 },
+        { radius: PLAYER.radius, stepHeight: PLAYER.stepHeight, height: PLAYER.height },
+        [PLAYER_START.x, PLAYER_START.z],
+        // A robot strikes when its centre is within this of the player's.
+        ROBOT.attackRange - 0.15,
+      );
+      return groupSafeSpots(spots, cell);
+    },
     poison(x, y, z) {
       if (poison) {
         game.scene.remove(poison);
@@ -267,8 +298,11 @@ export function installDebugApi(game: Game): DebugTools {
       poison.position.set(x, y, z);
       game.scene.add(poison);
     },
-    autopilot(on) {
-      setAutopilot(on);
+    simulate(dt, frames = 1) {
+      for (let i = 0; i < frames; i++) game.frame(dt, false);
+    },
+    autopilot(on, name) {
+      setAutopilot(on, name);
     },
     photoMode(on) {
       game.hideWeapon = on;

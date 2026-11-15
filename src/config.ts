@@ -26,8 +26,38 @@ export const PLAYER = {
   maxHealth: 100,
   regenDelay: 4.0,
   regenPerSecond: 34,
+  /**
+   * After a blow lands, no other blow can land for this long. Without it,
+   * three robots in reach take a player from full health to down in under
+   * a second, which nobody can react to. With it, being surrounded is
+   * still lethal, but there is a moment in which to run.
+   */
+  mercy: 0.45,
   /** How hard a robot hit shoves the view (degrees). */
   hitKick: 3.2,
+  /**
+   * Robots are solid to the player: this is how close their centres can
+   * come. Less than the two bodies' widths, so a single robot can be
+   * squeezed past, but a crowd cannot be walked through.
+   */
+  robotGap: 0.58,
+};
+
+/**
+ * Sprinting drains a bar. Running should buy time, not safety: the fast
+ * robots of the later rounds are nearly as quick as a sprint, and over a
+ * long chase they cover more ground than a player who has to stop and
+ * recover (tests/stamina.test.ts holds these numbers to that).
+ */
+export const STAMINA = {
+  /** Seconds of sprinting a full bar pays for (about 25 metres). */
+  sprintSeconds: 4,
+  /** Seconds after the last sprint before the bar starts to refill. */
+  recoverDelay: 1,
+  /** Seconds to refill from empty, once refilling. */
+  recoverSeconds: 5,
+  /** After running dry, this share of the bar must return before sprinting works again. */
+  restartAt: 0.3,
 };
 
 export const LOOK = {
@@ -142,8 +172,11 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     casingSpeed: 2.2,
     flash: 0.7,
     thump: 0.55,
-    price: 0,
-    ammoPrice: 0,
+    // The sidearm has a rack of its own in the lobby, so there is always
+    // something cheap to spend scrap on and an empty gun is never the end:
+    // one melee kill (130) pays for a refill.
+    price: 100,
+    ammoPrice: 100,
   },
   shotgun: {
     id: 'shotgun',
@@ -269,31 +302,33 @@ export const SCRAP = {
 export const ROUNDS = {
   /** Seconds from pressing Play to the first robot, and between rounds. */
   firstDelay: 3.2,
-  lull: 7,
+  lull: 10,
   /** Robots sent in each of the first rounds, then this many more per round. */
-  counts: [6, 8, 11, 14, 18, 22, 26, 30, 34, 38],
+  counts: [6, 8, 10, 13, 16, 20, 24, 28, 32, 36],
   countGrowth: 4,
   /** Most robots on the map at once; the rest wait their turn. */
   maxActive: 24,
   /** Seconds between arrivals in round 1, shrinking by `spawnQuicken` a round down to a floor. */
   spawnInterval: 2.3,
-  spawnQuicken: 0.22,
+  spawnQuicken: 0.18,
   spawnIntervalMin: 0.45,
   /** Robot health: this much in round 1, growing by a fixed step, then by a percentage. */
   health: 70,
-  healthStep: 35,
+  healthStep: 25,
   healthStepRounds: 9,
   healthGrowth: 1.1,
   /** Walking speed in round 1 and how it climbs; from `runFrom` on, a growing share run. */
   walkSpeed: 1.25,
   walkSpeedStep: 0.22,
   walkSpeedMax: 2.2,
-  runFrom: 4,
+  runFrom: 5,
   runShareStep: 0.15,
   runShareMax: 0.85,
-  runSpeed: 2.9,
-  runSpeedStep: 0.12,
-  runSpeedMax: 4.0,
+  // Runners start slower than a walking player (4.3), pass walking pace in
+  // round 8, and level off just under sprinting pace (6.4) in round 13.
+  runSpeed: 3.4,
+  runSpeedStep: 0.33,
+  runSpeedMax: 6.0,
   /** When this few robots are left in a round, the HUD marks them. */
   markLast: 3,
 };
@@ -320,7 +355,8 @@ export const ROBOT = {
   /** Above this ground speed the run animation is used instead of the walk. */
   runAbove: 1.75,
   attackRange: 1.45,
-  attackDamage: 34,
+  // Four blows to go down from full health.
+  attackDamage: 30,
   /** Seconds into the swing when the hit lands, and the swing's length. */
   attackHitTime: 0.42,
   attackDuration: 1.0,

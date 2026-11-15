@@ -128,6 +128,8 @@ export class Game {
   fps = 60;
   private lowFpsTime = 0;
   private settleUntil = 0;
+  /** The robots the player can bump into this frame. */
+  private readonly obstacles: Array<{ x: number; z: number }> = [];
 
   private readonly tmpA = new THREE.Vector3();
   private readonly tmpB = new THREE.Vector3();
@@ -610,8 +612,12 @@ export class Game {
 
   // ------------------------------------------------------------------ frame
 
-  /** Advance and draw one frame. Public so tools can step time exactly. */
-  frame(dt: number): void {
+  /**
+   * Advance and draw one frame. Public so tools can step time exactly.
+   * With `draw` false the frame is worked out but not drawn, which lets a
+   * tool play whole runs several times faster than they could be watched.
+   */
+  frame(dt: number, draw = true): void {
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.06;
     const simulate = this.state !== 'paused';
     const step = simulate ? dt : 0;
@@ -664,7 +670,10 @@ export class Game {
     developScreens(this.renderer.three);
     this.renderer.grade.fade = this.fade;
     this.renderer.grade.damage = this.state === 'title' ? 0 : Math.min(1, this.player.hurt * 1.15);
-    this.renderer.render(dt, this.time);
+    if (draw) this.renderer.render(dt, this.time);
+    // Drawing is also what works out where every bone of every robot is,
+    // which hit tests depend on; without it, do that part by hand.
+    else this.scene.updateMatrixWorld();
     this.input.endFrame();
     if (this.state === 'playing') this.governQuality(dt);
   }
@@ -677,7 +686,9 @@ export class Game {
     player.aimFov = def.aimFov;
     player.aimTime = def.aimTime;
     const wantAim = input.isDown('aim') && !weapons.busy;
-    player.update(dt, this.world.colliders, wantAim, look);
+    this.obstacles.length = 0;
+    for (const robot of this.robots) if (robot.alive && robot.grounded) this.obstacles.push(robot.position);
+    player.update(dt, this.world.colliders, wantAim, look, this.obstacles);
     this.camera.updateMatrixWorld(true);
     if (!this.debugCamera && this.world.track(player.position.x, player.position.z)) this.areaChanged();
 
@@ -786,7 +797,7 @@ export class Game {
   private hurtPlayer(amount: number, robot: Robot): void {
     const { player } = this;
     if (this.godMode || !player.alive || this.state !== 'playing') return;
-    player.damage(amount, robot.position.x, robot.position.z);
+    if (!player.damage(amount, robot.position.x, robot.position.z)) return;
     this.audio.play('hurt');
     // Bearing of the attacker relative to where the player is looking.
     const dx = robot.position.x - player.position.x;

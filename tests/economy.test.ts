@@ -117,3 +117,26 @@ describe('carrying two weapons', () => {
     expect(nextSlot(loadout, -1)).toBe(1);
   });
 });
+
+describe('an empty gun is never the end', () => {
+  it('lets one melee kill pay for a sidearm refill', () => {
+    expect(SCRAP.meleeKill).toBeGreaterThanOrEqual(WEAPONS.pistol.ammoPrice);
+    expect(WEAPONS.pistol.ammoPrice).toBeGreaterThan(0);
+    expect(WEAPONS.pistol.ammoPrice).toBeLessThan(WEAPONS.shotgun.ammoPrice);
+  });
+
+  it('sells sidearm ammunition at its rack like any other weapon', () => {
+    const wallet = createWallet();
+    earn(wallet, 100);
+    const loadout = fresh();
+    held(loadout).state.ammo = 0;
+    held(loadout).state.reserve = 0;
+    const offer = rackOffer(wallet, loadout, 'pistol', WEAPONS.pistol);
+    expect(offer.kind).toBe('ammo');
+    expect(offer.kind === 'ammo' && offer.affordable).toBe(true);
+    const result = buyFromRack(wallet, loadout, 'pistol', WEAPONS.pistol);
+    expect(result.bought).toBe('ammo');
+    expect(wallet.scrap).toBe(0);
+    expect(held(loadout).state.reserve).toBe(WEAPONS.pistol.reserveMax);
+  });
+});

@@ -164,6 +164,11 @@ export class Robot {
     return this.root.position;
   }
 
+  /** True once it is standing on the floor (not still dropping from a vent). */
+  get grounded(): boolean {
+    return !this.falling;
+  }
+
   get alive(): boolean {
     return this.mind.state !== 'dead';
   }
@@ -312,7 +317,7 @@ export class Robot {
 
       // Match the stride to ground speed so the feet do not slide.
       this.actions.get('walk')!.timeScale = clamp(this.speed / ROBOT.walkAnimSpeedAt, 0.6, 3.6);
-      this.actions.get('run')!.timeScale = clamp(this.speed / ROBOT.runAnimSpeedAt, 0.55, 1.5);
+      this.actions.get('run')!.timeScale = clamp(this.speed / ROBOT.runAnimSpeedAt, 0.55, 2.0);
       this.stride += this.speed * dt;
       const half = Math.floor(this.stride / (running ? 0.85 : 0.42));
       if (half !== this.lastHalfStride) {

@@ -157,6 +157,8 @@ export const COLUMN = 0.7;
 export const RACK_PLANS: RackPlan[] = [
   // On the lobby column ahead and to the left of where the player starts, facing them.
   { weapon: 'shotgun', area: 'lobby', at: [-4.5, 1.62, -2.5 + COLUMN / 2], normal: [0, 0, 1] },
+  // On the matching column to the right: the sidearm and its ammunition, cheap.
+  { weapon: 'pistol', area: 'lobby', at: [4.5, 1.62, -2.5 + COLUMN / 2], normal: [0, 0, 1] },
   // On the first column of the server hall, facing whoever comes in through the blast door.
   { weapon: 'carbine', area: 'hall', at: [1.6, 1.62, 11.6 - COLUMN / 2], normal: [0, 0, -1] },
 ];
