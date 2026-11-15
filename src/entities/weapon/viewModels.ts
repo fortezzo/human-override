@@ -4,8 +4,9 @@
 // Positions are relative to the eye, in real metres. Points on a gun are in
 // that gun model's own coordinates (it points down -Z, +Y is up).
 
-import type { WeaponId } from '../../config';
+import { FX, type WeaponId } from '../../config';
 import type { ModelId } from '../../assetList';
+import type { FlashLook } from './MuzzleFlash';
 import { SIGHT_HEIGHT } from './ReflexSight';
 
 export interface Pose {
@@ -32,8 +33,8 @@ export interface ViewModelDef {
   ejectionPort: [number, number, number] | null;
   /** The carbine carries the game's own reflex sight. */
   reflexSight: boolean;
-  /** Size of the muzzle flash relative to the carbine's. */
-  flashSize: number;
+  /** The muzzle flash: its size relative to the carbine's, how long it is drawn, and its shape. */
+  flash: FlashLook;
   /** How far the gun drops and tips during a reload, relative to the carbine. */
   reloadMotion: number;
 }
@@ -51,7 +52,7 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     muzzles: [[0, 0.04, -0.104]],
     ejectionPort: [0.014, 0.05, -0.02],
     reflexSight: false,
-    flashSize: 0.62,
+    flash: { size: 0.62, seconds: FX.muzzleFlashTime, shape: 'star' },
     reloadMotion: 0.75,
   },
   shotgun: {
@@ -69,7 +70,10 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     ],
     ejectionPort: null,
     reflexSight: false,
-    flashSize: 1.35,
+    // Small, and drawn for a single frame: a big, lingering star looked
+    // like a cartoon. The shot's weight comes from the light it throws on
+    // the room, the kick and the sound.
+    flash: { size: 0.78, seconds: 0.012, shape: 'burst' },
     reloadMotion: 1,
   },
   carbine: {
@@ -83,7 +87,7 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     muzzles: [[0, 0.094, -0.475]],
     ejectionPort: [0.03, 0.1, 0.0],
     reflexSight: true,
-    flashSize: 1,
+    flash: { size: 1, seconds: FX.muzzleFlashTime, shape: 'star' },
     reloadMotion: 1,
   },
 };

@@ -96,10 +96,10 @@ await run(() => {
   ho.step(1 / 60, 50);
   ho.aimAtRobot('chest');
   ho.step(1 / 60, 2);
+  // The shotgun's flash is drawn for one frame only: photograph that frame.
   ho.press('fire', true);
   ho.step(1 / 60, 1);
   ho.press('fire', false);
-  ho.step(1 / 60, 1);
 });
 await shoot('04-shotgun');
 

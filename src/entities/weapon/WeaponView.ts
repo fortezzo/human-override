@@ -239,7 +239,7 @@ export class WeaponView {
         sight = new ReflexSight(assets, this.lens, (material) => useViewLens(material, this.lens, this.light));
         group.add(sight.group);
       }
-      const flash = new MuzzleFlash((material) => useViewLens(material, this.lens), def.flashSize);
+      const flash = new MuzzleFlash((material) => useViewLens(material, this.lens), def.flash);
       group.add(flash.group);
 
       group.visible = false;

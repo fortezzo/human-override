@@ -385,8 +385,12 @@ export const FX = {
   maxGibs: 72,
   gibLifetime: 9,
   sparkGravity: 9.8,
-  /** How long the flash at the barrel is drawn, in seconds (about two frames). */
-  muzzleFlashTime: 0.034,
+  /**
+   * How long the flash at the barrel stays after the frame it fires on, in
+   * seconds: two frames in all at 60 a second. (The shotgun's is shorter;
+   * see its view model.)
+   */
+  muzzleFlashTime: 0.02,
   muzzleLightIntensity: 22,
   /** How fast the flash's light on the room dies away (higher is shorter). */
   muzzleLightFade: 46,

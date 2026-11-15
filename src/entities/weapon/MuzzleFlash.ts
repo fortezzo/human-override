@@ -3,7 +3,11 @@
 // Real muzzle flash is over in a few hundredths of a second and has hard,
 // ragged edges, not a soft glow. This draws it as a spiky star seen
 // end-on plus two crossed tongues of flame seen from the side, shows it
-// for about two frames, and gives every shot a different size and twist.
+// for a frame or two, and gives every shot a different size and twist.
+//
+// The shotgun's is a different shape: a short ragged burst round a hot
+// core. At the size a shotgun's flash has to be, the long thin spikes of
+// the star read as a cartoon "bang".
 
 import * as THREE from 'three';
 import { FX } from '../../config';
@@ -50,6 +54,47 @@ function starTexture(): THREE.Texture {
   return texture;
 }
 
+/** A burst seen from behind the gun: a hot core with a short, ragged fringe of flame. */
+function burstTexture(): THREE.Texture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d')!;
+  const c = size / 2;
+  g.translate(c, c);
+  // Stubby flames of uneven length and width, unevenly spaced.
+  const flames = [0.7, 0.44, 0.58, 0.4, 0.66, 0.47, 0.54, 0.38, 0.62, 0.43, 0.5];
+  flames.forEach((length, i) => {
+    g.save();
+    g.rotate((i / flames.length) * Math.PI * 2 + Math.sin(i * 2.3) * 0.16);
+    const reach = c * 0.96 * length;
+    const half = c * (0.1 + 0.05 * ((i * 7) % 3));
+    const heat = g.createLinearGradient(0, 0, 0, -reach);
+    heat.addColorStop(0, 'rgba(255,255,255,1)');
+    heat.addColorStop(0.5, 'rgba(255,226,170,0.9)');
+    heat.addColorStop(1, 'rgba(255,150,60,0)');
+    g.fillStyle = heat;
+    g.beginPath();
+    g.moveTo(-half, 0);
+    g.lineTo(-half * 0.25, -reach * 0.8);
+    g.lineTo(0, -reach);
+    g.lineTo(half * 0.3, -reach * 0.72);
+    g.lineTo(half, 0);
+    g.closePath();
+    g.fill();
+    g.restore();
+  });
+  const core = g.createRadialGradient(0, 0, 0, 0, 0, c * 0.36);
+  core.addColorStop(0, 'rgba(255,255,255,1)');
+  core.addColorStop(0.6, 'rgba(255,244,214,0.92)');
+  core.addColorStop(1, 'rgba(255,205,130,0)');
+  g.fillStyle = core;
+  g.fillRect(-c, -c, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /** A tongue of flame seen from the side, pointing along +X of the image. */
 function tongueTexture(): THREE.Texture {
   const width = 256;
@@ -84,17 +129,31 @@ function tongueTexture(): THREE.Texture {
   return texture;
 }
 
+/** How one weapon's flash looks. */
+export interface FlashLook {
+  /** Size relative to the carbine's. */
+  size: number;
+  /** How long it stays after the frame it fires on, in seconds. */
+  seconds: number;
+  shape: 'star' | 'burst';
+}
+
 export class MuzzleFlash {
   /** Add to the gun, positioned at the end of the barrel. */
   readonly group = new THREE.Group();
   private readonly star: THREE.Mesh;
   private readonly tongues = new THREE.Group();
   private timer = 0;
+  /** Fired since the last picture was drawn. */
+  private fresh = false;
 
-  /** @param scale size relative to the carbine's flash */
+  /**
+   * @param look size relative to the carbine's flash, how long it is drawn
+   * (in seconds), and its shape
+   */
   constructor(
     prepare: (material: THREE.Material) => void,
-    private readonly scale = 1,
+    private readonly look: FlashLook = { size: 1, seconds: FX.muzzleFlashTime, shape: 'star' },
   ) {
     const make = (map: THREE.Texture) => {
       const material = new THREE.MeshBasicMaterial({
@@ -112,7 +171,7 @@ export class MuzzleFlash {
       return material;
     };
 
-    this.star = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), make(starTexture()));
+    this.star = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), make(look.shape === 'burst' ? burstTexture() : starTexture()));
     // Two crossed cards along the barrel, each starting at the muzzle.
     const card = new THREE.PlaneGeometry(1, 0.5);
     card.translate(0.5, 0, 0);
@@ -131,13 +190,16 @@ export class MuzzleFlash {
   /** Show a new flash. `aim` (0..1) shrinks it a little when sighted. */
   fire(aim: number): void {
     const calm = settings.value.reducedMotion ? 0.55 : 1;
-    const size = rand(0.17, 0.25) * (1 - aim * 0.3) * calm * this.scale;
+    const size = rand(0.17, 0.25) * (1 - aim * 0.3) * calm * this.look.size;
     this.star.scale.setScalar(size);
     this.star.rotation.z = rand(0, Math.PI * 2);
-    this.tongues.scale.set(size * rand(0.8, 1.15), size * rand(0.8, 1.15), size * rand(1.3, 2.1));
+    // A burst throws its flame out sideways more than forward.
+    const forward = this.look.shape === 'burst' ? rand(0.8, 1.25) : rand(1.3, 2.1);
+    this.tongues.scale.set(size * rand(0.8, 1.15), size * rand(0.8, 1.15), size * forward);
     this.tongues.rotation.z = rand(0, Math.PI);
     this.group.visible = true;
-    this.timer = FX.muzzleFlashTime;
+    this.timer = this.look.seconds;
+    this.fresh = true;
   }
 
   /** True while the flash is being drawn. */
@@ -147,6 +209,13 @@ export class MuzzleFlash {
 
   update(dt: number): void {
     if (this.timer <= 0) return;
+    // The frame it fires on is always drawn, however slow the frame rate:
+    // the clock starts with the next one. (Counting from the shot itself, a
+    // flash shorter than one frame was put out again before it was drawn.)
+    if (this.fresh) {
+      this.fresh = false;
+      return;
+    }
     this.timer -= dt;
     if (this.timer <= 0) this.group.visible = false;
   }
