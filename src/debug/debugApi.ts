@@ -7,16 +7,17 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { PLAYER, QUALITY, ROBOT, WEAPONS } from '../config';
+import { MISSION, PLAYER, QUALITY, ROBOT, WEAPONS } from '../config';
 import type { Action } from '../core/input';
 import { setEdgeLight } from '../entities/robot/robotMaterial';
 import type { Game } from '../game/Game';
+import type { MissionStep } from '../game/Mission';
 import type { SurfaceKind } from '../render/materials';
 import { remaining } from '../sim/rounds';
 import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
-import { cellAt } from '../sim/navGrid';
+import { cellAt, createNavGrid, floodFrom } from '../sim/navGrid';
 import { BREACH, VESTIBULE } from '../world/lobby/plan';
-import { AREA_IDS, DOCK, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
+import { AREA_IDS, DOCK, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, HALL, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
 
@@ -51,8 +52,10 @@ export interface DebugApi {
    * report what it is showing and what the corner counter reads.
    */
   announcement: {
+    /** Take down whatever is on screen and forget any notices waiting. */
+    clear(): void;
     freezeAt(seconds: number | null): void;
-    status(): { showing: 'none' | 'start' | 'clear'; seconds: number; counter: string };
+    status(): { showing: 'none' | 'start' | 'clear' | 'notice'; seconds: number; counter: string };
   } | null;
   game: Game;
   /** Start playing without capturing the mouse. */
@@ -128,6 +131,41 @@ export interface DebugApi {
    */
   doorwayObstructions(): Record<string, number>;
   /**
+   * Put the mission at the start of a step, as if everything before it
+   * had been done: 'keys' = power on; 'core' = all three keys in hand, the
+   * core still sealed; 'arming' = the core open and the switch arming (the
+   * final stand); 'armed' = ready to pull; 'saved' = pulled. The map is
+   * cleared of robots first.
+   */
+  missionJump(step: MissionStep): void;
+  /** Where the mission stands, what it is telling the player, and the places it happens. */
+  mission(): {
+    phase: string;
+    time: number;
+    keys: Record<string, boolean>;
+    custodian: string;
+    uplink: string;
+    uplinkHeld: number;
+    coreOpen: boolean;
+    armed: number;
+    bossSent: boolean;
+    bossDestroyed: boolean;
+    savedAt: number | null;
+    objective: { title: string; detail: string; target: string | null };
+    marker: { x: number; y: number; onScreen: boolean; distance: number } | null;
+    holdingUplink: boolean;
+    boss: { name: string; health: number } | null;
+    /** Robots of the mission's own on the map, and the elites among them (with where they are). */
+    extras: number;
+    elites: Array<{ role: string; x: number; z: number; health: number }>;
+    /** Where the Custodian's key is lying, if it is. */
+    droppedKey: { x: number; z: number } | null;
+    suspended: boolean;
+    places: Record<string, { area: string; at: readonly number[]; stand: readonly number[] }>;
+    /** The mission's numbers, from the config. */
+    rules: typeof MISSION;
+  };
+  /**
    * Every robot the rounds have created since the count was last reset, and
    * each one the player could see at the moment it was created: inside the
    * picture on screen, with a clear line to some part of it (or, for one
@@ -136,6 +174,17 @@ export interface DebugApi {
    * out.) Pass true to start the count again.
    */
   spawnAudit(reset?: boolean): { created: number; seen: Array<{ entry: string; x: number; y: number; z: number; eye: [number, number, number] }>; byEntry: Record<string, number>; waiting: number; lastResorts: number };
+  /**
+   * Whether a robot can walk from each way in to each room, on the same
+   * map of the floor the robots themselves steer by, with every door open.
+   * For each of the eight ways in: the rooms it cannot be reached from
+   * (which should be none). A robot with no route walks straight at the
+   * player and into the nearest wall, so one arriving in a test does not
+   * prove there is a route: this does.
+   */
+  entryRoutes(): Record<string, string[]>;
+  /** Debug: the solid things within `radius` metres of a point on the floor (their centres, half sizes and turn). */
+  solidsNear(x: number, z: number, radius: number): Array<{ x: number; z: number; hx: number; hz: number; turn: number; y0: number; y1: number }>;
   /**
    * Whether the places robots walk in from can be seen from indoors. From
    * every half metre of floor inside the building (rooms, doorways, the
@@ -180,7 +229,9 @@ declare global {
 }
 
 /** Keys for testing by hand, shown in the debug overlay. */
-const KEYS = { god: 'Digit7', scrap: 'Digit8', skip: 'Digit9', autopilot: 'Digit0' };
+const KEYS = { mission: 'Digit6', god: 'Digit7', scrap: 'Digit8', skip: 'Digit9', autopilot: 'Digit0' };
+/** The steps the mission can be jumped to, in order. */
+const MISSION_STEPS: MissionStep[] = ['power', 'keys', 'core', 'arming', 'armed', 'saved'];
 const FREE_SCRAP = 2000;
 
 export interface DebugTools {
@@ -199,6 +250,17 @@ export function installDebugApi(game: Game): DebugTools {
   let onErrand = false;
   let poison: THREE.Mesh | null = null;
 
+  /** Put the mission at the start of a step, with the map cleared of whatever the old step had on it. */
+  const jumpMission = (step: MissionStep): void => {
+    game.clearRobots();
+    game.mission.jump(step);
+  };
+  // [6] moves the mission on to its next step, as if the one in hand had been done.
+  game.input.onKey(KEYS.mission, () => {
+    if (game.state !== 'playing') return;
+    const next = MISSION_STEPS[MISSION_STEPS.indexOf(game.mission.state.phase) + 1];
+    if (next) jumpMission(next);
+  });
   game.input.onKey(KEYS.god, () => (game.godMode = !game.godMode));
   game.input.onKey(KEYS.scrap, () => game.grantScrap(FREE_SCRAP));
   game.input.onKey(KEYS.skip, () => game.skipRound());
@@ -399,6 +461,37 @@ export function installDebugApi(game: Game): DebugTools {
       for (const door of game.world.doors) door.settle();
       return gaps;
     },
+    missionJump(step) {
+      jumpMission(step);
+    },
+    mission() {
+      const { mission } = game;
+      const state = mission.state;
+      const dropped = game.world.mission.droppedAt;
+      return {
+        phase: state.phase,
+        time: state.time,
+        keys: { ...state.keys },
+        custodian: state.custodian,
+        uplink: state.uplink,
+        uplinkHeld: state.uplinkHeld,
+        coreOpen: state.coreOpen,
+        armed: state.armed,
+        bossSent: state.bossSent,
+        bossDestroyed: state.bossDestroyed,
+        savedAt: state.savedAt,
+        objective: mission.objective,
+        marker: game.objectiveMarker(),
+        holdingUplink: mission.holdingUplink,
+        boss: mission.boss,
+        extras: game.robots.filter((robot) => robot.alive && robot.extra).length,
+        elites: game.robots.filter((robot) => robot.alive && robot.role).map((robot) => ({ role: robot.role!, x: robot.position.x, z: robot.position.z, health: robot.healthLeft })),
+        droppedKey: dropped ? { x: dropped.x, z: dropped.z } : null,
+        suspended: game.director.suspended,
+        places: MISSION_PLACES,
+        rules: MISSION,
+      };
+    },
     spawnAudit(reset = false) {
       const report = { created: audit.created, seen: audit.seen.slice(), byEntry: { ...audit.byEntry }, waiting: game.director.waiting, lastResorts: game.director.lastResorts };
       if (reset) {
@@ -407,6 +500,36 @@ export function installDebugApi(game: Game): DebugTools {
         audit.byEntry = {};
       }
       return report;
+    },
+    entryRoutes() {
+      // A map of the floor with every door open, built the way the game builds its own.
+      const grid = createNavGrid(
+        NAV_BOUNDS,
+        game.world.nav.cell,
+        game.world.openColliders,
+        ROBOT.radius + 0.06,
+        0.3,
+        1.8,
+        WALKABLE,
+        ENTRY_PLANS.map((entry) => entry.at),
+      );
+      const cut: Record<string, string[]> = {};
+      for (const entry of ENTRY_PLANS) cut[entry.id] = [];
+      for (const area of AREA_IDS) {
+        const [x0, z0, x1, z1] = ROOM_RECTS[area];
+        // From the middle of the room (or the nearest open floor to it).
+        floodFrom(grid, (x0 + x1) / 2, (z0 + z1) / 2);
+        for (const entry of ENTRY_PLANS) {
+          const cell = cellAt(grid, entry.at[0], entry.at[1]);
+          if (cell < 0 || grid.blocked[cell] || grid.distance[cell] === Infinity) cut[entry.id]!.push(area);
+        }
+      }
+      return cut;
+    },
+    solidsNear(x, z, radius) {
+      return game.world.openColliders
+        .filter((c) => Math.hypot(c.x - x, c.z - z) < radius)
+        .map((c) => ({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, turn: Math.atan2(c.sin, c.cos), y0: c.y0, y1: c.y1 }));
     },
     spawnSightlines() {
       const raycaster = new THREE.Raycaster();
@@ -629,9 +752,9 @@ export function installDebugApi(game: Game): DebugTools {
       const { director } = game;
       const plan = director.rounds.plan;
       return [
-        `DEBUG  [7] god mode ${game.godMode ? 'ON' : 'off'}  [8] +${FREE_SCRAP} scrap  [9] skip round  [0] autopilot ${game.autopilot ? 'ON' : 'off'}`,
+        `DEBUG  [6] next mission step  [7] god mode ${game.godMode ? 'ON' : 'off'}  [8] +${FREE_SCRAP} scrap  [9] skip round  [0] autopilot ${game.autopilot ? 'ON' : 'off'}`,
         `round ${director.rounds.round} (${director.rounds.phase}${director.paused ? ', held' : ''})  robots ${game.robots.length} on map, ${remaining(director.rounds)} left  health ${plan.health}  speed ${plan.walkSpeed.toFixed(2)}${plan.runShare > 0 ? ` / ${plan.runSpeed.toFixed(2)} x${Math.round(plan.runShare * 100)}%` : ''}`,
-        `${WEAPONS[game.weapons.def.id].name}  area ${game.world.playerArea}  lights ${game.lights.liveNames.length}${game.autopilot ? `  autopilot: ${pilot.status}` : ''}`,
+        `${WEAPONS[game.weapons.def.id].name}  area ${game.world.playerArea}  lights ${game.lights.liveNames.length}  mission: ${game.mission.state.phase}${game.autopilot ? `  autopilot: ${pilot.status}` : ''}`,
       ];
     },
   };

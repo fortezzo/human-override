@@ -298,6 +298,46 @@ export const SCRAP = {
   meleeKill: 130,
 };
 
+/**
+ * The mission: restore power, recover three override keys, unseal the core,
+ * arm the kill switch and pull it. (The rules are in sim/mission.ts.)
+ */
+export const MISSION = {
+  /**
+   * The Custodian arrives with the first round numbered this or higher
+   * that starts with the power on. (Round 8: late enough that a focused
+   * player, who has the other two keys by then, reaches the final stand
+   * around round 10.)
+   */
+  custodianFromRound: 8,
+  /** Seconds the ground round the uplink has to be held, and how far from it that ground reaches (metres). */
+  uplinkSeconds: 60,
+  uplinkRadius: 6.5,
+  /** While the uplink is being held an extra robot is sent this often (seconds), up to this many of them on the map. */
+  uplinkWaveInterval: 2.4,
+  uplinkWaveMax: 8,
+  /** Seconds the kill switch takes to arm, and how far into that ARGUS's own unit arrives. */
+  armSeconds: 75,
+  bossAfter: 10,
+  /** During the final stand a robot is sent in this often (seconds), on top of whatever the round still owes. */
+  standInterval: 1.5,
+  standMax: 16,
+  /** How near the player must be to pick up a key that is lying on the floor (metres). */
+  keyReach: 1.7,
+  /**
+   * The Custodian, which carries a key, and the Proxy, ARGUS's own unit at
+   * the final stand. `health` is a multiple of an ordinary robot's in the
+   * same round; `speed` is metres per second (the player walks at 4.3);
+   * `damage` is one blow; `scrap` is the bounty for destroying it;
+   * `stagger` is how many times harder than an ordinary robot it is to
+   * knock off balance (a point-blank shotgun blast or a melee strike still
+   * rocks the Custodian; nothing rocks the Proxy); and `flinch` is how long
+   * a hit slows it for, in seconds (an ordinary robot: 0.22).
+   */
+  custodian: { health: 6, speed: 3.0, damage: 34, scrap: 500, stagger: 2, flinch: 0.1 },
+  proxy: { health: 12, speed: 3.6, damage: 45, scrap: 1500, stagger: 12, flinch: 0 },
+};
+
 /** How rounds grow. Round numbers start at 1. */
 export const ROUNDS = {
   /** Seconds from pressing Play to the first robot, and between rounds. */
@@ -314,13 +354,15 @@ export const ROUNDS = {
    * seconds and then comes in behind them.
    */
   arrivalPatience: 5,
+  /** A ceiling vent is not used while the player is standing within this many metres of the spot under it. */
+  ventClearance: 1.8,
   /** Seconds between arrivals in round 1, shrinking by `spawnQuicken` a round down to a floor. */
   spawnInterval: 2.3,
   spawnQuicken: 0.18,
   spawnIntervalMin: 0.45,
   /** Robot health: this much in round 1, growing by a fixed step, then by a percentage. */
   health: 70,
-  healthStep: 25,
+  healthStep: 22,
   healthStepRounds: 9,
   healthGrowth: 1.1,
   /** Walking speed in round 1 and how it climbs; from `runFrom` on, a growing share run. */

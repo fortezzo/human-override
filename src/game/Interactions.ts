@@ -1,4 +1,5 @@
-// The things the player can use with F: weapon racks and doors.
+// The things the player can use with F: weapon racks, doors, and the
+// mission's own (the breaker, the keys, the uplink, the kill switch).
 //
 // Each frame this finds the nearest usable thing the player is facing and
 // works out the prompt to show for it; when F is pressed it makes the
@@ -15,6 +16,7 @@ import { held } from '../sim/loadout';
 import type { Door } from '../world/Door';
 import { AREA_NAMES, RACK_PLANS, type RackPlan } from '../world/plan';
 import type { World } from '../world/World';
+import type { Mission } from './Mission';
 
 export interface Prompt {
   /** What pressing F will do, in plain words. */
@@ -48,6 +50,7 @@ export class Interactions {
     private readonly camera: THREE.PerspectiveCamera,
     private readonly weapons: WeaponController,
     private readonly wallet: () => Wallet,
+    private readonly mission: Mission,
   ) {}
 
   /** True if the player is looking roughly toward a point on the ground plane. */
@@ -84,6 +87,17 @@ export class Interactions {
     const loadout = this.weapons.loadout;
     this.prompt = null;
 
+    // The mission's own things first: the breaker, the keys, the uplink, the kill switch.
+    const step = this.mission.interaction();
+    if (step) {
+      this.prompt = step.prompt;
+      if (pressed) {
+        if (step.use) step.use();
+        else this.onDenied();
+      }
+      return;
+    }
+
     const rack = this.nearestRack();
     if (rack) {
       const def = WEAPONS[rack.weapon];
@@ -115,8 +129,13 @@ export class Interactions {
       const { cost } = door.plan;
       const beyond = AREA_NAMES[door.plan.a === this.world.playerArea ? door.plan.b : door.plan.a];
       if (cost === null) {
-        this.prompt = { text: `${beyond}: sealed`, cost: null, usable: false, note: 'Three override keys required' };
-        if (pressed) this.onDenied();
+        // The core: no amount of scrap opens it, only the three keys.
+        const core = this.mission.coreDoor();
+        this.prompt = core.prompt;
+        if (pressed) {
+          if (core.use) core.use();
+          else this.onDenied();
+        }
         return;
       }
       this.prompt = { text: `Open the door to the ${beyond}`, cost, usable: wallet.scrap >= cost, note: '' };

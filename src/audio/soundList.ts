@@ -58,6 +58,12 @@ export const SOUNDS = {
   scrapTick: { files: ['scrap_tick.mp3'], bus: 'ui', gain: 0.35, pitchJitter: 0.1, maxVoices: 3 },
   doorOpen: { files: ['door_open.mp3'], bus: 'impacts', gain: 0.95, reverb: 0.6 },
   roundClear: { files: ['round_clear.mp3'], bus: 'music', gain: 0.8, reverb: 0.4 },
+  missionPower: { files: ['mission_power.mp3'], bus: 'impacts', gain: 0.95, reverb: 0.5 },
+  missionKey: { files: ['mission_key.mp3'], bus: 'ui', gain: 0.7 },
+  missionNotice: { files: ['mission_notice.mp3'], bus: 'ui', gain: 0.55 },
+  missionAlarm: { files: ['mission_alarm.mp3'], bus: 'music', gain: 0.8, reverb: 0.3 },
+  missionSwitch: { files: ['mission_switch.mp3'], bus: 'impacts', gain: 1.0, reverb: 0.5 },
+  missionSaved: { files: ['mission_saved.mp3'], bus: 'music', gain: 0.9, reverb: 0.5 },
   gameOver: { files: ['game_over.mp3'], bus: 'music', gain: 0.95, reverb: 0.3 },
 
   ambienceRoom: { files: ['ambience_room.mp3'], bus: 'ambience', gain: 0.8 },

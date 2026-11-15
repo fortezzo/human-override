@@ -16,6 +16,7 @@ import { buildCore } from './core';
 import { Door } from './Door';
 import { buildHall } from './hall';
 import { buildLobby } from './lobby';
+import { MissionSet } from './MissionSet';
 import { AREA_IDS, AREA_RECTS, CORE, DOOR_PLANS, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
 import { buildPower } from './power';
 
@@ -27,6 +28,8 @@ export class World {
   readonly lights: LightDef[] = [];
   /** Drifting dust, one cloud per area. */
   readonly dust = new Map<AreaId, DustMotes>();
+  /** The parts of the map the mission moves: levers, the cage's gate, the keys. */
+  readonly mission: MissionSet;
   /** Meshes that stop bullets (rooms and doors). */
   readonly solids: THREE.Mesh[] = [];
   /** Everything solid right now: the rooms, plus every door that is still shut. */
@@ -49,6 +52,10 @@ export class World {
       this.lights.push(...area.lights);
       for (const { effect } of area.haze) area.group.add(effect.mesh);
     }
+    this.mission = new MissionSet(assets, materials);
+    for (const id of AREA_IDS) this.areas.get(id)!.group.add(this.mission.groups[id]);
+    this.group.add(this.mission.loose);
+    this.lights.push(...this.mission.lights);
     for (const plan of DOOR_PLANS) {
       const door = new Door(plan, assets, materials);
       this.doors.push(door);
@@ -195,6 +202,7 @@ export class World {
       }
     }
     for (const area of this.areas.values()) if (area.group.visible) area.tick?.(time);
+    this.mission.update(dt, time);
   }
 
   /** Shut every door and put the player back in the lobby (a new run). */
@@ -204,5 +212,6 @@ export class World {
     for (const door of this.doors) refreshRegion(this.nav, door.rect, this.colliders);
     this.playerArea = 'lobby';
     this.refreshVisibility();
+    this.mission.reset();
   }
 }

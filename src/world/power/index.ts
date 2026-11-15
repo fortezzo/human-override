@@ -10,7 +10,7 @@ import { LevelBuilder } from '../build/LevelBuilder';
 import { approach, drum, ibeam, vent, wall, type AreaBuild, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
-import { DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LOBBY, POWER, WALL } from '../plan';
+import { DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, KEY_CAGE, LOBBY, POWER, WALL } from '../plan';
 
 type Vec3 = [number, number, number];
 
@@ -148,11 +148,10 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   for (let i = 0; i < 6; i++) {
     for (const y of [1.7, 1.25]) b.box('rackSteel', [bx - 1.5 + i * 0.42, y, z1 - 0.57], [bx - 1.5 + i * 0.42 + 0.34, y + 0.34, z1 - 0.53], { collide: false, cast: false });
   }
-  // The breaker itself: a red lever in a hazard-striped housing.
+  // The breaker itself: a hazard-striped housing with a slot down it. (The
+  // lever that rides in the slot is a moving part: see world/MissionSet.ts.)
   b.box('hazard', [bx + 1.02, 0.75, z1 - 0.6], [bx + 1.5, 2.15, z1 - 0.53], { collide: false, cast: false });
   b.box('darkSteel', [bx + 1.2, 1.0, z1 - 0.64], [bx + 1.32, 1.9, z1 - 0.6], { collide: false, cast: false });
-  b.tube('rustedSteel', [bx + 1.26, 1.2, z1 - 0.6], [bx + 1.26, 1.2, z1 - 0.84], 0.028, false);
-  b.tube('hazard', [bx + 1.14, 1.2, z1 - 0.84], [bx + 1.38, 1.2, z1 - 0.84], 0.035, false);
   screens.add([bx - 1.05, 0.72, z1 - 0.535], [0, 0, -1], 0.62, 0.46, 'log');
   screens.add([bx - 0.25, 0.72, z1 - 0.535], [0, 0, -1], 0.62, 0.46, 'static');
   // Feeder cables up to the ceiling, either side of the sign and behind it.
@@ -163,9 +162,12 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   b.box('steelPlate', [bx - 1.3, 3.0, z1 - 0.26], [bx + 1.3, 3.04, z1 - 0.02], { collide: false, cast: false });
   for (const dx of [-0.9, 0.9]) b.box('darkSteel', [bx + dx - 0.03, 3.04, z1 - 0.1], [bx + dx + 0.03, 3.5, z1 - 0.02], { collide: false, cast: false });
 
-  // The key cage in the south-east corner: steel bars, a locked gate, a pedestal inside.
-  const cx0 = 19.3;
-  const cz0 = 10.7;
+  // The key cage in the south-east corner: steel bars, and a stand just
+  // inside the gate for the override key. (The gate, its lock and the key
+  // are moving parts: see world/MissionSet.ts.)
+  const cx0 = KEY_CAGE.x0;
+  const cz0 = KEY_CAGE.z0;
+  const gate = KEY_CAGE.gate;
   const bars = (along: 'x' | 'z', from: number, to: number, at: number) => {
     for (let u = from; u <= to + 0.001; u += 0.13) {
       const p: Vec3 = along === 'x' ? [u, 0, at] : [at, 0, u];
@@ -178,7 +180,8 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
     }
   };
   bars('x', cx0, x1, cz0);
-  bars('z', cz0, z1, cx0);
+  bars('z', cz0, gate.z0, cx0);
+  bars('z', gate.z1, z1, cx0);
   for (const [px, pz] of [
     [cx0, cz0],
     [x1 - 0.05, cz0],
@@ -188,12 +191,13 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   ] as const) {
     b.box('rustedSteel', [px - 0.04, 0, pz - 0.04], [px + 0.04, 2.7, pz + 0.04], { collide: false });
   }
-  b.box('hazard', [cx0 - 0.03, 0.95, 12.3], [cx0 + 0.03, 1.25, 12.7], { collide: false, cast: false });
+  // Nobody gets into the cage, open or shut: the key is taken through the gateway.
   b.blocker([cx0 - 0.05, 0, cz0 - 0.05], [x1, 2.7, cz0 + 0.05]);
   b.blocker([cx0 - 0.05, 0, cz0], [cx0 + 0.05, 2.7, z1]);
-  b.box('steelPlate', [20.7, 0, 12.2], [21.3, 0.95, 12.8], { collide: false });
-  b.box('darkSteel', [20.62, 0.95, 12.12], [21.38, 1.0, 12.88], { collide: false });
-  b.prop('ammo_box', { at: [21.0, 1.0, 12.5], rotY: 0.6, collide: false });
+  const stand = KEY_CAGE.stand;
+  b.box('steelPlate', [stand.x - 0.26, 0, stand.z - 0.26], [stand.x + 0.26, stand.top - 0.05, stand.z + 0.26], { collide: false });
+  b.box('darkSteel', [stand.x - 0.32, stand.top - 0.05, stand.z - 0.32], [stand.x + 0.32, stand.top, stand.z + 0.32], { collide: false });
+  b.prop('ammo_box', { at: [21.4, 0, 11.6], rotY: 0.6, collide: false });
   b.prop('steel_frame_shelves_03', { at: [21.1, 0, z1 - 0.4], rotY: Math.PI, collide: false });
 
   // ---- Pipes and clutter
@@ -323,8 +327,14 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   // Small lamps over the two doors on the west side.
   lights.push({ name: 'powerLobbyDoor', area: 'power', kind: 'point', color: SODIUM, intensity: 4, position: [x0 + 0.7, 2.75, 3.6], distance: 4.5 });
   lights.push({ name: 'powerServiceDoor', area: 'power', kind: 'point', color: SODIUM, intensity: 4, position: [x0 + 0.7, 2.8, (service.from + service.to) / 2], distance: 4.5 });
-  lights.push({ name: 'breakerLamp', area: 'power', kind: 'point', color: RED, intensity: 6, position: [bx + 1.26, 2.2, z1 - 1.0], distance: 5, flicker: 'pulse' });
+  // The breaker's lamp: red and pulsing while the power is out, steady green once it is back.
+  lights.push({ name: 'breakerLamp', area: 'power', kind: 'point', color: RED, intensity: 6, position: [bx + 1.26, 2.2, z1 - 1.0], distance: 5, flicker: 'pulse', when: 'powerOut' });
+  lights.push({ name: 'breakerLampOn', area: 'power', kind: 'point', color: 0x8dffa8, intensity: 1.8, position: [bx + 1.26, 2.3, z1 - 1.1], distance: 4, when: 'powerOn' });
   lights.push({ name: 'cageLamp', area: 'power', kind: 'point', color: AMBER, intensity: 9, position: [21.0, 2.1, 12.5], distance: 5.5 });
+  // With the power back, the room's own lighting comes up over the
+  // machines: cooler than the emergency lamps, and not much of it.
+  lights.push({ name: 'powerMainsNorth', area: 'power', kind: 'point', color: 0xdfe8ff, intensity: 22, position: [15.9, h - 0.9, -0.8], distance: 11, when: 'powerOn' });
+  lights.push({ name: 'powerMainsSouth', area: 'power', kind: 'point', color: 0xdfe8ff, intensity: 16, position: [16.4, h - 0.9, 8.6], distance: 11, when: 'powerOn' });
   // Bounce: what the pools throw back up off the floor. Kept low, so the
   // dark between the pools stays dark without going to solid black.
   lights.push({ name: 'powerBounce', area: 'power', kind: 'point', color: 0xffc890, intensity: 6.5, position: [16, 2.4, 8.6], distance: 13 });

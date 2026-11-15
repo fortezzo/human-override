@@ -29,6 +29,10 @@ const START = { in: 0.2, hold: 1.5, fly: 0.42 };
 const PULSE = 0.6;
 /** Round cleared, in seconds: in, hold, out. */
 const CLEAR = { in: 0.24, hold: 2.0, out: 0.4 };
+/** A notice from the mission, in seconds: in, hold, out. */
+const NOTICE = { in: 0.22, hold: 2.5, out: 0.4 };
+/** A notice that has waited this long (seconds) for its turn is dropped. */
+const STALE = 7;
 /** How long the scan line takes to cross the view. */
 const SCAN = 0.6;
 
@@ -57,6 +61,8 @@ const NO_ROUND = '\u200b';
 const SHADE = '0 2px 22px rgba(0, 0, 0, 0.6)';
 
 export class RoundAnnouncer {
+  /** Everything the announcements are drawn with: taken out of the picture altogether while nothing is showing. */
+  private readonly root: HTMLElement;
   private readonly scan: HTMLElement;
   private readonly lines: HTMLElement;
   private readonly start: HTMLElement;
@@ -69,8 +75,16 @@ export class RoundAnnouncer {
   private readonly clearNumber: HTMLElement;
   private readonly clearRule: HTMLElement;
   private readonly clearSub: HTMLElement;
+  private readonly note: HTMLElement;
+  private readonly noteTitle: HTMLElement;
+  private readonly noteRule: HTMLElement;
+  private readonly noteSub: HTMLElement;
+  /** Notices waiting their turn: a title, a second line, and when it was raised. */
+  private readonly queue: Array<[string, string, number]> = [];
+  /** The notice on screen, so it can be shown again if a round cuts it short. */
+  private showing: [string, string, number] | null = null;
 
-  private mode: 'idle' | 'start' | 'clear' = 'idle';
+  private mode: 'idle' | 'start' | 'clear' | 'notice' = 'idle';
   /** Seconds since the announcement on screen began. */
   private time = 0;
   /** Seconds since the corner counter last took a new number, or -1. */
@@ -96,6 +110,7 @@ export class RoundAnnouncer {
     private readonly corner: HTMLElement,
   ) {
     const root = el('div', 'announce', parent);
+    this.root = root;
     this.lines = el('div', 'announce-lines', root);
     this.scan = el('div', 'announce-scan', root);
 
@@ -114,7 +129,13 @@ export class RoundAnnouncer {
     this.clearRule = el('div', 'announce-rule', this.clear);
     this.clearSub = el('div', 'announce-sub', this.clear);
 
+    this.note = el('div', 'announce-clear announce-notice', root);
+    this.noteTitle = el('div', 'announce-clear-title', this.note);
+    this.noteRule = el('div', 'announce-rule', this.note);
+    this.noteSub = el('div', 'announce-sub', this.note);
+
     this.corner.textContent = NO_ROUND;
+    this.hide();
   }
 
   /** A round has begun, with this many robots on their way. */
@@ -143,8 +164,35 @@ export class RoundAnnouncer {
     this.render();
   }
 
+  /**
+   * Something in the mission has happened: one line and a second, smaller
+   * one. It waits its turn if something else is on screen, and is shown
+   * again afterwards if a round begins on top of it.
+   */
+  notice(title: string, detail: string): void {
+    this.queue.push([title, detail, performance.now()]);
+    if (this.mode === 'idle') this.nextNotice();
+  }
+
+  private nextNotice(): void {
+    // One that has been waiting longer than a few seconds is no longer news.
+    const now = performance.now();
+    while (this.queue.length && now - this.queue[0]![2] > STALE * 1000) this.queue.shift();
+    const next = this.queue.shift();
+    if (!next) return;
+    this.showing = next;
+    this.mode = 'notice';
+    this.time = 0;
+    this.noteTitle.textContent = next[0];
+    this.noteSub.textContent = next[1];
+    this.clock = performance.now();
+    this.render();
+  }
+
   /** A new run: nothing on screen and no round on the counter. */
   reset(): void {
+    this.queue.length = 0;
+    this.showing = null;
     this.mode = 'idle';
     this.frozenAt = null;
     this.hide();
@@ -177,9 +225,21 @@ export class RoundAnnouncer {
       this.pulse += dt;
       this.renderPulse();
     }
-    if (this.mode === 'idle') return;
+    if (this.mode === 'idle') {
+      if (this.queue.length) this.nextNotice();
+      return;
+    }
     this.time += dt;
     this.render();
+  }
+
+  /** Debug: take down whatever is on screen and forget any notices waiting (the round counter is kept). */
+  dismiss(): void {
+    this.queue.length = 0;
+    this.showing = null;
+    this.frozenAt = null;
+    if (this.mode === 'start') this.show(this.round, false);
+    this.finish();
   }
 
   /** Debug: hold the announcement on screen at a given moment (null lets it go on). */
@@ -189,15 +249,34 @@ export class RoundAnnouncer {
   }
 
   /** What is on screen, for checks. */
-  get status(): { showing: 'none' | 'start' | 'clear'; seconds: number; counter: string } {
+  get status(): { showing: 'none' | 'start' | 'clear' | 'notice'; seconds: number; counter: string } {
     return { showing: this.mode === 'idle' ? 'none' : this.mode, seconds: this.time, counter: (this.corner.textContent ?? '').replace(NO_ROUND, '') };
   }
 
   // ------------------------------------------------------------------ drawing
 
   private render(): void {
+    if (this.mode !== 'idle') this.root.style.visibility = 'visible';
     if (this.mode === 'start') this.renderStart();
     else if (this.mode === 'clear') this.renderClear();
+    else if (this.mode === 'notice') this.renderNotice();
+  }
+
+  private renderNotice(): void {
+    const t = this.time;
+    const outAt = NOTICE.in + NOTICE.hold;
+    if (t >= outAt + NOTICE.out) {
+      this.showing = null;
+      this.finish();
+      return;
+    }
+    const calm = settings.value.reducedMotion;
+    const leaving = clamp01((t - outAt) / NOTICE.out);
+    const rise = calm ? 0 : 8 * (1 - easeOutCubic(t / NOTICE.in)) - 5 * leaving;
+    this.note.style.opacity = String(clamp01(t / (calm ? 0.25 : 0.1)) * (1 - leaving));
+    this.note.style.transform = `translateY(${rise.toFixed(1)}px)`;
+    this.noteRule.style.transform = `scaleX(${easeOutCubic(t / 0.35).toFixed(4)})`;
+    this.noteSub.style.clipPath = '';
   }
 
   private renderStart(): void {
@@ -317,9 +396,15 @@ export class RoundAnnouncer {
     }
   }
 
-  /** Whatever is on screen is cut short: a round being announced still reaches the counter. */
+  /**
+   * Whatever is on screen is cut short. A round being announced still
+   * reaches the counter, and a notice that had barely been seen goes back
+   * to the front of the queue.
+   */
   private settle(): void {
     if (this.mode === 'start') this.show(this.round, false);
+    if (this.mode === 'notice' && this.showing && this.time < NOTICE.in + NOTICE.hold * 0.6) this.queue.unshift(this.showing);
+    this.showing = null;
     this.finish();
   }
 
@@ -329,8 +414,10 @@ export class RoundAnnouncer {
   }
 
   private hide(): void {
+    this.root.style.visibility = 'hidden';
     this.start.style.opacity = '0';
     this.clear.style.opacity = '0';
+    this.note.style.opacity = '0';
     this.scan.style.opacity = '0';
     this.lines.style.opacity = '0';
     this.number.style.transform = '';

@@ -15,6 +15,10 @@ export interface RobotDesign {
   weakPoint: { centre: [number, number, number]; radius: number };
   /** Centre of the visor's glow relative to the head joint, and its width and height. */
   glow: { at: [number, number, number]; size: [number, number] };
+  /** Colour of everything on it that glows (the standard red if left out). */
+  eyeColor?: number;
+  /** Somewhere on the body an object can be hung: relative to a joint, riding on that joint's bone. */
+  carry?: { bone: string; at: [number, number, number] };
   /** Adds every part of the body to the builder. */
   build(rig: Rig, builder: RobotBuilder): void;
 }

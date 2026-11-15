@@ -6,7 +6,8 @@ import { PLAYER, QUALITY, WEAPONS } from './config';
 import { settings } from './core/settings';
 import { installDebugApi, type DebugTools } from './debug/debugApi';
 import { Game } from './game/Game';
-import { accuracy, readBest } from './game/RunStats';
+import { accuracy, readBest, type RunStats } from './game/RunStats';
+import { KEY_IDS } from './sim/mission';
 import { AREA_NAMES } from './world/plan';
 import { Hud } from './ui/Hud';
 import { Screens } from './ui/Screens';
@@ -32,7 +33,7 @@ async function boot(): Promise<void> {
   let tools: DebugTools | null = null;
   if (debug) {
     tools = installDebugApi(game);
-    window.__HO!.announcement = { freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
+    window.__HO!.announcement = { clear: () => hud.announcer.dismiss(), freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
   }
 
   // Phones and tablets get the scene and a friendly note instead of a game
@@ -43,11 +44,12 @@ async function boot(): Promise<void> {
   let previous = game.state;
   game.onStateChange = (state) => {
     // Coming into play from anything but a pause is a new run.
-    if (state === 'playing' && previous !== 'paused') hud.reset();
+    // (Coming back from a pause, or carrying on after the ending, is the same run.)
+    if (state === 'playing' && previous !== 'paused' && previous !== 'saved') hud.reset();
     previous = state;
     hud.setVisible(state === 'playing');
-    if (state === 'title') screens.setBest(readBest().round);
-    screens.show(state === 'playing' ? 'none' : state === 'paused' ? 'pause' : state === 'over' ? 'over' : touchOnly ? 'touch' : 'title');
+    if (state === 'title') screens.setBest(readBest());
+    screens.show(state === 'playing' ? 'none' : state === 'paused' ? 'pause' : state === 'over' ? 'over' : state === 'saved' ? 'saved' : touchOnly ? 'touch' : 'title');
   };
   game.onQualityChange = (level, automatic) => {
     screens.setQuality(level, settings.value.quality);
@@ -66,19 +68,22 @@ async function boot(): Promise<void> {
     hud.scrapChange(-purchase.cost);
     if (purchase.kind === 'weapon' && purchase.replaced) hud.showToast(`${WEAPONS[purchase.replaced].name} left behind`, 2.5);
   };
-  game.onGameOver = (stats, best) => {
-    screens.setSummary({
-      round: Math.max(1, stats.round),
-      kills: stats.kills,
-      weakPointKills: stats.weakPointKills,
-      meleeKills: stats.meleeKills,
-      accuracy: accuracy(stats),
-      scrapEarned: stats.scrapEarned,
-      time: stats.time,
-      best,
-      bestRound: readBest().round,
-    });
-  };
+  const summary = (stats: RunStats, best: boolean) => ({
+    round: Math.max(1, stats.round),
+    kills: stats.kills,
+    weakPointKills: stats.weakPointKills,
+    meleeKills: stats.meleeKills,
+    accuracy: accuracy(stats),
+    scrapEarned: stats.scrapEarned,
+    time: stats.time,
+    missionTime: stats.missionTime,
+    best,
+    bestRound: readBest().round,
+    bestMissionTime: readBest().missionTime,
+  });
+  game.onGameOver = (stats, best) => screens.setSummary(summary(stats, best));
+  game.onSaved = (stats, best) => screens.setSaved(summary(stats, best));
+  game.onNotice = (title, detail) => hud.notice(title, detail);
 
   // ---- Interface -> game
   screens.onStart = () => game.requestPlay();
@@ -111,7 +116,7 @@ async function boot(): Promise<void> {
 
   await game.load((fraction) => screens.setProgress(fraction));
   screens.setQuality(game.qualityLevel, settings.value.quality);
-  screens.setBest(readBest().round);
+  screens.setBest(readBest());
   screens.show(touchOnly ? 'touch' : 'title');
 
   // The HUD reads the game's state once per frame.
@@ -133,10 +138,14 @@ async function boot(): Promise<void> {
         current: weapons.loadout.current,
         scrap: wallet.scrap,
         round: director.rounds.round,
-        remaining: director.remaining,
+        // (During the final stand the rounds stand aside: there is no count to show.)
+        remaining: director.suspended ? 0 : director.remaining,
         area: AREA_NAMES[game.world.playerArea],
         prompt: game.interactions.prompt,
         markers: game.markers(),
+        objective: { ...game.mission.objective, keys: KEY_IDS.map((id) => game.mission.state.keys[id]) },
+        objectiveMarker: game.objectiveMarker(),
+        boss: game.mission.boss,
         spread: weapons.spread(player),
         fov: game.camera.fov,
         aim: player.aim,

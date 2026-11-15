@@ -13,8 +13,9 @@
 //   - every kind of purchase, and that each charges the right amount
 //   - the player cannot leave the map
 //   - a change of quality level mid-game leaves no shader to be built late
-//   - every door, bought with F and walked through on foot from both sides
-//     at every quality level: the room beyond is never near black
+//   - every door (the core's included, unsealed with the three keys),
+//     opened with F and walked through on foot from both sides at every
+//     quality level: the room beyond is never near black
 //   - every room is closed off by its own walls, nothing stands across a
 //     doorway, and a robot in the darkest places still stands out from
 //     what is behind it
@@ -28,6 +29,12 @@
 //     held above the crosshair while the game carries on, and flies to the
 //     corner counter; the plain version with flashing reduced; and the
 //     "cleared" line with the scrap the round paid
+//   - the mission, start to finish: power restored at the breaker, the
+//     three override keys (the cage, the uplink held for a minute, the
+//     Custodian destroyed), the core unsealed, the kill switch armed
+//     through the final stand with ARGUS's Proxy destroyed, the switch
+//     pulled, every robot powered down, HUMANITY SAVED, and three more
+//     rounds played afterward
 //   - whole rounds played by the autopilot, with purchases
 //   - going down without god mode reaches the game-over screen
 //   - restarting three times leaves nothing behind
@@ -38,8 +45,8 @@
 //   - with the browser slowed down to imitate a weak computer, the game
 //     lowers its own quality and says so
 //
-// The mission, ARGUS and the rest of the economy arrive in later stages and
-// are added to this script with them.
+// ARGUS's adaptations and the rest of the economy arrive in later stages
+// and are added to this script with them.
 
 import fs from 'node:fs';
 import sharp from 'sharp';
@@ -939,6 +946,12 @@ try {
       { door: 'hallPower', stand: [10.6, 11.4], face: [8, 11.4], inside: [5.2, 11.6], look: [-3, 17], room: 'hall' },
       { door: 'lobbyHall', stand: [0, 9.3], face: [0, 6], inside: [0, 4.2], look: [0, -6], room: 'lobby' },
     ],
+    // The core's door is not bought: with the three override keys in hand, F unseals it.
+    'lobby, hall, the core, and out again': [
+      { door: 'lobbyHall', stand: [0, 5.4], face: [0, 9], inside: [-1, 12.9], look: [-1, 22], room: 'hall' },
+      { door: 'hallCore', keys: true, stand: [-1, 24.2], face: [-1, 27], inside: [-1, 28.4], look: [-1, 34], room: 'core' },
+      { door: null, inside: [-1, 22.6], look: [-1, 12], room: 'hall' },
+    ],
   };
   const dark = [];
   const walked = [];
@@ -954,7 +967,22 @@ try {
         ho.step(1 / 60, 20);
       }, level);
       for (const leg of legs) {
-        const where = `${level}: ${name}, the ${leg.door} door into the ${leg.room}`;
+        const where = `${level}: ${name}, ${leg.door ? `the ${leg.door} door` : 'back out'} into the ${leg.room}`;
+        // A leg with no door of its own walks back out through the one just opened.
+        if (leg.door === null) {
+          if (!(await walkTo(leg.inside[0], leg.inside[1], leg.look[0], leg.look[1]))) {
+            dark.push(`${where}: could not walk through`);
+            break;
+          }
+          await step(75);
+          const back = await run();
+          const view = await measurePicture();
+          walked.push(view.mean);
+          if (back.area !== leg.room) dark.push(`${where}: ended up in the ${back.area}`);
+          else if (view.black > 70 || view.mean < 10) dark.push(`${where}: brightness ${view.mean.toFixed(1)} of 255, ${view.black.toFixed(0)}% near black`);
+          continue;
+        }
+        if (leg.keys) await ev(() => window.__HO.missionJump('core'));
         if (!(await walkTo(leg.stand[0], leg.stand[1], leg.face[0], leg.face[1]))) {
           dark.push(`${where}: could not walk to the door`);
           break;
@@ -968,7 +996,7 @@ try {
         await tap('interact');
         await step(110); // the door takes 1.6 seconds to open
         const opened = await run();
-        if (!opened.doors[leg.door] || opened.scrap >= atDoor.scrap) {
+        if (!opened.doors[leg.door] || (!leg.keys && opened.scrap >= atDoor.scrap) || (leg.keys && opened.scrap !== atDoor.scrap)) {
           dark.push(`${where}: F did not open it (${atDoor.at})`);
           break;
         }
@@ -992,9 +1020,9 @@ try {
     }
   }
   check(
-    'every door, bought with F and walked through on foot, leads into a lit room at every quality level',
-    dark.length === 0 && walked.length === 24,
-    dark.length ? dark.join(' | ') : `24 crossings (3 doors, both directions, 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
+    'every door, opened with F and walked through on foot, leads into a lit room at every quality level',
+    dark.length === 0 && walked.length === 36,
+    dark.length ? dark.join(' | ') : `36 crossings (all 4 doors, both directions, 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
   );
 
   // Each room is drawn only while it can be seen, so each must be closed
@@ -1143,6 +1171,21 @@ try {
       : `${standing.length} robots measured; the faintest (${weakest.where}, ${weakest.distance.toFixed(1)} m away) has ${Math.round(weakest.share * 100)}% of itself standing out; without the edge light ${blind} of them would fail`,
   );
 
+  // Every way in has to be joined to every room on the map of the floor
+  // the robots steer by. (A robot arriving in the check above does not
+  // prove it: one with no route walks straight at the player, and if that
+  // line happens to pass through the opening it gets in anyway. A cart
+  // parked in the loading dock's mouth cut the dock off this way for two
+  // stages, and every robot sent that way with the player in another room
+  // stood against a wall until it was recalled.)
+  const routes = await ev(() => window.__HO.entryRoutes());
+  const cut = Object.entries(routes).filter(([, rooms]) => rooms.length > 0);
+  check(
+    'every way in is joined to every room on the map robots steer by',
+    Object.keys(routes).length === 8 && cut.length === 0,
+    cut.length ? cut.map(([entry, rooms]) => `${entry} cannot be reached from the ${rooms.join(', ')}`).join('; ') : `${Object.keys(routes).join(', ')}`,
+  );
+
   // Robots must never be seen to appear. Those that walk in are created
   // outside, in the gap behind a shipping container: from nowhere inside
   // the building is there a line of sight to those gaps.
@@ -1211,6 +1254,314 @@ try {
     ho.holdRounds(true);
     ho.clearRobots();
   });
+
+  // ============================================================ the mission
+  // A whole mission, start to finish, driven with the debug tools: god mode
+  // on and scrap for the asking, but every step taken the way a player
+  // takes it: standing where they would stand and pressing F.
+  const mission = () => ev(() => window.__HO.mission());
+  /** Stand at one of the mission's places, facing it (from further back if asked). */
+  const standAt = (name, back = 0) =>
+    ev(
+      ([name, back]) => {
+        const ho = window.__HO;
+        const place = ho.mission().places[name];
+        const dx = place.at[0] - place.stand[0];
+        const dz = place.at[2] - place.stand[1];
+        const length = Math.hypot(dx, dz) || 1;
+        ho.place(place.stand[0] - (dx / length) * back, place.stand[1] - (dz / length) * back, (Math.atan2(-dx, -dz) * 180) / Math.PI, 0);
+        ho.step(1 / 60, 12);
+      },
+      [name, back],
+    );
+  /** Turn on a robot of a given kind and fire at it, striking it when it is in reach, until it is destroyed. */
+  const destroy = (role) =>
+    ev((role) => {
+      const ho = window.__HO;
+      const game = ho.game;
+      const head = new game.camera.position.constructor();
+      let frames = 0;
+      for (; frames < 60 * 240; frames++) {
+        const robot = game.robots.find((r) => r.role === role && r.alive);
+        if (!robot) break;
+        if (robot.grounded) {
+          // Aim at its head from wherever the player is standing.
+          head.setFromMatrixPosition(robot.bones.get('Head').matrixWorld);
+          const eye = game.camera.position;
+          const dx = head.x - eye.x;
+          const dz = head.z - eye.z;
+          const p = game.player.position;
+          ho.place(p.x, p.z, (Math.atan2(-dx, -dz) * 180) / Math.PI, (Math.atan2(head.y - eye.y, Math.hypot(dx, dz)) * 180) / Math.PI);
+          ho.press('fire', true);
+          if (frames % 40 === 0 && Math.hypot(dx, dz) < 1.9) ho.tap('melee');
+        }
+        // The scripted run does not stop to shop: it is handed ammunition.
+        const weapon = game.weapons.state;
+        if (weapon.reserve < 30) weapon.reserve = 120;
+        if (weapon.ammo === 0 && !game.weapons.reloading) ho.tap('reload');
+        ho.step(1 / 60, 1);
+      }
+      ho.press('fire', false);
+      ho.step(1 / 60, 30);
+      return frames / 60;
+    }, role);
+
+  await ev(() => {
+    const ho = window.__HO;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.scrap(6000);
+    for (const id of ['lobbyHall', 'lobbyPower', 'hallPower']) ho.openDoor(id);
+    ho.step(1 / 60, 140);
+    // The carbine from its rack, for the two elites.
+    ho.place(1.6, 10.2, 180);
+    ho.step(1 / 60, 6);
+    ho.tap('interact');
+    ho.step(1 / 60, 40);
+    ho.spawnAudit(true);
+  });
+  let m = await mission();
+  r = await run();
+  check('the mission begins with the power out, and the tracker says where to go', m.phase === 'power' && m.objective.target === 'breaker' && m.marker !== null && (await page.locator('.hud-objective-title').textContent()) === 'RESTORE POWER AT THE MAIN BREAKER' && r.weapon === 'carbine', `"${m.objective.title}", marker ${Math.round(m.marker?.distance ?? 0)} m away`);
+
+  // ---- Before the power is on, nothing of the mission's can be used.
+  const locked = [];
+  for (const [place, back] of [['cage', 0], ['uplink', 0], ['coreDoor', 0], ['killSwitch', 0]]) {
+    if (place === 'killSwitch') continue; // behind the sealed door
+    await standAt(place, back);
+    const prompt = (await run()).prompt;
+    await tap('interact');
+    await step(10);
+    locked.push(`${place}: "${prompt?.text ?? 'no prompt'}"${prompt?.usable ? ' USABLE' : ''}`);
+  }
+  m = await mission();
+  r = await run();
+  check('without power the cage is locked, the uplink is dead and the core is sealed', m.phase === 'power' && !m.keys.cage && m.uplink === 'idle' && !r.doors.hallCore && locked.every((line) => !line.includes('USABLE') && !line.includes('no prompt')), locked.join(', '));
+
+  // ---- 1. Restore power.
+  await standAt('breaker');
+  const breakerPrompt = (await run()).prompt;
+  await tap('interact');
+  await step(30);
+  m = await mission();
+  const powered = await ev(() => ({ lamps: window.__HO.game.lights.power, notice: document.querySelector('.announce-notice .announce-clear-title').textContent }));
+  check('throwing the main breaker restores power', breakerPrompt?.text === 'Restore power' && m.phase === 'keys' && powered.lamps && powered.notice === 'POWER RESTORED' && m.objective.target === 'cage', `"${breakerPrompt?.text}", then "${m.objective.title}"`);
+
+  // ---- 2a. The key in the cage.
+  await step(90); // the gate slides aside
+  await standAt('cage');
+  const cagePrompt = (await run()).prompt;
+  await tap('interact');
+  await step(10);
+  m = await mission();
+  check('the cage gives up its key once the power is on', cagePrompt?.text === 'Take the override key' && m.keys.cage && (await page.locator('.hud-keys i.held').count()) === 1, `"${cagePrompt?.text}"; keys held: 1 of 3`);
+  await tap('interact');
+  await step(5);
+  check('and only once', Object.values((await mission()).keys).filter(Boolean).length === 1);
+
+  // ---- 2b. The uplink: hold the ground round it for a minute.
+  await ev(() => window.__HO.holdRounds(false));
+  await standAt('uplink');
+  const uplinkPrompt = (await run()).prompt;
+  await tap('interact');
+  const held = await ev(() => {
+    const ho = window.__HO;
+    const place = ho.mission().places.uplink;
+    const out = { wave: 0, awayHeld: 0, awayTitle: '' };
+    const hold = (frames) => {
+      for (let i = 0; i < frames; i++) {
+        ho.place(place.stand[0], place.stand[1], 180);
+        ho.step(1 / 60, 1);
+        out.wave = Math.max(out.wave, ho.mission().extras);
+      }
+    };
+    hold(60 * 20);
+    // Walk away for ten seconds: the clock stops, and what was earned is kept.
+    const before = ho.mission().uplinkHeld;
+    for (let i = 0; i < 600; i++) {
+      ho.place(-1, 11, 0);
+      ho.step(1 / 60, 1);
+    }
+    out.awayHeld = ho.mission().uplinkHeld - before;
+    out.awayTitle = ho.mission().objective.title;
+    out.at20 = before;
+    hold(60 * 39);
+    out.at59 = ho.mission().uplinkHeld;
+    out.keyAt59 = ho.mission().keys.uplink;
+    hold(60 * 2);
+    return out;
+  });
+  m = await mission();
+  check(
+    'the uplink hands over its key after the ground round it has been held for 60 seconds',
+    uplinkPrompt?.text === 'Start the uplink' && Math.abs(held.at20 - 20) < 0.2 && !held.keyAt59 && Math.abs(held.at59 - 59) < 0.2 && m.keys.uplink && m.uplink === 'done',
+    `20.0 s after 20 s, ${held.at59.toFixed(1)} s and no key after 59, the key at 60`,
+  );
+  check('its clock stops while the player is away, and the tracker says so', Math.abs(held.awayHeld) < 0.05 && held.awayTitle === 'GET BACK TO THE UPLINK', `${held.awayHeld.toFixed(2)} s gained in ten seconds away: "${held.awayTitle}"`);
+  check('ARGUS sends more robots at the uplink than the round would', held.wave >= 4, `up to ${held.wave} extra robots on the map`);
+
+  // ---- 2c. The Custodian arrives with a later round (the config says which) and carries the third key.
+  m = await mission();
+  const waitingFor = m.objective;
+  const dueRound = m.rules.custodianFromRound;
+  await ev((dueRound) => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 4.6, 0);
+    for (let guard = 0; guard < 80 && ho.run().round < dueRound - 1; guard++) {
+      ho.skipRound();
+      ho.step(1 / 60, 2);
+    }
+    // The round before is under way: end it and let the Custodian's round begin by itself.
+    ho.skipRound();
+    for (let i = 0; i < 60 * 14 && ho.run().round < dueRound; i++) ho.step(1 / 60, 1);
+    for (let i = 0; i < 60 * 8 && ho.mission().custodian !== 'active'; i++) ho.step(1 / 60, 1);
+    // No need for the rest of that round to be in the way.
+    ho.holdRounds(true);
+    for (const robot of [...ho.game.robots]) if (!robot.role) robot.dispose();
+    ho.game.robots.splice(0, ho.game.robots.length, ...ho.game.robots.filter((robot) => robot.role));
+  }, dueRound);
+  m = await mission();
+  r = await run();
+  check(
+    `with two keys in hand the tracker explains that a Custodian carries the third, and it arrives with round ${dueRound}`,
+    waitingFor.target === null && waitingFor.title.includes('CUSTODIAN') && waitingFor.detail.includes(`ROUND ${dueRound}`) && r.round === dueRound && m.custodian === 'active' && m.elites.length === 1 && m.elites[0].role === 'custodian' && m.objective.target === 'custodian' && m.marker !== null,
+    `"${waitingFor.title}" (${waitingFor.detail}); then "${m.objective.title}"`,
+  );
+  const custodianFight = await destroy('custodian');
+  m = await mission();
+  r = await run();
+  check('destroying the Custodian drops its key where it fell and pays a bounty', m.custodian === 'dropped' && m.droppedKey !== null && m.objective.target === 'custodianKey' && r.earned >= 500, `destroyed in ${custodianFight.toFixed(0)} s of fire; its key is lying at (${m.droppedKey?.x.toFixed(1)}, ${m.droppedKey?.z.toFixed(1)})`);
+  await ev(() => {
+    const ho = window.__HO;
+    const key = ho.mission().droppedKey;
+    ho.place(key.x + 0.9, key.z, 90, -30);
+    ho.step(1 / 60, 8);
+  });
+  const dropPrompt = (await run()).prompt;
+  await tap('interact');
+  await step(10);
+  m = await mission();
+  check('picking it up makes three, and the tracker sends the player to the core', dropPrompt?.text === 'Pick up the override key' && m.keys.custodian && m.phase === 'core' && m.droppedKey === null && m.objective.target === 'coreDoor' && (await page.locator('.hud-keys i.held').count()) === 3, `"${m.objective.title}"`);
+
+  // ---- 3. Unseal the core, arm the switch, survive the final stand.
+  await standAt('coreDoor');
+  const corePrompt = (await run()).prompt;
+  await tap('interact');
+  await step(120);
+  r = await run();
+  check('the three keys unseal the core', corePrompt?.text === 'Unseal the core' && corePrompt.usable && r.doors.hallCore && (await mission()).objective.target === 'killSwitch');
+  await standAt('killSwitch');
+  const armPrompt = (await run()).prompt;
+  await tap('interact');
+  await step(20);
+  const early = (await run()).prompt;
+  await tap('interact'); // too early: it is still arming
+  const stand = await ev(() => {
+    const ho = window.__HO;
+    const out = { extras: 0, bossAt: -1, phases: new Set() };
+    for (let i = 0; i < 60 * 14; i++) {
+      ho.step(1 / 60, 1);
+      const state = ho.mission();
+      out.extras = Math.max(out.extras, state.extras);
+      out.phases.add(state.phase);
+      if (out.bossAt < 0 && state.boss) out.bossAt = state.armed;
+    }
+    return { extras: out.extras, bossAt: out.bossAt, phases: [...out.phases], suspended: ho.mission().suspended, round: ho.run().round };
+  });
+  m = await mission();
+  check(
+    'arming the kill switch starts the final stand: the rounds stand aside and ARGUS sends a horde and its Proxy',
+    armPrompt?.text === 'Arm the kill switch' && early?.usable === false && stand.phases.join() === 'arming' && stand.suspended && stand.extras >= 6 && stand.bossAt > 9 && stand.bossAt < 13 && m.boss?.name === 'ARGUS PROXY' && (await page.locator('.hud-boss').isVisible()),
+    `${stand.extras} robots on the map 14 s in; the Proxy arrived ${stand.bossAt.toFixed(1)} s in`,
+  );
+  const proxyFight = await destroy('proxy');
+  m = await mission();
+  check('the Proxy can be destroyed', m.bossSent && m.bossDestroyed && m.boss === null && !(await page.locator('.hud-boss').isVisible()), `in ${proxyFight.toFixed(0)} s of fire`);
+  const armedAfter = await ev(() => {
+    const ho = window.__HO;
+    for (let i = 0; i < 60 * 90 && ho.mission().phase === 'arming'; i++) ho.step(1 / 60, 1);
+    return ho.mission().armed;
+  });
+  m = await mission();
+  check('the switch arms after 75 seconds', m.phase === 'armed' && Math.abs(armedAfter - 75) < 0.1 && m.objective.title === 'PULL THE KILL SWITCH', `armed at ${armedAfter.toFixed(1)} s`);
+
+  // ---- 4. Pull it.
+  await standAt('killSwitch');
+  const pullPrompt = (await run()).prompt;
+  const before4 = await run();
+  await tap('interact');
+  await step(60);
+  const after4 = await run();
+  m = await mission();
+  check(
+    'pulling the switch powers down every robot on the map',
+    pullPrompt?.text === 'PULL THE KILL SWITCH' && m.phase === 'saved' && before4.robots.filter((q) => q.alive).length >= 6 && after4.robots.filter((q) => q.alive).length === 0 && after4.robots.length === before4.robots.length,
+    `${before4.robots.filter((q) => q.alive).length} robots working before, none after; ${after4.robots.length} wrecks where they stood`,
+  );
+  await step(150);
+  const ending = await ev(() => ({
+    state: window.__HO.run().state,
+    shown: !document.querySelector('.screen.saved').classList.contains('hidden'),
+    title: document.querySelector('.screen.saved .over-title')?.textContent,
+    stats: [...document.querySelectorAll('.screen.saved .over-stat')].map((row) => `${row.firstElementChild.textContent} ${row.lastElementChild.textContent}`),
+    buttons: [...document.querySelectorAll('.screen.saved button')].map((b) => b.textContent),
+    best: JSON.parse(localStorage.getItem('human-override.best.v1') ?? '{}'),
+    time: window.__HO.mission().savedAt,
+  }));
+  check(
+    'then the HUMANITY SAVED screen shows the run, with the choice to fight on or stop',
+    ending.state === 'saved' && ending.shown && ending.title === 'HUMANITY SAVED' && ending.stats.length === 6 && ending.stats[0].startsWith('Mission time') && ending.buttons.join() === 'KEEP FIGHTING,END RUN',
+    `${ending.stats.slice(0, 3).join(', ')}`,
+  );
+  check('the fastest mission time is remembered', Math.abs(ending.best.missionTime - ending.time) < 0.01 && ending.time > 60, `${ending.best.missionTime?.toFixed(0)} s`);
+  const missionAudit = await ev(() => window.__HO.spawnAudit());
+  check('through the whole mission no robot was created in view', missionAudit.created > 30 && missionAudit.seen.length === 0, `${missionAudit.created} created, ${missionAudit.seen.length} seen`);
+
+  // ---- Afterwards: fight on, for three more rounds.
+  const roundThen = after4.round;
+  await ev(() => {
+    const ho = window.__HO;
+    ho.holdRounds(false);
+    ho.play();
+    ho.step(1 / 60, 10);
+    ho.autopilot(true);
+  });
+  const resumed = await run();
+  let endless = resumed;
+  let endlessFrames = 0;
+  for (; endlessFrames < 60 * 60 * 14 && endless.round < roundThen + 4; endlessFrames += 600) {
+    await ev(() => window.__HO.simulate(1 / 60, 600));
+    endless = await run();
+  }
+  await step(2);
+  check(
+    'KEEP FIGHTING clears the wrecks away and the rounds carry on: three more are played through',
+    resumed.state === 'playing' && resumed.robots.length === 0 && endless.round >= roundThen + 4 && (await mission()).phase === 'saved',
+    `from round ${roundThen} to round ${endless.round} in ${(endlessFrames / 3600).toFixed(1)} game minutes, ${endless.kills} destroyed in all`,
+  );
+  // Going down after the switch has been pulled is not ARGUS winning.
+  await ev(() => {
+    const ho = window.__HO;
+    ho.autopilot(false);
+    ho.god(false);
+    for (let i = 0; i < 60 * 240 && ho.run().state === 'playing'; i++) ho.step(1 / 60, 1);
+  });
+  await step(3);
+  const lateOver = await ev(() => ({ state: window.__HO.run().state, eyebrow: document.querySelector('.screen.over .eyebrow')?.textContent, rows: [...document.querySelectorAll('.screen.over .over-stat')].map((row) => `${row.firstElementChild.textContent} ${row.lastElementChild.textContent}`) }));
+  check('going down after that still ends the run, with humanity saved on the card', lateOver.state === 'over' && lateOver.eyebrow.includes('HUMANITY SAVED') && lateOver.rows[0].startsWith('Mission time'), lateOver.eyebrow);
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    ho.step(1 / 60, 5);
+  });
+  m = await mission();
+  r = await run();
+  check('a new run starts the mission afresh', m.phase === 'power' && Object.values(m.keys).every((key) => !key) && !r.doors.hallCore && m.custodian === 'waiting' && m.uplink === 'idle' && !m.suspended && (await ev(() => window.__HO.game.lights.power)) === false);
 
   // The reflections each room is lit by are made from a photograph of it.
   // One broken pixel in that photograph (a shader's "not a number") used to
@@ -1426,6 +1777,53 @@ try {
   await until('playing');
   s = await at();
   check('Play Again starts a fresh run with the mouse captured', s.state === 'playing' && s.locked && s.round === 0 && s.health === 100 && s.scrap === 0 && s.robots.length === 0);
+
+  // The ending, for real: the kill switch pulled with the real F key, the
+  // mouse let go for the HUMANITY SAVED screen, and taken back by a real
+  // click on KEEP FIGHTING. Then END RUN, back to the title, where the
+  // fastest mission time is shown.
+  await doing(() => {
+    const ho = window.__HO;
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.missionJump('armed');
+    const place = ho.mission().places.killSwitch;
+    ho.place(place.stand[0], place.stand[1], 180);
+  });
+  const offered = await becomes(() => window.__HO.run().prompt?.text === 'PULL THE KILL SWITCH');
+  await key('KeyF');
+  await until('saved');
+  s = await at();
+  const endingShown = await real.locator('.screen.saved').isVisible();
+  check('the real F key pulls the kill switch; the ending lets go of the mouse', offered && s.state === 'saved' && !s.locked && endingShown, (await real.locator('.screen.saved .over-title').textContent()).trim());
+  await real.waitForTimeout(700);
+  await real.click('.screen.saved button[data-action="resume"]');
+  await until('playing');
+  s = await at();
+  check('KEEP FIGHTING takes the mouse back and the same run carries on', s.state === 'playing' && s.locked && (await doing(() => window.__HO.mission().phase)) === 'saved');
+  // Round the loop once more, to END RUN this time.
+  await doing(() => window.__HO.missionJump('armed'));
+  await becomes(() => window.__HO.run().prompt?.text === 'PULL THE KILL SWITCH');
+  await key('KeyF');
+  await until('saved');
+  await real.waitForTimeout(700);
+  await real.click('.screen.saved button[data-action="quit"]');
+  await until('title');
+  s = await at();
+  const record = (await real.locator('.title-note').textContent()).trim();
+  // (The time shown is that of the mission played in full further up. The
+  // two runs just made here skipped straight to the switch with the debug
+  // tools, and a skipped mission sets no record.)
+  const fastest = /Fastest mission: (\d+):(\d\d)/.exec(record);
+  check(
+    'END RUN goes to the title screen, which shows the fastest mission time (and a mission skipped with the debug tools sets no record)',
+    s.state === 'title' && (await real.locator('.screen.title').isVisible()) && fastest !== null && Number(fastest[1]) * 60 + Number(fastest[2]) > 60,
+    record,
+  );
+  await real.click('button[data-action="start"]');
+  await until('playing');
+  s = await at();
+  check('and Play starts a clean run from there', s.state === 'playing' && s.locked && s.round === 0 && (await doing(() => window.__HO.mission().phase)) === 'power');
 
   // A weak computer, imitated: the browser's processor is slowed sixteen
   // times over, so frames take far too long. On Auto the game should notice

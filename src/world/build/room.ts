@@ -32,6 +32,8 @@ export interface AreaBuild {
   dustBeams: DustBeam[];
   /** Called every frame while the area can be seen (animated screens and the like). */
   tick?: (time: number) => void;
+  /** The core only: how awake ARGUS is, 1 to 0. Its eye on the wall follows this. */
+  argus?: { awake: number };
 }
 
 export interface Opening {

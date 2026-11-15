@@ -143,6 +143,34 @@ export const ENTRY_PLANS: EntryPlan[] = [
   { id: 'coreVentEast', area: 'core', kind: 'drop', at: [2.4, 33.5], spread: 0.25, height: CORE.height, fromRound: 1 },
 ];
 
+// ------------------------------------------------------------ the mission
+
+/** One place the mission sends the player. */
+export interface MissionPlace {
+  area: AreaId;
+  /** The thing itself: where the HUD's marker points. */
+  at: readonly [number, number, number];
+  /** Where to stand to use it (on the floor). */
+  stand: readonly [number, number];
+}
+
+/** The main breaker's lever, on the power room's south wall. */
+export const BREAKER = { x: 15.4 + 1.26, y: 1.45, z: POWER.z1 - 0.6 } as const;
+/** The key cage in the power room's south-east corner, its gate, and the stand the key sits on just inside it. */
+export const KEY_CAGE = { x0: 19.3, z0: 10.7, gate: { z0: 12.0, z1: 13.0 }, stand: { x: 20.0, z: 12.5, top: 1.0 } } as const;
+/** The uplink station in the server hall, and the ground round it that has to be held. */
+export const UPLINK = { x: 5.6, z: HALL.z1 - 0.55, zone: { x: 5.2, z: 22.9 } } as const;
+/** The kill-switch console, in the middle of the core. */
+export const KILL_SWITCH = { x: (CORE.x0 + CORE.x1) / 2, z: (CORE.z0 + CORE.z1) / 2 } as const;
+
+export const MISSION_PLACES = {
+  breaker: { area: 'power', at: [BREAKER.x, 1.5, BREAKER.z - 0.2], stand: [BREAKER.x - 0.5, POWER.z1 - 2.2] },
+  cage: { area: 'power', at: [KEY_CAGE.stand.x, 1.25, KEY_CAGE.stand.z], stand: [KEY_CAGE.x0 - 1.1, KEY_CAGE.stand.z] },
+  uplink: { area: 'hall', at: [UPLINK.x, 1.9, UPLINK.z], stand: [UPLINK.x, UPLINK.z - 1.9] },
+  coreDoor: { area: 'hall', at: [-1.0, 2.2, HALL.z1 + WALL / 2], stand: [-1.0, HALL.z1 - 1.3] },
+  killSwitch: { area: 'core', at: [KILL_SWITCH.x, 1.45, KILL_SWITCH.z], stand: [KILL_SWITCH.x, KILL_SWITCH.z - 0.95] },
+} as const satisfies Record<string, MissionPlace>;
+
 // ------------------------------------------------------------ wall racks
 
 export interface RackPlan {

@@ -49,7 +49,8 @@ export class Gibs {
   /** Called when a chunk hits the floor hard, for a clang. */
   onImpact: (position: THREE.Vector3, speed: number) => void = () => {};
 
-  constructor(private readonly model: RobotModel) {
+  /** @param model any robot type: it only lends the pool something to hold until the first burst */
+  constructor(model: RobotModel) {
     this.group.name = 'gibs';
     for (let i = 0; i < FX.maxGibs; i++) {
       const mesh = new THREE.Mesh(model.chunks[0]!.geometry, model.material);
@@ -77,12 +78,13 @@ export class Gibs {
 
   /**
    * Replace a robot with its chunks.
+   * @param model which kind of robot it was
    * @param bones the robot's bones, in their current animated pose
    * @param centre roughly the middle of the body
    * @param impulse direction and strength of the killing shot
    */
-  burst(bones: Map<string, THREE.Bone>, centre: THREE.Vector3, impulse: THREE.Vector3): void {
-    for (const chunk of this.model.chunks) {
+  burst(model: RobotModel, bones: Map<string, THREE.Bone>, centre: THREE.Vector3, impulse: THREE.Vector3): void {
+    for (const chunk of model.chunks) {
       const bone = bones.get(chunk.bone);
       if (!bone) continue;
       const gib = this.pool[this.next]!;
@@ -90,6 +92,7 @@ export class Gibs {
 
       bone.matrixWorld.decompose(_position, _quaternion, _scale);
       gib.mesh.geometry = chunk.geometry;
+      gib.mesh.material = model.material;
       gib.mesh.position.copy(chunk.offset).applyMatrix4(bone.matrixWorld);
       gib.mesh.quaternion.copy(_quaternion);
       gib.mesh.scale.copy(_scale);

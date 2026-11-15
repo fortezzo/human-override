@@ -4,11 +4,15 @@
 
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { ROBOT } from '../../config';
 import type { Assets } from '../../core/assets';
 import type { RobotDesign } from './kit/design';
 import { RobotBuilder, type Chunk } from './kit/RobotBuilder';
 import { Rig } from './kit/Rig';
 import { createGlowMaterial, createRobotMaterial } from './robotMaterial';
+
+/** The size the standard robot is built at, which the hit shapes were measured for. */
+const STANDARD_SCALE = 1.05;
 
 export type ClipName = 'idle' | 'walk' | 'run' | 'attack' | 'attackHeavy' | 'hit' | 'deathBack' | 'deathFront';
 
@@ -26,6 +30,12 @@ export class RobotModel {
   readonly glow: { at: THREE.Vector3; size: THREE.Vector2 };
   /** Overall size multiplier of this robot type. */
   readonly scale: number;
+  /** How much thicker its body and limbs are than the standard robot's (for hit testing). */
+  readonly girth: number;
+  /** Colour of everything on it that glows. */
+  readonly eyeColor: number;
+  /** Where an object can be hung on it: a bone, and a position in that bone's own space. Null if nowhere. */
+  readonly carry: { bone: string; at: THREE.Vector3 } | null;
   /** Triangles in the body, for the performance report. */
   readonly triangles: number;
   private readonly template = new THREE.Group();
@@ -43,6 +53,9 @@ export class RobotModel {
     this.triangles = built.triangles;
     this.posture = rig.posture(design.posture);
     this.scale = design.scale;
+    this.girth = design.scale / STANDARD_SCALE;
+    this.eyeColor = design.eyeColor ?? ROBOT.eyeColor;
+    this.carry = design.carry ? { bone: design.carry.bone, at: rig.at(design.carry.bone).add(new THREE.Vector3(...design.carry.at)).applyMatrix4(rig.toBone(design.carry.bone)) } : null;
 
     const headJoint = rig.at('Head');
     const inHead = (offset: [number, number, number]) => headJoint.clone().add(new THREE.Vector3(...offset)).applyMatrix4(rig.toBone('Head'));

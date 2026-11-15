@@ -7,6 +7,9 @@
 
 import * as THREE from 'three';
 import { acceleratedRaycast } from 'three-mesh-bvh';
+import { CUSTODIAN } from '../entities/robot/designs/custodian';
+import { PROXY } from '../entities/robot/designs/proxy';
+import { Mission } from './Mission';
 import { Sight } from './Sight';
 import { AudioEngine } from '../audio/AudioEngine';
 import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, type QualityLevel } from '../config';
@@ -44,7 +47,11 @@ import { createRunStats, saveBest, type RunStats } from './RunStats';
 // Fast ray tests against the level for bullets.
 THREE.Mesh.prototype.raycast = acceleratedRaycast;
 
-export type GameState = 'title' | 'playing' | 'paused' | 'over';
+/**
+ * 'saved' is the ending: the kill switch has been pulled and the HUMANITY
+ * SAVED screen is up. The run is not over; the player may carry on from it.
+ */
+export type GameState = 'title' | 'playing' | 'paused' | 'over' | 'saved';
 
 /** A robot to point out on the HUD when only a few are left. */
 export interface Marker {
@@ -73,6 +80,8 @@ export class Game {
   /** What the player can see from where they stand (robots are never created in view). */
   sight!: Sight;
   interactions!: Interactions;
+  /** The mission: power, the three keys, the core, the kill switch. */
+  mission!: Mission;
   /** Scrap, and what happened this run. */
   wallet: Wallet = createWallet(SCRAP.start);
   /** Scrap earned in the run before the round now being played began. */
@@ -97,6 +106,10 @@ export class Game {
   onDenied: () => void = () => {};
   /** The run ended. `best` is true if it beat the best round so far. */
   onGameOver: (stats: RunStats, best: boolean) => void = () => {};
+  /** Something in the mission has just happened: a line for the HUD. */
+  onNotice: (title: string, detail: string) => void = () => {};
+  /** The kill switch has been pulled. `best` is true if no run has finished the mission faster. */
+  onSaved: (stats: RunStats, best: boolean) => void = () => {};
 
   /** Debug only: overrides where the camera sits and looks. */
   debugCamera: { position: THREE.Vector3; yaw: number; pitch: number; fov?: number } | null = null;
@@ -109,7 +122,10 @@ export class Game {
 
   private materials!: MaterialLibrary;
   private view!: WeaponView;
+  /** The standard robot, and the two elites built on the same skeleton. */
   private robotModel!: RobotModel;
+  private custodianModel!: RobotModel;
+  private proxyModel!: RobotModel;
   /** A robot that is never shown: it keeps the robots' shaders built. */
   private spare!: Robot;
   private gibs!: Gibs;
@@ -199,6 +215,8 @@ export class Game {
     this.scene.add(this.particles.group, this.decals.group, this.casings.mesh);
 
     this.robotModel = new RobotModel(this.assets, DRUDGE);
+    this.custodianModel = new RobotModel(this.assets, CUSTODIAN);
+    this.proxyModel = new RobotModel(this.assets, PROXY);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
     // A spare robot that is never shown. While it exists the robots' shaders
@@ -220,7 +238,8 @@ export class Game {
     this.sight = new Sight(this.camera, () => this.world.solids);
     this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits), this.sight);
     this.combat = new Combat(this.world, this.robots, this.player, this.camera, this.view, this.effects, this.casings, this.audio);
-    this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet);
+    this.mission = new Mission(this.world, this.director, this.lights, this.audio, this.player, this.camera, this.robots);
+    this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet, this.mission);
     this.wireEvents();
 
     this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
@@ -260,15 +279,19 @@ export class Game {
     weapons.onMeleeLand = () => combat.strike();
 
     combat.onHit = (hit) => {
-      earn(this.wallet, hit.scrap);
-      this.stats.scrapEarned += hit.scrap;
+      let scrap = hit.scrap;
       if (hit.killed) {
         this.stats.kills++;
         if (hit.weakPoint) this.stats.weakPointKills++;
         if (hit.melee) this.stats.meleeKills++;
-        director.destroyed();
+        // Robots the mission sent in are not the round's to count.
+        if (!hit.robot.extra) director.destroyed();
+        // The elites pay a bounty on top of the usual award.
+        scrap += this.mission.robotDestroyed(hit.robot);
       }
-      this.onHit(hit);
+      earn(this.wallet, scrap);
+      this.stats.scrapEarned += scrap;
+      this.onHit(scrap === hit.scrap ? hit : { ...hit, scrap });
     };
     combat.onShotFired = (hit) => {
       this.stats.shots++;
@@ -283,7 +306,14 @@ export class Game {
       this.earnedBeforeRound = this.wallet.earned;
       audio.play('sting');
       this.onRound('start', round, director.rounds.plan.count);
+      this.mission.roundStarted(round);
     };
+
+    this.mission.onNotice = (title, detail) => this.onNotice(title, detail);
+    this.mission.onPowerDown = () => {
+      for (const robot of this.robots) robot.powerDown();
+    };
+    this.mission.onSaved = () => this.showSaved();
     director.onRoundClear = (round) => {
       audio.play('roundClear');
       this.onRound('clear', round, this.wallet.earned - this.earnedBeforeRound);
@@ -531,6 +561,7 @@ export class Game {
       this.audio.resume();
       this.startBeds();
       if (from === 'title' || from === 'over') this.beginRun();
+      else if (from === 'saved') this.fightOn();
       // Throw away mouse movement that built up while not playing.
       this.input.consumeLook();
       this.lastFrame = performance.now();
@@ -556,6 +587,7 @@ export class Game {
     this.world.reset();
     this.director.reset();
     this.director.forceEntry = null;
+    this.mission.reset();
     this.weapons.reset();
     this.view.show(this.weapons.def.id);
     this.wallet = createWallet(SCRAP.start);
@@ -595,10 +627,46 @@ export class Game {
     this.fadeTarget = 0.32;
     this.audio.play('gameOver');
     for (const action of ['fire', 'aim', 'sprint', 'forward', 'back', 'left', 'right'] as const) this.input.release(action);
-    const best = saveBest(this.stats);
+    const best = saveBest(this.stats).round;
     this.input.unlock();
     this.onStateChange('over');
     this.onGameOver(this.stats, best);
+  }
+
+  /**
+   * The kill switch has been pulled and the robots have gone down: let go
+   * of the mouse and put the HUMANITY SAVED screen up. The run is not over;
+   * the player may fight on from here.
+   */
+  private showSaved(): void {
+    if (this.state !== 'playing') return;
+    this.state = 'saved';
+    this.stats.missionTime = this.mission.state.savedAt;
+    this.stats.missionSkipped = this.mission.skipped;
+    this.fadeTarget = 0.8;
+    this.audio.play('missionSaved');
+    for (const action of ['fire', 'aim', 'sprint', 'forward', 'back', 'left', 'right'] as const) this.input.release(action);
+    const best = saveBest(this.stats).mission;
+    this.input.unlock();
+    this.onStateChange('saved');
+    this.onSaved(this.stats, best);
+  }
+
+  /**
+   * The player chose to fight on after the ending. The robots the switch
+   * put out fall to pieces where they lie, and the rounds pick up again
+   * with the next one.
+   */
+  private fightOn(): void {
+    this.fadeTarget = 1;
+    for (let i = this.robots.length - 1; i >= 0; i--) {
+      const robot = this.robots[i]!;
+      if (robot.alive) continue;
+      this.gibs.burst(robot.model, robot.bones, robot.chest(this.tmpB), this.tmpA.set(0, 0, 0));
+      robot.dispose();
+      this.robots.splice(i, 1);
+    }
+    this.mission.resume();
   }
 
   private startBeds(): void {
@@ -641,7 +709,7 @@ export class Game {
 
     if (this.state === 'playing') this.updatePlay(step);
     else if (this.state === 'title') this.updateTitle();
-    else if (this.state === 'over') this.view.root.visible = false;
+    else if (this.state === 'over' || this.state === 'saved') this.view.root.visible = false;
 
     if (this.debugCamera) {
       const { position, yaw, pitch, fov } = this.debugCamera;
@@ -714,6 +782,7 @@ export class Game {
 
     this.interactions.update(input.wasPressed('interact'));
     this.director.update(dt);
+    this.mission.update(dt);
     this.stats.time += dt;
   }
 
@@ -737,15 +806,23 @@ export class Game {
 
   // ----------------------------------------------------------------- robots
 
-  /** Remove every robot at once (for tests and screenshots). */
+  /**
+   * Remove every robot at once (for tests, screenshots and the debug
+   * "skip round" key). The mission is told about any of its own that go
+   * this way, so that an elite it still needs is sent in again.
+   */
   clearRobots(): void {
-    for (const robot of this.robots) robot.dispose();
+    for (const robot of this.robots) {
+      robot.dispose();
+      if (robot.extra) this.mission.robotLost(robot);
+    }
     this.robots.length = 0;
   }
 
   /** Add a robot to the map. */
   addRobot(x: number, z: number, heading: number, traits?: RobotTraits): Robot {
-    const robot = new Robot(this.robotModel, x, z, heading, traits);
+    const model = traits?.role === 'custodian' ? this.custodianModel : traits?.role === 'proxy' ? this.proxyModel : this.robotModel;
+    const robot = new Robot(model, x, z, heading, traits);
     this.robots.push(robot);
     this.scene.add(robot.root);
     return robot;
@@ -795,7 +872,7 @@ export class Game {
 
       if (events.breakApart) {
         const centre = robot.chest(this.tmpB);
-        this.gibs.burst(robot.bones, centre, robot.killImpulse);
+        this.gibs.burst(robot.model, robot.bones, centre, robot.killImpulse);
         this.effects.robotDestroyed(centre);
         audio.play('robotDeath', { position: centre });
         player.addShake(Math.max(0, 0.5 - centre.distanceTo(this.camera.position) * 0.05));
@@ -805,7 +882,8 @@ export class Game {
         // Never let a robot stay wedged somewhere: take it off and send it round again.
         robot.dispose();
         this.robots.splice(i, 1);
-        this.director.recalled();
+        if (robot.extra) this.mission.robotLost(robot);
+        else this.director.recalled();
       }
     }
   }
@@ -826,9 +904,10 @@ export class Game {
   markers(): Marker[] {
     const out: Marker[] = [];
     const remaining = this.director.remaining;
-    if (this.state !== 'playing' || remaining <= 0 || remaining > ROUNDS.markLast) return out;
+    if (this.state !== 'playing' || this.director.suspended || remaining <= 0 || remaining > ROUNDS.markLast) return out;
     for (const robot of this.robots) {
-      if (!robot.alive) continue;
+      // (Only the round's own: robots the mission sent in do not hold a round open.)
+      if (!robot.alive || robot.extra) continue;
       const point = robot.chest(this.tmpA);
       const distance = point.distanceTo(this.camera.position);
       point.y += 0.75;
@@ -846,6 +925,25 @@ export class Game {
       out.push({ x, y, onScreen, distance });
     }
     return out;
+  }
+
+  /** Where the mission's next step is, for the HUD's marker (null if there is nowhere to go). */
+  objectiveMarker(): Marker | null {
+    if (this.state !== 'playing' || !this.mission.target(this.tmpA)) return null;
+    const point = this.tmpA;
+    const distance = point.distanceTo(this.camera.position);
+    point.project(this.camera);
+    const behind = point.z > 1;
+    let x = behind ? -point.x : point.x;
+    let y = behind ? -point.y : point.y;
+    const onScreen = !behind && Math.abs(x) < 0.94 && Math.abs(y) < 0.86;
+    if (!onScreen) {
+      // Slide it to the edge of the screen in the right direction.
+      const scale = 0.86 / Math.max(Math.abs(x), Math.abs(y), 0.001);
+      x *= scale;
+      y *= scale;
+    }
+    return { x, y, onScreen, distance };
   }
 
   /** In automatic mode, step quality down if the frame rate stays low. */

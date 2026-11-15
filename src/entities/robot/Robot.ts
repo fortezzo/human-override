@@ -7,6 +7,7 @@ import { addsLightOnly } from '../../render/glow';
 import { PoseLayers } from './kit/PoseLayers';
 import { ROBOT } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
+import { settings } from '../../core/settings';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
 import { nextWaypoint, type NavGrid } from '../../sim/navGrid';
 import { rayCapsule, raySphere } from '../../sim/rayShapes';
@@ -40,7 +41,22 @@ export interface RobotTraits {
   speed: number;
   /** Dropping from a ceiling vent: the height it starts at. Leave out for one that walks in. */
   dropFrom?: number;
+  /** An elite: the Custodian, which carries an override key, or the Proxy, ARGUS's own unit. */
+  role?: RobotRole;
+  /**
+   * Sent in by the mission, on top of the round's own robots: destroying
+   * it pays scrap but does not count toward clearing the round.
+   */
+  extra?: boolean;
+  /** Damage of one blow, if not the usual. */
+  attackDamage?: number;
+  /** How hard a single hit has to be to knock it off balance, if not the usual. */
+  staggerDamage?: number;
+  /** How long a hit slows it for (seconds), if not the usual. */
+  flinchTime?: number;
 }
+
+export type RobotRole = 'custodian' | 'proxy';
 
 /** Capsules that follow the limbs: [bone at one end, bone at the other, radius]. */
 const LIMBS: Array<[string, string, number]> = [
@@ -78,13 +94,19 @@ export class Robot {
   hurry = false;
   /** Where it came in, for the debug tools. */
   entry = '';
+  /** An elite, or null for one of the horde. */
+  readonly role: RobotRole | null;
+  /** Sent in by the mission, on top of the round's own robots. */
+  readonly extra: boolean;
+  /** Switched off by the kill switch: it slumps where it stands and stays there. */
+  poweredDown = false;
 
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<ClipName, THREE.AnimationAction>();
   private current: ClipName = 'idle';
   private readonly eyeMaterial: THREE.MeshBasicMaterial;
   private readonly glow: THREE.Sprite;
-  private readonly eyeColor = new THREE.Color(ROBOT.eyeColor);
+  private readonly eyeColor: THREE.Color;
   /** The design's hunch and the bullet flinch, layered over the animation. */
   private readonly pose: PoseLayers;
 
@@ -107,13 +129,22 @@ export class Robot {
   private readonly body: CircleBody = { x: 0, z: 0, radius: ROBOT.radius, feet: 0, head: 1.8 };
 
   constructor(
-    private readonly model: RobotModel,
+    readonly model: RobotModel,
     x: number,
     z: number,
     heading: number,
     traits: RobotTraits = { health: ROBOT.health, speed: ROBOT.walkSpeed },
   ) {
-    this.spec = { ...ROBOT, health: traits.health };
+    this.spec = {
+      ...ROBOT,
+      health: traits.health,
+      attackDamage: traits.attackDamage ?? ROBOT.attackDamage,
+      staggerDamage: traits.staggerDamage ?? ROBOT.staggerDamage,
+      flinchTime: traits.flinchTime ?? ROBOT.flinchTime,
+    };
+    this.role = traits.role ?? null;
+    this.extra = traits.extra ?? false;
+    this.eyeColor = new THREE.Color(model.eyeColor);
     this.mind = createRobotMind(this.spec);
     this.moveSpeed = traits.speed;
     this.root = model.instantiate();
@@ -173,6 +204,39 @@ export class Robot {
     return this.mind.state !== 'dead';
   }
 
+  /** How much of its health is left, 0..1. */
+  get healthLeft(): number {
+    return Math.max(0, this.mind.health / this.spec.health);
+  }
+
+  /**
+   * Hang an object on the robot (the Custodian's key, in the cradle on its
+   * back). It rides on the bone and is left behind when the robot is
+   * removed. Does nothing on a robot with nowhere to carry it.
+   */
+  carry(object: THREE.Object3D): void {
+    const place = this.model.carry;
+    const bone = place && this.bones.get(place.bone);
+    if (!place || !bone) return;
+    object.position.copy(place.at);
+    bone.add(object);
+  }
+
+  /**
+   * The kill switch has been pulled: it stops where it is, slumps, and its
+   * lights die. It stays on the map as a wreck.
+   */
+  powerDown(): void {
+    if (!this.alive) return;
+    this.mind.state = 'dead';
+    this.mind.health = 0;
+    this.poweredDown = true;
+    this.collapse = 0;
+    const clip: ClipName = Math.random() < 0.5 ? 'deathBack' : 'deathFront';
+    this.play(clip, 0.3, true);
+    this.actions.get(clip)!.timeScale = rand(0.55, 0.9);
+  }
+
   /** Roughly the middle of the chest, for effects. */
   chest(out: THREE.Vector3): THREE.Vector3 {
     return out.setFromMatrixPosition(this.bones.get('Spine1')!.matrixWorld);
@@ -222,7 +286,24 @@ export class Robot {
       return out;
     }
 
-    if (this.mind.state === 'dead') {
+    if (this.poweredDown) {
+      // Switched off: it goes down slowly, its lights fading with a last
+      // flicker, and stays where it falls. One caught in mid-air still lands.
+      this.collapse += dt;
+      if (this.falling) {
+        this.fallSpeed += 14 * dt;
+        p.y -= this.fallSpeed * dt;
+        if (p.y <= 0) {
+          p.y = 0;
+          this.falling = false;
+          out.landed = true;
+        }
+      }
+      // Its lights die away over a second, each robot wavering at its own
+      // pace (a room full of them must not strobe).
+      const fade = Math.max(0, 1 - this.collapse / 1.1);
+      this.setEyes(fade * (settings.value.reducedMotion ? 1 : 0.7 + 0.3 * Math.sin(this.time * 11)));
+    } else if (this.mind.state === 'dead') {
       // Collapsing: the death animation plays briefly, eyes guttering.
       this.collapse += dt;
       this.setEyes(Math.random() < 0.5 ? 0.15 : 1 - this.collapse / COLLAPSE_TIME);
@@ -353,8 +434,10 @@ export class Robot {
     if (!this.alive) return null;
     // Cheap rejection: is the ray anywhere near the robot at all?
     const p = this.root.position;
-    _a.set(p.x, 0.9, p.z);
-    if (raySphere(origin, direction, _a, 1.3) < 0) return null;
+    // The shapes below were measured on the standard robot; bigger kinds are that much thicker.
+    const girth = this.model.girth;
+    _a.set(p.x, p.y + 0.9 * girth, p.z);
+    if (raySphere(origin, direction, _a, 1.3 * girth) < 0) return null;
 
     let best = maxDistance;
     let zone: HitZone | null = null;
@@ -369,7 +452,7 @@ export class Robot {
 
     _a.setFromMatrixPosition(this.bones.get('Hips')!.matrixWorld);
     _b.setFromMatrixPosition(this.bones.get('Neck')!.matrixWorld);
-    const torsoHit = rayCapsule(origin, direction, _a, _b, 0.2);
+    const torsoHit = rayCapsule(origin, direction, _a, _b, 0.2 * girth);
     // The head wins a near-tie so shots at the neckline count as weak-point hits.
     if (torsoHit >= 0 && torsoHit < best - (zone === 'head' ? 0.08 : 0)) {
       best = torsoHit;
@@ -379,7 +462,7 @@ export class Robot {
     for (const [from, to, radius] of LIMBS) {
       _a.setFromMatrixPosition(this.bones.get(from)!.matrixWorld);
       _b.setFromMatrixPosition(this.bones.get(to)!.matrixWorld);
-      const hit = rayCapsule(origin, direction, _a, _b, radius);
+      const hit = rayCapsule(origin, direction, _a, _b, radius * girth);
       if (hit >= 0 && hit < best - (zone ? 0.05 : 0)) {
         best = hit;
         zone = 'limb';

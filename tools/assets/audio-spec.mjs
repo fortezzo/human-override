@@ -141,6 +141,46 @@ export const AUDIO_SPEC = [
   { name: 'deny', peak: 0.5, layers: [whole('interface-sounds', `${KENNEY_UI}/error_004.ogg`, { pitch: 0.8 })] },
   { name: 'scrap_tick', peak: 0.3, layers: [whole('interface-sounds', `${KENNEY_UI}/drop_002.ogg`, { pitch: 1.3 })] },
 
+  // ---- The mission.
+  // The main breaker thrown and the power coming up behind it.
+  {
+    name: 'mission_power',
+    stereo: true,
+    peak: 0.9,
+    duration: 2.6,
+    fadeOut: 1.3,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/impactMetal_003.ogg`, { pitch: 0.6 }), whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_002.ogg`, { gain: 0.55, pitch: 0.5 })],
+  },
+  // An override key in hand.
+  { name: 'mission_key', peak: 0.6, layers: [whole('interface-sounds', `${KENNEY_UI}/confirmation_004.ogg`, { pitch: 0.7 }), whole('interface-sounds', `${KENNEY_UI}/glass_004.ogg`, { gain: 0.35, pitch: 0.8 })] },
+  // Something in the mission has changed: goes with the line on the HUD.
+  { name: 'mission_notice', peak: 0.5, layers: [whole('interface-sounds', `${KENNEY_UI}/maximize_008.ogg`, { pitch: 0.7 })] },
+  // The kill switch starts to arm, and ARGUS's own unit arrives: a low two-tone warning.
+  { name: 'mission_alarm', stereo: true, peak: 0.7, layers: [whole('interface-sounds', `${KENNEY_UI}/error_006.ogg`, { pitch: 0.45 }), whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_001.ogg`, { gain: 0.5, pitch: 0.7, filter: 'lowpass=f=300' })] },
+  // The kill switch pulled: the lever going home, and everything ARGUS runs winding down.
+  {
+    name: 'mission_switch',
+    stereo: true,
+    peak: 0.95,
+    duration: 3.4,
+    fadeOut: 2.2,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorClose_002.ogg`, { pitch: 0.45 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_000.ogg`, { gain: 0.8, pitch: 0.6 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/spaceEngineLow_001.ogg`, { gain: 0.5, pitch: 0.5, filter: 'afade=t=out:st=0.4:d=2.6' }),
+    ],
+  },
+  // HUMANITY SAVED: two bells a fifth apart, left to ring.
+  {
+    name: 'mission_saved',
+    stereo: true,
+    bitrate: '112k',
+    peak: 0.75,
+    duration: 4.6,
+    fadeOut: 3.2,
+    layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactBell_heavy_002.ogg`, { pitch: 0.5 }), whole('impact-sounds', `${KENNEY_IMPACT}/impactBell_heavy_000.ogg`, { gain: 0.7, pitch: 0.75 })],
+  },
+
   // ---- The facility.
   {
     name: 'door_open',

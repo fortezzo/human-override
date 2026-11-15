@@ -29,6 +29,8 @@
   --ink-dim: #9aa0a6;
   --amber: #ffb347;
   --red: #ff4326;
+  /* The mission's own colour: keys, the objective, its marker. */
+  --teal: #4fe6ff;
   --panel: rgba(8, 10, 12, 0.82);
   --line: rgba(233, 230, 222, 0.18);
   --display: 'Barlow Condensed', 'Arial Narrow', sans-serif;
@@ -823,6 +825,141 @@ kbd {
   }
 }
 
+/* The mission: the next step, under the round, with the three override keys. */
+.hud-objective {
+  position: absolute;
+  top: 118px;
+  left: 28px;
+  max-width: min(420px, 34vw);
+  padding: 5px 26px 6px 10px;
+  border-left: 2px solid var(--teal);
+  /* A faint dark backing, so it can be read against a lit wall. */
+  background: linear-gradient(90deg, rgba(6, 8, 10, 0.62) 0%, rgba(6, 8, 10, 0.45) 70%, rgba(6, 8, 10, 0) 100%);
+}
+.hud-objective-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.hud-objective-head .hud-label {
+  color: var(--teal);
+}
+.hud-keys {
+  display: inline-flex;
+  gap: 6px;
+}
+/* One small lozenge for each override key: hollow until it is held. */
+.hud-keys i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(79, 230, 255, 0.55);
+  transform: rotate(45deg);
+}
+.hud-keys i.held {
+  background: var(--teal);
+  border-color: var(--teal);
+  box-shadow: 0 0 8px rgba(79, 230, 255, 0.8);
+}
+.hud-objective-title {
+  margin-top: 5px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
+}
+.hud-objective-title.fresh {
+  animation: objective-fresh 1.4s ease-out;
+}
+@keyframes objective-fresh {
+  0% {
+    color: var(--teal);
+    transform: translateX(-6px);
+    opacity: 0.2;
+  }
+  18% {
+    transform: none;
+    opacity: 1;
+  }
+  100% {
+    color: var(--ink);
+  }
+}
+.hud-objective-detail {
+  margin-top: 3px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The marker on the mission's next step: a lozenge with the distance under it. */
+.objective-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  /* Placed by transform from the HUD's code, on a layer of its own. */
+  will-change: transform;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  pointer-events: none;
+  transition: opacity 0.25s;
+}
+.objective-marker i {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--teal);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(79, 230, 255, 0.7);
+}
+.objective-marker.edge i {
+  background: var(--teal);
+}
+.objective-marker span {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--teal);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+}
+.objective-marker.near {
+  opacity: 0.25;
+}
+
+/* ARGUS's own unit: its name and what is left of it. */
+.hud-boss {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  width: min(460px, 44vw);
+  transform: translateX(-50%);
+  text-align: center;
+}
+.hud-boss-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  padding-left: 0.32em;
+  color: var(--red);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+.hud-boss-bar {
+  height: 5px;
+  margin-top: 6px;
+  background: rgba(10, 12, 14, 0.7);
+  border: 1px solid rgba(255, 67, 38, 0.35);
+  overflow: hidden;
+}
+.hud-boss-fill {
+  height: 100%;
+  background: var(--red);
+  transform-origin: 0 50%;
+  transition: transform 0.15s linear;
+}
+
 /* Round announcements. Everything here is only the lettering and where it
    starts from: ui/RoundAnnouncer.ts moves it, frame by frame. */
 .announce {
@@ -921,6 +1058,23 @@ kbd {
   width: min(30vw, 400px);
   margin-top: 12px;
 }
+/* A notice from the mission: the same lettering, a size down, in the mission's colour. */
+.announce-notice .announce-clear-title {
+  font-size: clamp(22px, 2.5vw, 40px);
+}
+.announce-notice .announce-rule {
+  background: var(--teal);
+}
+.announce-notice .announce-sub {
+  color: var(--teal);
+}
+/* A notice has to be read whatever it lands on, so its shadow is heavier. */
+.announce-notice .announce-clear-title,
+.announce-notice .announce-sub {
+  text-shadow:
+    0 0 5px rgba(0, 0, 0, 0.95),
+    0 1px 16px rgba(0, 0, 0, 0.9);
+}
 
 /* Purchase prompt: what F will do here, and what it costs. */
 .hud-prompt {
@@ -990,8 +1144,11 @@ kbd {
 /* A marker over each of the last few robots of a round. */
 .robot-marker {
   position: absolute;
+  left: 0;
+  top: 0;
   width: 0;
   height: 0;
+  will-change: transform;
 }
 .robot-marker i {
   position: absolute;
@@ -1034,6 +1191,26 @@ kbd {
 }
 .over-title span {
   color: var(--red);
+}
+/* Behind HUMANITY SAVED the room stays visible: what is lying in it is the point. */
+.screen.saved {
+  background: radial-gradient(ellipse at 50% 50%, rgba(4, 5, 6, 0.5) 0%, rgba(4, 5, 6, 0.15) 70%);
+}
+/* HUMANITY SAVED, and a game over that came after it: the mission's colour, not ARGUS's. */
+.saved-panel {
+  border-top-color: var(--teal);
+}
+.saved-panel .eyebrow,
+.saved-panel .over-title span {
+  color: var(--teal);
+}
+.saved-note {
+  max-width: 520px;
+  margin: 4px 0 2px;
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  color: var(--ink-dim);
 }
 .over-best {
   min-height: 20px;

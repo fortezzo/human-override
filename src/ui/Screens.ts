@@ -1,6 +1,6 @@
 // The full-screen overlays: loading, the start screen, pause with its
-// settings, game over, the credits list, and the "use a computer" notice
-// for phones.
+// settings, game over, HUMANITY SAVED, the credits list, and the "use a
+// computer" notice for phones.
 
 import { BRIGHTNESS, QUALITY, QUALITY_ORDER, type QualityLevel } from '../config';
 import { settings } from '../core/settings';
@@ -22,7 +22,7 @@ const CONTROLS: Array<[string, string]> = [
   ['Right click', 'Aim down sights'],
   ['R', 'Reload'],
   ['V', 'Melee strike'],
-  ['F', 'Buy / open'],
+  ['F', 'Use / buy / open'],
   ['1  2  wheel', 'Switch weapon'],
   ['Shift', 'Sprint'],
   ['Space', 'Jump'],
@@ -41,9 +41,15 @@ export interface RunSummary {
   scrapEarned: number;
   /** Seconds. */
   time: number;
+  /** How long the mission took (seconds), or null if the kill switch was never pulled. */
+  missionTime: number | null;
+  /** This run set a record: the best round (game over), or the fastest mission (HUMANITY SAVED). */
   best: boolean;
   bestRound: number;
+  bestMissionTime: number | null;
 }
+
+const clock = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 
 export class Screens {
   onStart: Handler = () => {};
@@ -63,6 +69,7 @@ export class Screens {
   private readonly titleNote: HTMLElement;
   private readonly pause: HTMLElement;
   private readonly over: HTMLElement;
+  private readonly saved: HTMLElement;
   private readonly credits: HTMLElement;
   private readonly touch: HTMLElement;
   private readonly qualityButtons = new Map<string, HTMLElement>();
@@ -102,6 +109,10 @@ export class Screens {
     // ---- Game over
     this.over = h('div', 'screen over hidden');
     parent.appendChild(this.over);
+
+    // ---- HUMANITY SAVED
+    this.saved = h('div', 'screen saved hidden');
+    parent.appendChild(this.saved);
 
     // ---- Pause and settings
     this.pause = h('div', 'screen pause hidden');
@@ -191,7 +202,8 @@ export class Screens {
   }
 
   /** Show one overlay, or none. */
-  show(which: 'loading' | 'title' | 'pause' | 'over' | 'credits' | 'touch' | 'none'): void {
+  show(which: 'loading' | 'title' | 'pause' | 'over' | 'saved' | 'credits' | 'touch' | 'none'): void {
+    this.saved.classList.toggle('hidden', which !== 'saved');
     this.loading.classList.toggle('hidden', which !== 'loading');
     this.title.classList.toggle('hidden', which !== 'title');
     this.pause.classList.toggle('hidden', which !== 'pause');
@@ -200,9 +212,34 @@ export class Screens {
     this.touch.classList.toggle('hidden', which !== 'touch');
   }
 
-  /** The line under the start button: the best round so far, if there is one. */
-  setBest(round: number): void {
-    this.titleNote.textContent = round > 0 ? `Best run so far: round ${round}` : 'Hold the facility. Every round sends more of them.';
+  /** The line under the start button: the best round so far and the fastest mission, if there are any. */
+  setBest(best: { round: number; missionTime: number | null }): void {
+    const parts: string[] = [];
+    if (best.round > 0) parts.push(`Best run so far: round ${best.round}`);
+    if (best.missionTime !== null) parts.push(`Fastest mission: ${clock(best.missionTime)}`);
+    this.titleNote.textContent = parts.length ? parts.join('  ·  ') : 'Hold the facility. Find the kill switch. Every round sends more of them.';
+  }
+
+  /** Fill in the HUMANITY SAVED screen: the kill switch has been pulled. */
+  setSaved(run: RunSummary): void {
+    const rows: Array<[string, string]> = [
+      ['Mission time', clock(run.missionTime ?? run.time)],
+      ['Round reached', String(run.round)],
+      ['Robots destroyed', String(run.kills)],
+      ['Weak-point kills', String(run.weakPointKills)],
+      ['Accuracy', `${Math.round(run.accuracy * 100)}%`],
+      ['Scrap earned', run.scrapEarned.toLocaleString('en-US')],
+    ];
+    const record = run.best ? 'Your fastest yet.' : run.bestMissionTime !== null ? `Your fastest is ${clock(run.bestMissionTime)}.` : '';
+    this.saved.innerHTML = `
+      <div class="panel over-panel saved-panel">
+        <div class="eyebrow">ARGUS IS OFFLINE</div>
+        <div class="over-title">HUMANITY <span>SAVED</span></div>
+        <div class="over-best">${record}</div>
+        <div class="over-stats">${rows.map(([label, value]) => `<div class="over-stat"><span>${label}</span><b>${value}</b></div>`).join('')}</div>
+        <div class="saved-note">The switch is pulled and every machine it ran has stopped. The ones still outside have not heard. Fight on for a higher round, or end the run here.</div>
+        <div class="panel-actions"><button class="button primary" data-action="resume">KEEP FIGHTING</button><button class="button" data-action="quit">END RUN</button></div>
+      </div>`;
   }
 
   /** Fill in the game-over screen for a finished run. */
@@ -217,9 +254,12 @@ export class Screens {
       ['Scrap earned', run.scrapEarned.toLocaleString('en-US')],
       ['Time held', `${minutes}:${String(seconds).padStart(2, '0')}`],
     ];
+    // Going down after the kill switch was pulled is not ARGUS winning.
+    const saved = run.missionTime !== null;
+    if (saved) rows.unshift(['Mission time', clock(run.missionTime!)]);
     this.over.innerHTML = `
-      <div class="panel over-panel">
-        <div class="eyebrow">ARGUS WINS</div>
+      <div class="panel over-panel${saved ? ' saved-panel' : ''}">
+        <div class="eyebrow">${saved ? 'HUMANITY SAVED · ARGUS IS OFFLINE' : 'ARGUS WINS'}</div>
         <div class="over-title">YOU HELD UNTIL <span>ROUND ${run.round}</span></div>
         <div class="over-best">${run.best ? 'A new best.' : run.bestRound > 0 ? `Your best is round ${run.bestRound}.` : ''}</div>
         <div class="over-stats">${rows.map(([label, value]) => `<div class="over-stat"><span>${label}</span><b>${value}</b></div>`).join('')}</div>

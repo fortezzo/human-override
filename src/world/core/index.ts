@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import type { Assets } from '../../core/assets';
+import { settings } from '../../core/settings';
 import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import { addsLightOnly } from '../../render/glow';
 import type { LightDef } from '../../render/lighting';
@@ -21,7 +22,7 @@ const RED = 0xff2a12;
 const COLD = 0xcfe0ff;
 
 /** ARGUS's eye: a broken outer ring, an almond outline and an iris, all glowing. */
-function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; material: THREE.MeshStandardMaterial } {
+function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; material: THREE.MeshStandardMaterial; halo: THREE.MeshBasicMaterial } {
   const object = new THREE.Group();
   object.position.set(...centre);
   // It hangs on the south wall, facing north into the room.
@@ -73,7 +74,7 @@ function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; mater
   object.traverse((o) => {
     o.castShadow = false;
   });
-  return { object, iris, material };
+  return { object, iris, material, halo: halo.material };
 }
 
 export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild {
@@ -132,8 +133,8 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   screens.add([cx, 1.37, cz + 0.296], [0, 0, -1], 0.62, 0.46, 'lockdown');
   // Three slots for the override keys, and the switch itself under a guard.
   for (const dx of [-0.42, 0, 0.42]) b.box('hazard', [cx + dx - 0.09, 1.12, cz + 0.02], [cx + dx + 0.09, 1.14, cz + 0.2], { collide: false, cast: false });
+  // (The lever itself and the keys are moving parts: see world/MissionSet.ts.)
   b.box('hazard', [cx - 0.16, 1.12, cz - 0.07], [cx + 0.16, 1.2, cz + 0.0], { collide: false, cast: false });
-  b.tube('rustedSteel', [cx, 1.2, cz - 0.035], [cx, 1.44, cz - 0.11], 0.022, false);
   // Thick cables from the console across the floor to the eye.
   for (const dx of [-0.5, 0.5]) b.cable('cable', [cx + dx, 0.3, cz + 0.5], [cx + dx * 2.4, 0.06, z1 - 0.4], 0.0, 0.05);
 
@@ -179,9 +180,10 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'coreShaft', area: 'core', kind: 'spot', color: COLD, intensity: 760, position: lamp, target: [cx, 0, cz + 0.2], angle: 0.4, penumbra: 0.6, distance: 12, shadow: 1 });
   haze.push({ effect: createConeShaft([cx, h - 0.5, cz], [cx, 0.2, cz + 0.2], 0.3, 2.7, COLD, 0.13) });
   dustBeams.push({ position: lamp, target: [cx, 0, cz + 0.2], angle: 0.36, color: COLD, strength: 1.2 });
-  lights.push({ name: 'coreEye', area: 'core', kind: 'point', color: RED, intensity: 40, position: [cx, 3.7, z1 - 1.8], distance: 14, flicker: 'pulse' });
-  lights.push({ name: 'coreWest', area: 'core', kind: 'point', color: 0xff5a3a, intensity: 10, position: [x0 + 1.9, 1.8, 32], distance: 8 });
-  lights.push({ name: 'coreEast', area: 'core', kind: 'point', color: 0xff5a3a, intensity: 10, position: [x1 - 1.9, 1.8, 32], distance: 8 });
+  // The red in the room is ARGUS's own, and goes out with it.
+  lights.push({ name: 'coreEye', area: 'core', kind: 'point', color: RED, intensity: 40, position: [cx, 3.7, z1 - 1.8], distance: 14, flicker: 'pulse', when: 'argusAwake' });
+  lights.push({ name: 'coreWest', area: 'core', kind: 'point', color: 0xff5a3a, intensity: 10, position: [x0 + 1.9, 1.8, 32], distance: 8, when: 'argusAwake' });
+  lights.push({ name: 'coreEast', area: 'core', kind: 'point', color: 0xff5a3a, intensity: 10, position: [x1 - 1.9, 1.8, 32], distance: 8, when: 'argusAwake' });
   // Cold light high on the walls, so the chamber's ribs and height can be read.
   lights.push({ name: 'coreHighWest', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 20, position: [x0 + 2.2, 5.6, 30.5], distance: 12 });
   lights.push({ name: 'coreHighEast', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 20, position: [x1 - 2.2, 5.6, 33.5], distance: 12 });
@@ -189,19 +191,30 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'coreConsole', area: 'core', kind: 'point', color: 0xffb060, intensity: 2.5, position: [cx, 1.5, cz - 0.6], distance: 4 });
 
   const built = b.build();
+  // How awake ARGUS is, 1 to 0: the mission turns this down when the kill
+  // switch is pulled, and the eye on the wall goes out with it.
+  const argus = { awake: 1 };
   return {
     id: 'core',
     ...built,
     lights,
     haze,
     dustBeams,
+    argus,
     tick: (time) => {
       leds.update(time);
       screens.update(time);
       // The iris drifts as if searching, and the whole eye breathes.
       eye.iris.position.x = Math.sin(time * 0.37) * 0.42;
       eye.iris.position.y = Math.sin(time * 0.53 + 1.2) * 0.14;
-      eye.material.emissiveIntensity = 2.2 + 0.6 * Math.sin(time * 2.1);
+      // Going out, it wavers as it fades: a slow, smooth swell, about twice
+      // a second (a shape this large and bright must never flash quickly),
+      // and a plain fade with "reduce screen shake and flashing" on.
+      const waver = settings.value.reducedMotion ? 1 : 0.65 + 0.35 * Math.sin(time * 13);
+      const level = argus.awake >= 1 ? 1 : argus.awake <= 0 ? 0 : argus.awake * waver;
+      eye.material.emissiveIntensity = (2.2 + 0.6 * Math.sin(time * 2.1)) * level;
+      eye.iris.visible = level > 0.02;
+      eye.halo.opacity = level;
     },
   };
 }

@@ -123,6 +123,12 @@ class Buffers {
 
 export class RobotBuilder {
   private readonly parts: Part[] = [];
+  /**
+   * A design built on top of another sets this while the borrowed body is
+   * being added, to give it a finish of its own: every paint passes
+   * through it on the way in.
+   */
+  repaint: ((paint: Paint) => Paint) | null = null;
 
   constructor(private readonly rig: Rig) {}
 
@@ -130,7 +136,8 @@ export class RobotBuilder {
   add(shape: THREE.BufferGeometry, options: PartOptions): void {
     const positions = (shape.attributes.position as THREE.BufferAttribute).array as Float32Array;
     const anchors: Anchor[] = typeof options.bone === 'string' ? [{ bone: options.bone, at: new THREE.Vector3() }] : options.bone;
-    const part: Part = { positions, anchors, paint: options.paint ?? DEFAULT_PAINT, glow: options.glow ?? 0, crease: options.crease ?? 40 };
+    const paint = options.paint ?? DEFAULT_PAINT;
+    const part: Part = { positions, anchors, paint: this.repaint ? this.repaint(paint) : paint, glow: options.glow ?? 0, crease: options.crease ?? 40 };
     this.parts.push(part);
 
     if (options.mirror) {

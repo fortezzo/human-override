@@ -45,6 +45,12 @@ export interface LightDef {
    */
   needsShadow?: boolean;
   flicker?: 'faulty' | 'pulse' | 'beacon';
+  /**
+   * When the light is lit at all: only while the main power is out, only
+   * once it is back on, or only while ARGUS is still running. Left out, it
+   * is always lit.
+   */
+  when?: 'powerOut' | 'powerOn' | 'argusAwake';
   /** Parts of a lamp model that should glow with this light. */
   glow?: { materials: THREE.MeshStandardMaterial[]; color: number; intensity: number };
 }
@@ -80,6 +86,9 @@ export class LightRig {
   readonly group = new THREE.Group();
   /** Hold every lamp at full brightness (for repeatable screenshots and measurements). */
   steady = false;
+  /** The main power is on, and ARGUS is still running: some lights depend on one or the other (see LightDef.when). */
+  power = false;
+  argusAwake = true;
   private readonly lives: Live[];
   private slots: Slot[] = [];
   private lastTime = 0;
@@ -142,6 +151,8 @@ export class LightRig {
     const score = (live: Live): number => {
       const weight = areas.get(live.def.area) ?? 0;
       if (weight <= 0 || live.def.intensity <= 0) return 0;
+      const when = live.def.when;
+      if ((when === 'powerOut' && this.power) || (when === 'powerOn' && !this.power) || (when === 'argusAwake' && !this.argusAwake)) return 0;
       const reach = live.def.distance + 4;
       const distance = live.focus.distanceTo(position);
       // Lights already live are favoured a little, so two lights of similar

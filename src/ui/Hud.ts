@@ -1,7 +1,8 @@
 // The heads-up display: crosshair and hit markers, health, the weapon and
-// its ammunition, scrap, the round, purchase prompts, markers on the last
-// few robots, and the damage direction indicator. Plain HTML laid over the
-// 3D canvas, so it stays crisp at any resolution.
+// its ammunition, scrap, the round, the mission's objective and a marker
+// pointing to it, purchase prompts, markers on the last few robots, and the
+// damage direction indicator. Plain HTML laid over the 3D canvas, so it
+// stays crisp at any resolution.
 
 import type { QualityLevel } from '../config';
 import { QUALITY } from '../config';
@@ -50,6 +51,11 @@ export interface HudState {
   area: string;
   prompt: HudPrompt | null;
   markers: HudMarker[];
+  /** The mission's next step, which override keys are held, and where the step is (null if nowhere). */
+  objective: { title: string; detail: string; keys: boolean[] };
+  objectiveMarker: HudMarker | null;
+  /** ARGUS's own unit, while it is on the map: its name and how much of it is left, 0..1. */
+  boss: { name: string; health: number } | null;
   /** Cone of fire in radians, and the camera's vertical field of view in degrees. */
   spread: number;
   fov: number;
@@ -81,6 +87,13 @@ export class Hud {
   private readonly scrapPops: HTMLElement;
   private readonly round: HTMLElement;
   private readonly roundSub: HTMLElement;
+  private readonly objectiveTitle: HTMLElement;
+  private readonly objectiveDetail: HTMLElement;
+  private readonly keyPips: HTMLElement[] = [];
+  private readonly objectiveMarker: HTMLElement;
+  private readonly boss: HTMLElement;
+  private readonly bossName: HTMLElement;
+  private readonly bossFill: HTMLElement;
   /** The round announcements, which also keep the corner counter. */
   readonly announcer: RoundAnnouncer;
   private readonly prompt: HTMLElement;
@@ -88,6 +101,8 @@ export class Hud {
   private readonly promptCost: HTMLElement;
   private readonly promptNote: HTMLElement;
   private readonly markers: HTMLElement[] = [];
+  /** What each of those markers is showing, so the page is only written to when something changes. */
+  private readonly shownMarkers: Array<{ look: string; at: string; distance: string }> = [];
   private readonly fps: HTMLElement;
   private readonly debug: HTMLElement;
   private readonly hint: HTMLElement;
@@ -99,7 +114,7 @@ export class Hud {
   private toastTimer = 0;
   private hintTimer = 16;
   private shownScrap = -1;
-  private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '' };
+  private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '', objective: '', keys: '', boss: '', bossHealth: '', markerAt: '', markerDistance: '', markerLook: '' };
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud', parent);
@@ -110,6 +125,20 @@ export class Hud {
     el('span', 'hud-label', roundRow, 'ROUND');
     this.round = el('span', 'hud-round-number', roundRow);
     this.roundSub = el('div', 'hud-brand-sub', brand);
+
+    // The mission: what to do next, and the three override keys.
+    const objective = el('div', 'hud-objective', this.root);
+    const heading = el('div', 'hud-objective-head', objective);
+    el('span', 'hud-label', heading, 'OBJECTIVE');
+    const pips = el('span', 'hud-keys', heading);
+    for (let i = 0; i < 3; i++) this.keyPips.push(el('i', '', pips));
+    this.objectiveTitle = el('div', 'hud-objective-title', objective);
+    this.objectiveDetail = el('div', 'hud-objective-detail', objective);
+
+    // ARGUS's own unit: its name and what is left of it, top centre.
+    this.boss = el('div', 'hud-boss hidden', this.root);
+    this.bossName = el('div', 'hud-boss-name', this.boss);
+    this.bossFill = el('div', 'hud-boss-fill', el('div', 'hud-boss-bar', this.boss));
 
     this.fps = el('div', 'hud-fps', this.root);
     this.debug = el('div', 'hud-debug hidden', this.root);
@@ -128,7 +157,12 @@ export class Hud {
       el('i', '', marker);
       el('span', '', marker);
       this.markers.push(marker);
+      this.shownMarkers.push({ look: 'hidden', at: '', distance: '' });
     }
+
+    this.objectiveMarker = el('div', 'objective-marker hidden', this.root);
+    el('i', '', this.objectiveMarker);
+    el('span', '', this.objectiveMarker);
 
     this.announcer = new RoundAnnouncer(this.root, this.round);
 
@@ -159,7 +193,7 @@ export class Hud {
 
     this.hint = el('div', 'hud-hint', this.root);
     this.hint.innerHTML =
-      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>F</b> buy <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
+      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
     this.toast = el('div', 'hud-toast', this.root);
   }
 
@@ -214,6 +248,11 @@ export class Hud {
   /** A round has been cleared, having paid this much scrap. */
   roundCleared(round: number, scrap: number): void {
     this.announcer.cleared(round, scrap);
+  }
+
+  /** Something in the mission has happened: a line across the top of the view. */
+  notice(title: string, detail: string): void {
+    this.announcer.notice(title, detail);
   }
 
   showToast(text: string, seconds = 4): void {
@@ -304,6 +343,61 @@ export class Hud {
       this.roundSub.textContent = sub;
     }
 
+    // The mission: its next step, the keys held, and a marker on where to go.
+    const objectiveKey = `${state.objective.title}|${state.objective.detail}`;
+    if (objectiveKey !== last.objective) {
+      // A new step (not just its clock ticking) is drawn attention to.
+      if (state.objective.title !== this.objectiveTitle.textContent) {
+        this.objectiveTitle.classList.remove('fresh');
+        void this.objectiveTitle.offsetWidth;
+        this.objectiveTitle.classList.add('fresh');
+      }
+      last.objective = objectiveKey;
+      this.objectiveTitle.textContent = state.objective.title;
+      this.objectiveDetail.textContent = state.objective.detail;
+    }
+    const keys = state.objective.keys.map((held) => (held ? '1' : '0')).join('');
+    if (keys !== last.keys) {
+      last.keys = keys;
+      this.keyPips.forEach((pip, i) => pip.classList.toggle('held', !!state.objective.keys[i]));
+    }
+    const target = state.objectiveMarker;
+    const markerLook = !target ? 'hidden' : `${target.onScreen ? '' : 'edge'}${target.onScreen && target.distance < 3 ? ' near' : ''}`;
+    if (markerLook !== last.markerLook) {
+      last.markerLook = markerLook;
+      // ("near": close enough to see the thing itself, so the marker gets out of the way.)
+      this.objectiveMarker.className = `objective-marker ${markerLook}`;
+    }
+    if (target) {
+      // Moved by transform, on a layer of its own, and written only when it
+      // changes: it is on screen for the whole run, and placing it by
+      // "left" and "top" made the browser lay the HUD out and repaint it on
+      // every frame (about a millisecond a frame, measured).
+      const x = Math.round(((target.x + 1) / 2) * window.innerWidth);
+      const y = Math.round(((1 - target.y) / 2) * window.innerHeight);
+      const at = `${x},${y}`;
+      if (at !== last.markerAt) {
+        last.markerAt = at;
+        this.objectiveMarker.style.transform = `translate3d(${x}px, ${y}px, 0) translate(-50%, -50%)`;
+      }
+      const distance = `${Math.round(target.distance)} M`;
+      if (distance !== last.markerDistance) {
+        last.markerDistance = distance;
+        (this.objectiveMarker.lastElementChild as HTMLElement).textContent = distance;
+      }
+    }
+    const bossKey = state.boss ? state.boss.name : '';
+    if (bossKey !== last.boss) {
+      last.boss = bossKey;
+      this.boss.classList.toggle('hidden', !state.boss);
+      this.bossName.textContent = bossKey;
+    }
+    const bossHealth = state.boss ? Math.max(0, Math.min(1, state.boss.health)).toFixed(3) : '';
+    if (bossHealth !== last.bossHealth) {
+      last.bossHealth = bossHealth;
+      if (state.boss) this.bossFill.style.transform = `scaleX(${bossHealth})`;
+    }
+
     // Purchase prompt.
     const prompt = state.prompt;
     const promptKey = prompt ? `${prompt.text}|${prompt.cost}|${prompt.usable}|${prompt.note}` : '';
@@ -321,16 +415,27 @@ export class Hud {
     // The control reminder gives way to a prompt.
     this.hint.classList.toggle('faded', this.hintTimer <= 0 || !!prompt);
 
-    // Markers on the last few robots.
+    // Markers on the last few robots (placed the same way as the objective's marker).
     for (let i = 0; i < MAX_MARKERS; i++) {
       const marker = this.markers[i]!;
       const data = state.markers[i];
-      marker.classList.toggle('hidden', !data);
+      const shown = this.shownMarkers[i]!;
+      const look = !data ? 'hidden' : data.onScreen ? '' : 'edge';
+      if (look !== shown.look) {
+        shown.look = look;
+        marker.className = `robot-marker ${look}`;
+      }
       if (!data) continue;
-      marker.classList.toggle('edge', !data.onScreen);
-      marker.style.left = `${((data.x + 1) / 2) * 100}%`;
-      marker.style.top = `${((1 - data.y) / 2) * 100}%`;
-      (marker.lastElementChild as HTMLElement).textContent = `${Math.round(data.distance)} M`;
+      const at = `${Math.round(((data.x + 1) / 2) * window.innerWidth)}px, ${Math.round(((1 - data.y) / 2) * window.innerHeight)}px`;
+      if (at !== shown.at) {
+        shown.at = at;
+        marker.style.transform = `translate3d(${at}, 0)`;
+      }
+      const distance = `${Math.round(data.distance)} M`;
+      if (distance !== shown.distance) {
+        shown.distance = distance;
+        (marker.lastElementChild as HTMLElement).textContent = distance;
+      }
     }
 
     const fpsText = `${Math.round(state.fps)} FPS · ${QUALITY[state.quality].label.toUpperCase()}`;

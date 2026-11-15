@@ -193,7 +193,10 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   b.prop('utility_box_02', { at: [4.6, 0, z0 + 0.26], rotY: 0 });
   b.prop('power_box_01', { at: [6.2, 1.55, z0 + 0.08], rotY: 0, collide: false });
   b.prop('korean_fire_extinguisher_01', { at: [-2.6, 0, z0 + 0.22], rotY: 0 });
-  b.prop('industrial_storage_cart', { at: [-9.6, 0, 16.2], rotY: 1.2 });
+  // (Parked across the dead end of the aisle between rows D and E. It used
+  // to stand a pace inside the loading dock, where, on the map of the floor
+  // the robots steer by, it closed the dock off from the rest of the hall.)
+  b.prop('industrial_storage_cart', { at: [-10.4, 0, 21.6], rotY: HALF_PI });
   b.prop('cardboard_box_01', { at: [-9.9, 0, 18.4], rotY: 0.5, kind: 'soft' });
   b.prop('Barrel_01', { at: [-10.3, 0, 14.3], rotY: 0.8 });
   b.prop('hand_truck', { at: [8.5, 0, 14.6], rotY: -HALF_PI });

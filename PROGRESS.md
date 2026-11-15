@@ -8,7 +8,7 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | --- | --- | --- |
 | 0 | The look test: one room, one robot, one rifle | **Approved** (after two rounds of feedback, recorded below) |
 | 1 | Core loop: whole map, rounds, scrap, weapons, HUD, restart, debug mode | **Built. Waiting for you to play it.** |
-| 2 | The mission | Not started |
+| 2 | The mission | **Built and committed, but the end-of-stage write-up is not finished** (the session ran out of usage on 2026-11-15). All nine Stage 1 feedback items are done and the mission plays start to finish. Still to do: rebuild and re-run `npm run e2e` (the last run had 1 failure of 123, "no robot created in view" at the lobby vent; the fix is in `src/game/Director.ts` but has not been re-tested), re-take screenshots, then write this file and the README from the drafts in `.cache/progress-top.md`, `.cache/readme-new.md` with `node .cache/assemble-docs.cjs`. Until then the sections below still describe Stage 1. |
 | 3 | ARGUS: specials, tracking, counters, banner, end-of-run report | Not started |
 | 4 | Full economy | Not started |
 | 5 | Polish | Not started |

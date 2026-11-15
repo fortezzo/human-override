@@ -8,7 +8,7 @@ import { rand } from '../core/math';
 import type { Robot, RobotTraits } from '../entities/robot/Robot';
 import { pickEntry, pickUnseenEntry } from '../sim/facility';
 import { createRounds, remaining, robotDestroyed, robotRecalled, skipRound, speedFor, updateRounds, type RoundState } from '../sim/rounds';
-import { ENTRY_PLANS, insideRoom, type EntryPlan } from '../world/plan';
+import { ENTRY_PLANS, insideRoom, type AreaId, type EntryPlan } from '../world/plan';
 import type { World } from '../world/World';
 import type { Sight } from './Sight';
 
@@ -40,6 +40,12 @@ export class Director {
   lastResorts = 0;
   /** Debug: stop the rounds where they are (for staged screenshots). */
   paused = false;
+  /**
+   * The final stand has the map to itself: while this is set the rounds
+   * stand still (no robots of their own are released, and no round begins
+   * or ends), and whatever the mission sends in still comes.
+   */
+  suspended = false;
   /** Debug: send every robot in through this entry (its id), whatever the rules say. */
   forceEntry: string | null = null;
 
@@ -54,6 +60,7 @@ export class Director {
   reset(): void {
     this.rounds = createRounds(ROUNDS);
     this.paused = false;
+    this.suspended = false;
     this.waiting = 0;
     this.waited = 0;
     this.lastResorts = 0;
@@ -64,20 +71,85 @@ export class Director {
     return remaining(this.rounds);
   }
 
+  /** Robots on the map and working, of every kind. */
+  get active(): number {
+    return this.robots.reduce((count, robot) => count + (robot.alive ? 1 : 0), 0);
+  }
+
+  /** Is there room on the map for one more? */
+  get room(): boolean {
+    return this.active + this.waiting < ROUNDS.maxActive;
+  }
+
+  /**
+   * Send in a robot of the mission's own, on top of the round's: a wave at
+   * the uplink or the final stand, the Custodian, ARGUS's Proxy. It comes
+   * in at an entry in one of `areas` if one of those is out of the
+   * player's sight, at any other entry if not, and not at all (null) if
+   * the player can see every entry: the caller tries again. `health` is
+   * a multiple of an ordinary robot's in the current round; `speed`, if
+   * given, is in metres per second (otherwise it walks or runs as that
+   * round's robots do).
+   */
+  sendExtra(areas: readonly AreaId[], make: { health?: number; speed?: number } & Pick<RobotTraits, 'role' | 'attackDamage' | 'staggerDamage' | 'flinchTime'> = {}): Robot | null {
+    const reachable = this.world.reachable;
+    const spots = new Map<EntryPlan, [number, number]>();
+    const unseen = (entry: EntryPlan): boolean => {
+      const spot = this.unseenSpot(entry);
+      if (spot) spots.set(entry, spot);
+      return spot !== null;
+    };
+    const wanted = ENTRY_PLANS.filter((entry) => areas.includes(entry.area) && reachable.has(entry.area) && unseen(entry));
+    const others = wanted.length ? [] : ENTRY_PLANS.filter((entry) => !areas.includes(entry.area) && reachable.has(entry.area) && unseen(entry));
+    const pool = wanted.length ? wanted : others;
+    if (!pool.length) return null;
+    const entry = pool[Math.floor(Math.random() * pool.length)]!;
+    const [x, z] = spots.get(entry)!;
+    // Before the first round there is no plan yet for "an ordinary robot of this round": use round 1's.
+    const plan = this.rounds.plan;
+    const traits: RobotTraits = {
+      health: plan.health * (make.health ?? 1),
+      speed: make.speed ?? speedFor(plan, Math.random()),
+      role: make.role,
+      attackDamage: make.attackDamage,
+      staggerDamage: make.staggerDamage,
+      flinchTime: make.flinchTime,
+      extra: true,
+    };
+    if (entry.kind === 'drop') traits.dropFrom = (entry.height ?? 4.8) + ROBOT.dropStart;
+    const robot = this.spawn(x, z, rand(-Math.PI, Math.PI), traits);
+    robot.hurry = entry.kind === 'walk';
+    robot.entry = entry.id;
+    this.onArrival(robot, entry, false);
+    return robot;
+  }
+
+  /**
+   * The kill switch has been pulled: whatever was left of the round is
+   * over. The rounds pick up again with the next one, after the usual lull.
+   */
+  endRound(): void {
+    this.waiting = 0;
+    this.waited = 0;
+    if (this.rounds.phase === 'active') skipRound(this.rounds);
+    // Pulled during a lull: the next round still waits its full time.
+    else this.rounds.timer = ROUNDS.lull;
+  }
+
   update(dt: number): void {
-    if (this.paused) return;
-    const active = this.robots.reduce((count, robot) => count + (robot.alive ? 1 : 0), 0);
-    // Robots waiting to come in count towards how full the map is.
-    const tick = updateRounds(this.rounds, ROUNDS, dt, active + this.waiting);
-    if (tick.started !== null) this.onRoundStart(tick.started);
-    this.waiting += tick.spawn;
-    // Each is let in as soon as there is somewhere it can appear unseen.
-    if (this.waiting > 0) this.waited += dt;
-    while (this.waiting > 0 && this.sendOne()) {
-      this.waiting -= 1;
-      this.waited = 0;
+    if (!this.paused && !this.suspended) {
+      // Robots waiting to come in count towards how full the map is.
+      const tick = updateRounds(this.rounds, ROUNDS, dt, this.active + this.waiting);
+      if (tick.started !== null) this.onRoundStart(tick.started);
+      this.waiting += tick.spawn;
+      // Each is let in as soon as there is somewhere it can appear unseen.
+      if (this.waiting > 0) this.waited += dt;
+      while (this.waiting > 0 && this.sendOne()) {
+        this.waiting -= 1;
+        this.waited = 0;
+      }
+      if (tick.cleared !== null) this.onRoundClear(tick.cleared);
     }
-    if (tick.cleared !== null) this.onRoundClear(tick.cleared);
 
     // Robots hurry across the yards outside and slow to their own pace indoors.
     for (const robot of this.robots) {
@@ -115,18 +187,27 @@ export class Director {
    * have no line of sight to the player at all, whichever way they are
    * facing. Robots that drop from a vent are created above the ceiling,
    * where they cannot be seen, and fall out of it: a vent is used only
-   * while the player is not looking at it, or at the space under it.
+   * while the player is not looking at it, or at the space under it, and
+   * is not standing beneath it.
    */
   private unseenSpot(entry: EntryPlan): [number, number] | null {
     if (entry.kind === 'drop') {
       // Not just the mouth of the vent (its torn grille hangs in front of
       // it from some angles) but the whole column the robot will fall
       // through, down to the floor it lands on.
-      const mouth = (entry.height ?? 4.8) - 0.7;
-      for (let y = 0.2; y < mouth + 0.5; y += 0.8) {
-        if (this.sight.watching(_mouth.set(entry.at[0], Math.min(y, mouth), entry.at[1]))) return null;
+      // Nor is one dropped on the player's head: a vent they are standing under is left alone.
+      if (this.sight.standingNear(entry.at[0], entry.at[1], ROUNDS.ventClearance)) return null;
+      // And as wide as the robot is, all the way up: a vent half hidden
+      // behind a column is still being looked at. (Testing only the middle
+      // of it once let a robot drop in plain view beside a pillar.)
+      const [x, z] = this.spotAt(entry);
+      const top = (entry.height ?? 4.8) - 0.05;
+      for (let y = 0.1; y <= top; y += 0.2) {
+        for (const [dx, dz] of [[0, 0], [0.36, 0], [-0.36, 0], [0, 0.36], [0, -0.36]] as const) {
+          if (this.sight.watching(_mouth.set(x + dx, y, z + dz))) return null;
+        }
       }
-      return this.spotAt(entry);
+      return [x, z];
     }
     for (let attempt = 0; attempt < 4; attempt++) {
       const spot = attempt === 0 ? ([entry.at[0], entry.at[1]] as [number, number]) : this.spotAt(entry);

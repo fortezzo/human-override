@@ -1,6 +1,6 @@
 # How HUMAN OVERRIDE works
 
-A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 1, the core loop) and is extended as each stage is added.
+A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 2: the core loop and the mission) and is extended as each stage is added.
 
 ## The one-paragraph version
 
@@ -16,25 +16,51 @@ There is no server behind it. Once the files are downloaded, everything runs on 
 
 ## How a run works
 
-**Rounds.** A round is a fixed number of robots: 6 in round 1, 8 in round 2, 11, 14, 18 and so on. They do not all arrive at once: one comes in every couple of seconds (faster in later rounds), and never more than 24 are on the map together. When the last one is destroyed there is a short lull, then the next round starts with more robots that are tougher and faster. From round 4 some of them run. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code.
+**Rounds.** A round is a fixed number of robots: 6 in round 1, 8 in round 2, then 10, 13, 16, 20 and so on. They do not all arrive at once: one comes in every couple of seconds (faster in later rounds), and never more than 24 are on the map together. When the last one is destroyed there is a ten-second lull, then the next round starts with more robots that are tougher and faster. From round 5 some of them run, slowly at first; by round 13 the runners are just under your own sprinting speed. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code.
 
 **Scrap.** Destroying robots pays scrap: 10 for a hit, 60 for a kill, 100 for a kill through the head, 130 for a kill with the melee strike. The riskier the kill, the better it pays. The shotgun pays for one hit per shell however many of its nine pellets land, or it would print money.
 
 **Spending it.** Guns hang on wall racks with their price beside them; walk up, press F. Buying a gun you already own refills its ammunition for less. Doors cost scrap too, and stay open. You can only carry two guns, so a third replaces the one in your hands. Every purchase goes through one small piece of code that checks the price, takes the scrap and reports what happened, which is what lets a test buy everything in the game and add up the bill.
 
+**Running away.** Sprinting is paid for with stamina, the thin bar under your health. A full bar is four seconds of sprinting. It starts refilling a second after you stop, and if you run it dry you are "winded": walking pace only until about a third of it has come back. So running buys time, not safety. Robots are also solid: you cannot run through one, and a crowd can box you in.
+
+**Taking hits.** After a blow lands there is just under half a second in which another cannot, so three robots reaching you at once is three blows spread over a second and a half, not one instant. It is the difference between "I was overwhelmed" and "I died and do not know why".
+
 **Going down.** Your health comes back if nothing hits you for four seconds. If it reaches zero, the run ends, the game shows how far you got, and "Play Again" puts everything back exactly as it was at the start: robots, doors, guns, scrap, timers.
 
 The rules for all of this (how a round grows, what a hit pays, what a purchase does) are written as plain logic with no graphics in them, in `src/sim/`. That separation is what makes them testable: a test can play out round 30 in a thousandth of a second without drawing anything.
 
+## How the mission works
+
+The mission is a checklist with an order to it, and it lives in one small file of plain logic (`src/sim/mission.ts`) that knows nothing about graphics. The game tells that file what you did ("the player threw the breaker"), and asks it two questions: "is this allowed yet?" and "what should the player be told to do next?"
+
+1. **Restore power.** The power room's main breaker. Until it is thrown, the key cage's lock is dead, the uplink is dead, and the Custodian does not come.
+2. **Recover three override keys**, in any order:
+   - one sits in the **key cage** in the power room, whose lock lets go when the power comes back;
+   - one is issued by the **uplink** in the server hall to whoever starts it and then holds the ground around it for sixty seconds. The clock only runs while you are standing inside the ring on the floor; step out and it stops, keeping what you have earned. While it runs, ARGUS sends extra robots at it;
+   - one is carried by the **Custodian**, a tall, pale security machine that arrives with round 8 (or with the next round, if the power came on later than that). Destroy it and the key drops where it fell.
+3. **Unseal the core** with the three keys, **arm the kill switch**, and **survive** the 75 seconds it takes to arm. This is the final stand: the ordinary rounds stand aside and ARGUS sends a steady stream of robots at you, and ten seconds in, its own unit, the **Proxy**: half as tall again as anything else, black, with twelve times the health of an ordinary robot.
+4. **Pull the switch.** Every robot on the map goes limp and falls where it stands, ARGUS's eye on the core wall gutters and goes out, and the HUMANITY SAVED screen shows your run. From there you can stop, or keep fighting for a higher round (the machines still outside "have not heard").
+
+**The tracker.** The box under the round number always shows the next step, with three small lozenges for the keys and a marker in the world pointing at where to go. It never has to be kept in step with the mission by hand, because it does not store anything: every frame it asks the mission file "what now?" and prints the answer. With several keys still to find, the answer is whichever is nearest to hand: a key lying on the floor first, then the cage, then the Custodian if it is on the map, then the uplink.
+
+**The two elite robots** are the ordinary robot with different numbers and a different finish, exactly as the spec asked: the same skeleton and movements, scaled up, re-plated in another colour, with other lights. The Custodian carries a real glowing key in a cradle on its back, so you can see what you are being asked to shoot. Neither can be slowed to a crawl by automatic fire the way an ordinary robot can.
+
+**Records.** The fastest time from pressing Play to pulling the switch is remembered in your browser alongside your best round, and shown on the title screen.
+
 ## How the map works
 
-The facility is four areas joined by doors: the security lobby where you start, a server hall, a power room, and the core. Three of the doors can be bought, and together they make a loop, so someone being chased always has somewhere to run. The core's door is sealed until the mission arrives in Stage 2.
+The facility is four areas joined by doors: the security lobby where you start, a server hall, a power room, and the core. Three of the doors can be bought, and together they make a loop, so someone being chased always has somewhere to run. The core's door cannot be bought at any price: it opens when you press F on it with all three override keys in hand.
 
 **Only what can be seen is drawn.** The game keeps a tiny map of which areas are joined by open doors. An area you could not possibly see (behind a closed door) is not drawn and its lamps are not lit. That is most of why four rooms cost little more than one.
 
 **Lights are shared.** A graphics card can only afford a couple of dozen lights at once, and the facility has about sixty lamps. So the game keeps a fixed pool of 22 lights and lends them to whichever lamps matter most from where you are standing, fading one out and the next in as you walk. A few of them cast real shadows; which ones is chosen the same way.
 
+**Every room closes itself.** Because a room behind a shut door is not drawn, each room has to be sealed by surfaces of its own. Two rooms that share a wall cannot share one *wall object*: the room that borrowed its neighbour's would have a hole in it whenever the neighbour was not being drawn, and the night sky would show through. So where two rooms meet, each has its own facing on its own side, and the door frames belong to the doors (which are always drawn), not to either room. An automated check looks from inside every room toward every other, through that room's own walls only, and fails if any line of sight gets out.
+
 **Where robots come in.** There are eight entrances: three they walk through (the main breach, a loading dock, a hole in the power room wall) and five ceiling vents they drop out of. Robots only use entrances that connect to where you are, and favour the area you are in, so the fight follows you. In the first two rounds, with no doors bought, that means the one bright doorway in front of you, which is how the game teaches where to look.
+
+**You never see one appear.** A robot that walks in is created outside, in the gap behind a shipping container, and comes out round the end of it; from nowhere inside the building can those gaps be seen. A robot that drops from a vent is created above the ceiling and falls out of it. Before creating any robot, the game asks whether you could see it: for a walk-in spot, whether there is any clear line from your eye to it, whichever way you are facing; for a vent, whether you are looking at it or at the space under it. If the answer is yes it uses a different entrance, and if you are somehow watching all of them, the robot simply waits and is tried again a moment later. A separate piece of test code, which shares nothing with that rule, counts any robot that was in the picture on screen at the moment it was created. The count has to stay at zero.
 
 ## How the picture is made
 
@@ -79,6 +105,8 @@ The stains on the upper walls are not part of any picture. The wall's texture is
 
 The body is painted in code too: every part is given a paint color and a wear level, and the shader adds rust, chipped edges and grime that gathers toward the feet. The visor and sensor lights are bright enough to trigger the glow filter.
 
+**Seeing it in the dark.** A dark machine in a dark room is invisible, and being hit by something you could not see feels unfair. So wherever a robot's own surface comes out close to black, its edges (the parts of it turned away from you) pick up a faint cold sheen, the way bare steel catches stray light, and the rest of it lifts a shade off pure black. Where real light falls on the robot the effect fades to nothing, so in a lit room it looks exactly as it did. Across a room a thin outline would be finer than a pixel, so with distance the sheen spreads over more of each surface. A test photographs the darkest places on the map empty, then with robots standing in them with their backs turned, and measures how much of each robot comes out clearly different from what was behind it.
+
 **Finding you.** The floor is divided into a grid of 30 cm squares. Starting from the square you are standing in, the game "floods" outward and writes into every square how many steps it is from you, going around walls, furniture and closed doors. A robot anywhere on the map only has to step toward a neighbouring square with a smaller number. One flood works for any number of robots at once, which is why two dozen cost barely more than one. (This is called a flow field.) When a door opens, the squares in its doorway are unblocked and the next flood finds the new route by itself.
 
 **Not walking through each other.** Robots also push gently away from any robot that is too close, so a horde spreads out around furniture instead of merging into one.
@@ -111,6 +139,14 @@ Whatever was hit gets the matching effect: a crater and dust on concrete, a brig
 
 **The sight.** The carbine's sight is a small glass window with a glowing ring and dot. A real sight of this kind projects its mark "at infinity", so the mark stays on the target even when the gun shakes. The game does the same thing in a simple way: the mark is always drawn exactly where the bullets will go, and the window only decides how much of it you can see. The gun moves around the mark, not the mark with the gun.
 
+## How the round announcement works
+
+When a round begins, a red scan line sweeps down the view, the round number snaps in behind it in the title's lettering, holds for a second and a half, and then the numeral flies up to the round counter in the corner, which takes the new number and pulses. When a round is cleared, one line says so, with the scrap that round paid counting up under it.
+
+Two things about how it is made are worth knowing. First, it starts on the same instruction as its sound. The round "sting" used to swell in slowly; it was rebuilt to open on a sharp burst for the number to land on. Second, none of it is a canned animation. Every frame, one small file works out where each piece should be from a single clock: "0.1 seconds in: the lettering is 1.2 times its size, skewed 3 degrees, the scan line is a sixth of the way down". That makes it possible to freeze it at any moment (which is how its screenshots are taken, and how the tests look at it), and it means the "reduce screen shake and flashing" setting can simply leave out the scan line, the interference and the glitch, and fade the lettering in instead.
+
+It is lettering only, with no panel behind it, placed above the crosshair, and the game never stops for it.
+
 ## How the player moves
 
 Two things act on you as you walk. Friction drags your speed toward zero all the time, which is what stops you when you let go of the keys. Holding a direction pushes your speed toward the speed you are aiming for: walking, sprinting, or slower while aiming.
@@ -136,13 +172,17 @@ Only public-domain (CC0) and attribution (CC-BY) material is used, plus the Mixa
 
 ## How I know it works without playing it
 
-The code was written by an AI agent that cannot hold a mouse, so the project carries its own proof. There are four kinds, and the interesting part is what each one caught that the others could not.
+The code was written by an AI agent that cannot hold a mouse, so the project carries its own proof. It comes in several kinds, and the interesting part is what each one caught that the others could not.
 
-- **Unit tests** check the rule modules in isolation, with no graphics: how rounds grow, what every kind of kill pays, what every purchase does to your scrap and your two weapon slots, which areas connect when which doors are open, fire rate at different frame rates, robot decisions, path-finding, collision, and how the player's speed builds up.
+- **Unit tests** check the rule modules in isolation, with no graphics: how rounds grow, what every kind of kill pays, what every purchase does to your scrap and your two weapon slots, which areas connect when which doors are open, which entrance a robot may use when some are being watched, every step of the mission in every order the keys can be found, how stamina drains and returns, fire rate at different frame rates, robot decisions, path-finding, collision, and how the player's speed builds up.
 
 - **An end-to-end test** opens the finished game in an invisible browser and drives it through hidden debug controls with time stepped by hand, so every result is exact. It makes every kind of purchase and checks what each one charged, sends a robot through each of the eight entrances and waits for it to reach the player in each of the four areas, goes down without god mode, and restarts three times in a row looking for leftover robots, timers still running, or one click firing twice. It also measures the picture itself: equally bright at every quality level, shadows not solid black, the muzzle flash over in an instant.
 
-- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and buys the first weapon or door it can afford. The test lets it play three whole rounds. It is a crude player, which is the point: it wanders into situations nobody scripted.
+- **A whole mission, scripted.** The same test plays the mission from the first breaker to HUMANITY SAVED: it stands where a player would stand and presses F at each step, holds the uplink for its sixty seconds (and walks away for ten of them to check the clock stops), shoots the Custodian and the Proxy until they are destroyed, pulls the switch, checks every robot has gone down, then fights on through three more rounds. It also tries each step too early and checks that nothing happens.
+
+- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and shops. It has two characters. The "expert" never misses. The "first-timer" is a rough model of someone new to this kind of game: slow to notice a robot, shaky, aims at the body, backs away late. The spec asks that a first-time player usually goes down between rounds 5 and 8, so a tool plays sixteen whole runs as the first-timer, without drawing them (a five-minute run takes about five seconds), and reports the round each ended in. It is a model, not a person: it shows whether the numbers are in the right place, not how the game feels.
+
+- **Checks that look at the building itself.** Some bugs are in the map, not the rules, and were found by eye first and then turned into checks so they cannot come back: every room is sealed by its own walls; nothing stands across any doorway (a rail along one wall once carried straight on across four openings); there is nowhere a player can stand that no robot can reach; every way in is joined to every room on the map the robots steer by (a parked cart once cut the loading dock off, and every robot sent that way stood against a wall); the places robots walk in from cannot be seen from indoors; a robot in the darkest corner still stands out from what is behind it; and every door, the core's included, is opened with F and walked through on foot at every quality level, with the room beyond measured to make sure it is lit.
 
 - **Real input.** The debug controls press the game's buttons from the inside, which cannot notice a key that is wired to nothing, or a menu button that fails to capture the mouse. So the last part of the test uses the real thing: real clicks on Play, Resume and Play Again with the browser really capturing and releasing the mouse, and every key on the controls list really pressed. This found the sprint bug described above, and that choosing "Auto" quality after trying another level did nothing. Finally the browser's processor is slowed sixteen times over to imitate a weak computer, and the test waits for the game to notice and lower its own quality.
 
@@ -152,6 +192,5 @@ Alongside these, **a screenshot script** re-stages the same moments every time s
 
 These parts are designed but not built yet. This document will grow as they are.
 
-- **The mission** (Stage 2): power, the three override keys, the final stand, the kill switch.
 - **ARGUS, the AI that studies you** (Stage 3): during each round the game counts things about how you play, such as which weapon does most of your damage, how long you stay in one spot, and how many head shots you land. Between rounds, a set of plain rules turns those counts into one or two counters and tells you about them. It is rule-based game AI, not machine learning: there is no training and no neural network, just "if the player does X a lot, respond with Y", and every response is visible and beatable.
 - **The full economy** (Stage 4): shutters to repair, boost stations, a prototype crate, an overclock bench, pickups, swarm rounds, grenades.

@@ -55,6 +55,12 @@ export class Sight {
     return Math.abs(_local.y) <= reach && Math.abs(_local.x) <= reach * camera.aspect;
   }
 
+  /** True if the player is standing within `radius` metres of a spot on the floor. */
+  standingNear(x: number, z: number, radius: number): boolean {
+    this.camera.getWorldPosition(_eye);
+    return Math.hypot(_eye.x - x, _eye.z - z) < radius;
+  }
+
   /** True if the player is looking at a point and nothing is in the way. */
   watching(point: THREE.Vector3): boolean {
     return this.inView(point) && this.clearLineTo(point);
