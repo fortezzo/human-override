@@ -15,6 +15,9 @@
 //   - a change of quality level mid-game leaves no shader to be built late
 //   - every door, bought with F and walked through on foot from both sides
 //     at every quality level: the room beyond is never near black
+//   - every room is closed off by its own walls, nothing stands across a
+//     doorway, and a robot in the darkest places still stands out from
+//     what is behind it
 //   - no room's reflection photograph has a broken pixel, and one broken
 //     pixel cannot black out a room if it ever does
 //   - a robot from every entry point reaches the player in every area
@@ -867,6 +870,129 @@ try {
     'nothing stands across any doorway or entrance',
     crossed.length === 0,
     crossed.length ? crossed.map(([way, count]) => `${way}: ${count} lines blocked`).join(', ') : `${Object.keys(across).join(', ')}: all clear`,
+  );
+
+  // Robots must be readable wherever they stand: being hit by something
+  // that could not be seen is unfair. In the darkest places on the map a
+  // robot's dark body used to melt into the dark behind it. Photograph each
+  // of those places empty, then with robots standing in it (backs turned,
+  // so the glowing visor is no help, and one hanging in the air under each
+  // of two ceiling vents), and measure how much of each robot comes out
+  // clearly different from what was behind it: at least 9 steps brighter
+  // or 30 darker, out of 255. The same is measured with the robots' edge
+  // light switched off, to show what the edge light is worth.
+  const darkPlaces = [
+    ['a dark aisle on the east side of the server hall', [1.0, 1.64, 15.6, -90, 0, 74], [[4.6, 15.7], [8.2, 15.4]]],
+    ['a dark aisle on the west side of the server hall', [-4.4, 1.64, 11.4, 90, 0, 74], [[-7.4, 11.5], [-9.6, 11.3]]],
+    ['under the server hall vent', [2.4, 1.7, 24.2, -58, 10, 72], [[5.4, 21.9, 2.6]]],
+    ['under the power room vent', [16.8, 1.64, 7.4, 136, 10, 74], [[13.4, 10.9, 2.6]]],
+    ['the far end of the power room', [15.9, 1.64, 10.4, 0, 0, 74], [[20.8, 1.0]]],
+    ['the west side of the lobby', [1.5, 1.64, 0.5, 90, 0, 74], [[-5.6, -1.2]]],
+    ['the core', [-1, 1.64, 27.5, 180, 4, 74], [[-4.5, 31], [3, 33]]],
+  ];
+  const brightnessOf = async () => {
+    const { data, info } = await sharp(await page.screenshot()).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+    const out = new Float32Array(info.width * info.height);
+    for (let i = 0; i < out.length; i++) out[i] = 0.2126 * data[i * 3] + 0.7152 * data[i * 3 + 1] + 0.0722 * data[i * 3 + 2];
+    return { out, width: info.width, height: info.height };
+  };
+  const qualityBefore = (await stats()).quality;
+  const standing = [];
+  for (const level of ['low', 'high']) {
+    await ev((level) => {
+      const ho = window.__HO;
+      ho.restart();
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.setQuality(level);
+      for (const id of ['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+      ho.step(1 / 60, 160);
+      ho.photoMode(true);
+      ho.steadyLights(true);
+      ho.grain(false);
+    }, level);
+    for (const [where, view, robots] of darkPlaces) {
+      await ev((view) => {
+        const ho = window.__HO;
+        ho.clearRobots();
+        ho.view(view[0], view[1], view[2], view[3], view[4], view[5]);
+        ho.step(1 / 60, 40);
+      }, view);
+      await page.waitForTimeout(200);
+      const empty = await brightnessOf();
+      const boxes = await ev(
+        ([view, robots]) => {
+          const ho = window.__HO;
+          for (const [x, z] of robots) ho.spawnRobot(x, z, view[3] + 180, true, 1.5, 5000);
+          ho.step(1 / 60, 30);
+          robots.forEach(([, , y], i) => {
+            if (!y) return;
+            ho.game.robots[i].root.position.y = y;
+            ho.game.robots[i].root.updateMatrixWorld(true);
+          });
+          ho.step(1 / 60, 1);
+          return ho.robotBoxes();
+        },
+        [view, robots],
+      );
+      const pictures = {};
+      for (const lit of [false, true]) {
+        await ev((lit) => {
+          const ho = window.__HO;
+          ho.edgeLight(lit);
+          ho.step(1 / 60, 2);
+        }, lit);
+        await page.waitForTimeout(200);
+        pictures[lit] = await brightnessOf();
+      }
+      const scale = empty.width / 1280;
+      boxes.forEach((box, i) => {
+        const x0 = Math.max(0, Math.floor(box.x0 * scale));
+        const x1 = Math.min(empty.width - 1, Math.ceil(box.x1 * scale));
+        const y0 = Math.max(0, Math.floor(box.y0 * scale));
+        const y1 = Math.min(empty.height - 1, Math.ceil(box.y1 * scale));
+        // How much of the picture the robot covers: every pixel it changed
+        // at all, and never less than a third of the box round it (so a
+        // robot that cannot be seen does not pass for being small).
+        let covers = 0;
+        const stands = { false: 0, true: 0 };
+        for (let y = y0; y <= y1; y++) {
+          for (let x = x0; x <= x1; x++) {
+            const k = y * empty.width + x;
+            const without = pictures.false.out[k] - empty.out[k];
+            const withLight = pictures.true.out[k] - empty.out[k];
+            if (Math.abs(without) >= 4 || Math.abs(withLight) >= 4) covers++;
+            if (without >= 9 || without <= -30) stands.false++;
+            if (withLight >= 9 || withLight <= -30) stands.true++;
+          }
+        }
+        const area = Math.max(covers, 0.35 * (x1 - x0 + 1) * (y1 - y0 + 1));
+        standing.push({ where: `${where}${boxes.length > 1 ? `, robot ${i + 1}` : ''}, ${level} quality`, share: stands.true / area, without: stands.false / area, distance: box.distance });
+      });
+    }
+  }
+  await ev((quality) => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.edgeLight(true);
+    ho.grain(true);
+    ho.photoMode(false);
+    ho.steadyLights(false);
+    ho.releaseView();
+    ho.setQuality(quality);
+    ho.step(1 / 60, 30);
+  }, qualityBefore);
+  const expected = darkPlaces.reduce((sum, [, , robots]) => sum + robots.length, 0) * 2;
+  const faint = standing.filter((s) => s.share < 0.22);
+  const weakest = standing.reduce((a, b) => (a.share <= b.share ? a : b), { share: 1, without: 1, where: 'nowhere', distance: 0 });
+  const blind = standing.filter((s) => s.without < 0.22).length;
+  check(
+    'a robot in the darkest places stands out from what is behind it',
+    standing.length === expected && faint.length === 0,
+    faint.length
+      ? faint.map((s) => `${s.where}: only ${Math.round(s.share * 100)}% of it stands out`).join(' | ')
+      : `${standing.length} robots measured; the faintest (${weakest.where}, ${weakest.distance.toFixed(1)} m away) has ${Math.round(weakest.share * 100)}% of itself standing out; without the edge light ${blind} of them would fail`,
   );
 
   // The reflections each room is lit by are made from a photograph of it.

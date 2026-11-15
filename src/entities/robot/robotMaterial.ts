@@ -14,6 +14,41 @@ const STEEL_MEAN = 0.05;
 /** Average of the rust texture's green channel, which doubles as the rust mask. */
 const RUST_MEAN = 0.067;
 
+/**
+ * Edge light. A dark machine in a dark room is invisible, and being hit by
+ * something that could not be seen is unfair. So wherever a robot's own
+ * surface is close to black, its edges (the faces turned away from the
+ * viewer) pick up a faint cold sheen, as bare steel does from whatever
+ * stray light there is, and the rest of it lifts a shade off pure black.
+ * Its outline then reads against anything dark behind it. Where real light
+ * falls on the robot this fades out, so in a lit room it looks as it always
+ * did.
+ */
+export const EDGE_LIGHT = {
+  color: new THREE.Color(0.68, 0.77, 0.95),
+  /** Brightness at a face seen edge-on. */
+  strength: 0.2,
+  /** Brightness of the lift given to the whole body. */
+  lift: 0.012,
+  /**
+   * How tightly it hugs the outline (higher = thinner). Across a room a
+   * thin outline is finer than a pixel and all but disappears, so with
+   * distance it spreads over more of each face and the lift grows.
+   */
+  power: 2.2,
+  /** Surface brightness at which it has faded away completely. */
+  fadeBy: 0.09,
+};
+
+/** The edge light as the shader sees it: strength, lift, power, fade. Shared by every robot. */
+const edgeUniform = { value: new THREE.Vector4(EDGE_LIGHT.strength, EDGE_LIGHT.lift, EDGE_LIGHT.power, EDGE_LIGHT.fadeBy) };
+
+/** Switch the edge light off and on (so a check can show what it is worth). */
+export function setEdgeLight(on: boolean): void {
+  edgeUniform.value.x = on ? EDGE_LIGHT.strength : 0;
+  edgeUniform.value.y = on ? EDGE_LIGHT.lift : 0;
+}
+
 export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial {
   const steel = assets.surface('Metal046B');
   const rust = assets.surface('rusty_metal_04');
@@ -35,13 +70,15 @@ export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial 
 
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uRustMap = { value: rust.color };
+    shader.uniforms.uEdgeColor = { value: EDGE_LIGHT.color };
+    shader.uniforms.uEdge = edgeUniform;
 
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec3 aSurface;\nvarying vec3 vSurface;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSurface = aSurface;');
 
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uRustMap;\nvarying vec3 vSurface;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uRustMap;\nuniform vec3 uEdgeColor;\nuniform vec4 uEdge;\nvarying vec3 vSurface;')
       .replace(
         '#include <color_fragment>',
         /* glsl */ `#include <color_fragment>
@@ -65,6 +102,18 @@ export function createRobotMaterial(assets: Assets): THREE.MeshStandardMaterial 
         /* glsl */ `#include <roughnessmap_fragment>
         roughnessFactor = clamp(roughnessFactor + 0.44 + vSurface.y, 0.12, 1.0);
         roughnessFactor = mix(roughnessFactor, 0.95, rustAmount);`,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        /* glsl */ `
+        // Edge light (see EDGE_LIGHT above): strongest on faces seen
+        // edge-on, and only where the surface is otherwise near black.
+        float edgeFacing = 1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0);
+        float edgeDark = 1.0 - smoothstep(0.0, uEdge.w, dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722)));
+        float edgeFar = clamp((length(vViewPosition) - 3.0) / 9.0, 0.0, 1.0);
+        float edgeShape = pow(edgeFacing, mix(uEdge.z, uEdge.z * 0.5, edgeFar));
+        outgoingLight += uEdgeColor * (uEdge.y * (1.0 + 2.5 * edgeFar) + uEdge.x * edgeShape) * edgeDark;
+        #include <opaque_fragment>`,
       )
       .replace(
         '#include <metalnessmap_fragment>',

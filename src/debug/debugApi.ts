@@ -7,8 +7,9 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { PLAYER, ROBOT, WEAPONS } from '../config';
+import { PLAYER, QUALITY, ROBOT, WEAPONS } from '../config';
 import type { Action } from '../core/input';
+import { setEdgeLight } from '../entities/robot/robotMaterial';
 import type { Game } from '../game/Game';
 import type { SurfaceKind } from '../render/materials';
 import { remaining } from '../sim/rounds';
@@ -126,6 +127,15 @@ export interface DebugApi {
   poison(x?: number, y?: number, z?: number): void;
   /** Hide the weapon and HUD for clean photographs of the room. */
   photoMode(on: boolean): void;
+  /** Film grain off (or back on), so pictures can be measured without its noise. */
+  grain(on: boolean): void;
+  /** The robots' edge light off (or back on), to show what it is worth. */
+  edgeLight(on: boolean): void;
+  /**
+   * Where each living robot is on screen: a box round it in pixels of the
+   * page, and how far away it is. Robots behind the camera are left out.
+   */
+  robotBoxes(): Array<{ x0: number; y0: number; x1: number; y1: number; distance: number }>;
   /** Hold every lamp at full brightness, so pictures can be compared. */
   steadyLights(on: boolean): void;
   /** Leave a bullet scar and sparks on a surface. */
@@ -393,6 +403,42 @@ export function installDebugApi(game: Game): DebugTools {
     },
     autopilot(on, name) {
       setAutopilot(on, name);
+    },
+    grain(on) {
+      game.renderer.grade.grain = on ? QUALITY[game.qualityLevel].filmGrain : 0;
+    },
+    edgeLight(on) {
+      setEdgeLight(on);
+    },
+    robotBoxes() {
+      const boxes: Array<{ x0: number; y0: number; x1: number; y1: number; distance: number }> = [];
+      const point = new THREE.Vector3();
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+      for (const robot of game.robots) {
+        if (!robot.alive) continue;
+        let x0 = Infinity;
+        let y0 = Infinity;
+        let x1 = -Infinity;
+        let y1 = -Infinity;
+        let behind = false;
+        for (const bone of robot.bones.values()) {
+          point.setFromMatrixPosition(bone.matrixWorld).project(game.camera);
+          if (point.z > 1) behind = true;
+          const x = (point.x * 0.5 + 0.5) * width;
+          const y = (-point.y * 0.5 + 0.5) * height;
+          x0 = Math.min(x0, x);
+          y0 = Math.min(y0, y);
+          x1 = Math.max(x1, x);
+          y1 = Math.max(y1, y);
+        }
+        if (behind) continue;
+        const distance = robot.root.position.distanceTo(game.camera.position);
+        // The body stands a little proud of its joints.
+        const pad = (0.12 / Math.max(distance, 0.5)) * (height / (2 * Math.tan(THREE.MathUtils.degToRad(game.camera.fov) / 2)));
+        boxes.push({ x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad, distance });
+      }
+      return boxes;
     },
     photoMode(on) {
       game.hideWeapon = on;
