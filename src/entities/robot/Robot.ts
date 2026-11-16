@@ -5,13 +5,17 @@
 import * as THREE from 'three';
 import { addsLightOnly } from '../../render/glow';
 import { PoseLayers } from './kit/PoseLayers';
-import { ROBOT } from '../../config';
+import { ARGUS, ROBOT, SPECIALS } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { settings } from '../../core/settings';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
 import { nextWaypoint, type NavGrid } from '../../sim/navGrid';
 import { rayCapsule, raySphere } from '../../sim/rayShapes';
+import type { WeaponKey } from '../../sim/argus';
+import { createArmour, type Armour } from '../../sim/armour';
+import type { RobotKind } from '../../sim/horde';
 import { createRobotMind, damageRobot, moveFactor, thinkRobot, type HitZone, type RobotMind, type RobotSpec } from '../../sim/robotMind';
+import { createGuard, createShield, type Shield } from './attachments';
 import type { ClipName, RobotModel } from './RobotModel';
 
 export interface RobotHit {
@@ -32,6 +36,8 @@ export interface RobotEventsOut {
   landed: boolean;
   /** It has made no headway for too long and should be sent round again. */
   stuck: boolean;
+  /** A bomber has come within reach and started its fuse. */
+  primed: boolean;
 }
 
 /** What makes one robot different from the next: set by the round it belongs to. */
@@ -54,6 +60,12 @@ export interface RobotTraits {
   staggerDamage?: number;
   /** How long a hit slows it for (seconds), if not the usual. */
   flinchTime?: number;
+  /** One of the specials (a drone, a bomber, a heavy); the ordinary robot if left out. */
+  kind?: RobotKind;
+  /** ARGUS's shielding against one weapon: that weapon does half its damage to this robot. */
+  shield?: WeaponKey;
+  /** ARGUS's plate over the weak point: the damage it takes to shoot off. */
+  guard?: number;
 }
 
 export type RobotRole = 'custodian' | 'proxy';
@@ -100,6 +112,16 @@ export class Robot {
   readonly extra: boolean;
   /** Switched off by the kill switch: it slumps where it stands and stays there. */
   poweredDown = false;
+  /** The ordinary robot, or which special it is. */
+  readonly kind: RobotKind;
+  /** What stands between a hit and this robot: plating, shielding, a plate over the weak point. */
+  readonly armour: Armour = createArmour();
+  /** A bomber's fuse: seconds left once it has primed, -1 until then. */
+  fuse = -1;
+  /** A bomber that went off by itself (no one destroyed it). */
+  selfDestructed = false;
+  /** A primed bomber: seconds until its next beep. */
+  beepIn = 0;
 
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<ClipName, THREE.AnimationAction>();
@@ -127,6 +149,11 @@ export class Robot {
   private flinchTwist = 0;
   private time = rand(0, 10);
   private readonly body: CircleBody = { x: 0, z: 0, radius: ROBOT.radius, feet: 0, head: 1.8 };
+  /** For one that flies: how far its feet hang off the floor. */
+  private readonly lift: number;
+  private shield: Shield | null = null;
+  private shieldFlash = 0;
+  private guard: THREE.Object3D | null = null;
 
   constructor(
     readonly model: RobotModel,
@@ -144,12 +171,16 @@ export class Robot {
     };
     this.role = traits.role ?? null;
     this.extra = traits.extra ?? false;
+    this.kind = traits.kind ?? 'drudge';
+    if (this.kind === 'heavy') this.armour.plating = SPECIALS.heavy.plating;
+    this.lift = model.flies ? Math.max(0, SPECIALS.drone.hover - model.chestHeight) : 0;
     this.eyeColor = new THREE.Color(model.eyeColor);
     this.mind = createRobotMind(this.spec);
     this.moveSpeed = traits.speed;
     this.root = model.instantiate();
-    this.root.position.set(x, traits.dropFrom ?? 0, z);
-    this.falling = traits.dropFrom !== undefined;
+    this.root.position.set(x, traits.dropFrom ?? this.lift, z);
+    // (One that flies does not fall out of a vent: it comes down out of it.)
+    this.falling = traits.dropFrom !== undefined && !model.flies;
     this.heading = heading;
     this.root.rotation.y = heading;
     this.root.traverse((node) => {
@@ -187,8 +218,26 @@ export class Robot {
     this.glow.scale.set(model.glow.size.x, model.glow.size.y, 1);
     this.glow.renderOrder = 9;
     addsLightOnly(this.glow);
-    this.bones.get('Head')!.add(this.glow);
+    this.bones.get(model.glow.bone)!.add(this.glow);
     this.setEyes(1);
+
+    // What ARGUS has hung on it.
+    const hang = (object: THREE.Object3D, mount: { bone: string; toBone: THREE.Matrix4 }): void => {
+      object.matrixAutoUpdate = false;
+      object.matrix.copy(mount.toBone);
+      this.bones.get(mount.bone)!.add(object);
+    };
+    if (traits.shield) {
+      this.armour.shield = traits.shield;
+      this.armour.shieldFactor = ARGUS.shielding.factor;
+      this.shield = createShield(traits.shield, model.mounts.chest.at);
+      hang(this.shield.object, model.mounts.chest);
+    }
+    if (traits.guard) {
+      this.armour.guard = traits.guard;
+      this.guard = createGuard(model.mounts.visor.at);
+      hang(this.guard, model.mounts.visor);
+    }
   }
 
   get position(): THREE.Vector3 {
@@ -239,13 +288,51 @@ export class Robot {
 
   /** Roughly the middle of the chest, for effects. */
   chest(out: THREE.Vector3): THREE.Vector3 {
-    return out.setFromMatrixPosition(this.bones.get('Spine1')!.matrixWorld);
+    return out.setFromMatrixPosition(this.bones.get(this.model.flies ? 'Spine2' : 'Spine1')!.matrixWorld);
+  }
+
+  /**
+   * Where to aim to hit it: its weak point, if that is what is wanted and
+   * it has one (the head, for most; the heavy's is the reactor in its
+   * chest), otherwise the middle of it.
+   */
+  aimPoint(out: THREE.Vector3, weakPoint = true): THREE.Vector3 {
+    const { hitShape, weakPoint: weak } = this.model;
+    if (hitShape) return out.copy(hitShape.centre).applyMatrix4(this.bones.get(hitShape.bone)!.matrixWorld);
+    if (!weakPoint || weak.radius <= 0) return this.chest(out);
+    if (weak.bone === 'Head') return out.setFromMatrixPosition(this.bones.get('Head')!.matrixWorld);
+    return out.copy(weak.centre).applyMatrix4(this.bones.get(weak.bone)!.matrixWorld);
+  }
+
+  /** Which weapon it is shielded against, or null. */
+  get shieldedAgainst(): WeaponKey | null {
+    return this.armour.shield;
+  }
+
+  /** Its shielding has just turned part of a shot: flare it. */
+  flashShield(): void {
+    this.shieldFlash = 1;
+  }
+
+  /** The plate over its weak point has been shot off: let go of it. Returns where it was, or null if there was none. */
+  dropGuard(out: THREE.Vector3): THREE.Vector3 | null {
+    if (!this.guard) return null;
+    this.guard.getWorldPosition(out);
+    out.setFromMatrixPosition(this.bones.get('Head')!.matrixWorld);
+    this.guard.removeFromParent();
+    this.guard = null;
+    return out;
   }
 
   /** @param others every robot on the map (this one included), to keep them from walking through each other */
   update(dt: number, target: THREE.Vector3, targetAlive: boolean, grid: NavGrid, colliders: readonly Collider[], others: readonly Robot[] = []): RobotEventsOut {
     this.time += dt;
-    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false };
+    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false, primed: false };
+    const flies = this.model.flies;
+    if (this.shield) {
+      this.shieldFlash = damp(this.shieldFlash, 0, 7, dt);
+      this.shield.setLevel(this.alive ? 1 + this.shieldFlash * 2.2 + 0.12 * Math.sin(this.time * 5) : 0);
+    }
     const p = this.root.position;
     const dx = target.x - p.x;
     const dz = target.z - p.z;
@@ -312,13 +399,34 @@ export class Robot {
       const events = thinkRobot(this.mind, this.spec, dt, distance, targetAlive);
       out.hitPlayer = events.hit;
       out.attackStarted = events.attackStarted;
-      if (events.attackStarted) this.play('attack', 0.12, true);
+      if (events.attackStarted) {
+        // (A drone has no arms to swing: it lunges. The heavy has a blow of its own.)
+        if (flies) this.flinchLean += 0.5;
+        else this.play(this.kind === 'heavy' && this.actions.has('attackHeavy') ? 'attackHeavy' : 'attack', 0.12, true);
+      }
+
+      // A bomber within reach starts its fuse, and when the fuse runs out
+      // it goes off: there is that long to get clear of it.
+      if (this.kind === 'bomber') {
+        if (this.fuse < 0 && targetAlive && distance <= SPECIALS.bomber.trigger) {
+          this.fuse = SPECIALS.bomber.fuse;
+          out.primed = true;
+        } else if (this.fuse >= 0) {
+          this.fuse -= dt;
+          if (this.fuse <= 0) {
+            this.selfDestructed = true;
+            this.mind.state = 'dead';
+            this.mind.health = 0;
+            this.collapse = COLLAPSE_TIME;
+          }
+        }
+      }
 
       // Decide where to face and how fast to go.
       let wantX = dx;
       let wantZ = dz;
       let wantSpeed = 0;
-      const pace = this.hurry ? Math.max(this.moveSpeed, ROBOT.arrivalSpeed) : this.moveSpeed;
+      const pace = (this.hurry ? Math.max(this.moveSpeed, ROBOT.arrivalSpeed) : this.moveSpeed) * (this.fuse >= 0 ? 0.6 : 1);
       const running = pace > ROBOT.runAbove;
       if (this.mind.state === 'chase') {
         if (distance > ROBOT.attackRange * 0.85) {
@@ -360,7 +468,7 @@ export class Robot {
         } else {
           this.sinceProgress = 0;
         }
-        this.play(wantSpeed > 0.05 || this.speed > 0.2 ? (running ? 'run' : 'walk') : 'idle', 0.25);
+        this.play(flies ? 'idle' : wantSpeed > 0.05 || this.speed > 0.2 ? (running ? 'run' : 'walk') : 'idle', 0.25);
       } else if (this.mind.state === 'stagger') {
         this.play('hit', 0.1);
       }
@@ -403,16 +511,33 @@ export class Robot {
       const half = Math.floor(this.stride / (running ? 0.85 : 0.42));
       if (half !== this.lastHalfStride) {
         this.lastHalfStride = half;
-        out.footstep = true;
+        out.footstep = !flies;
       }
-      this.setEyes(0.9 + 0.1 * Math.sin(this.time * 9));
+      if (this.fuse >= 0) {
+        // Primed: its lights beat faster and faster as the fuse runs down.
+        const through = 1 - Math.max(0, this.fuse) / SPECIALS.bomber.fuse;
+        this.setEyes(Math.sin(this.time * (26 + through * 50)) > 0 ? 1.5 : 0.25);
+      } else {
+        this.setEyes(0.9 + 0.1 * Math.sin(this.time * 9));
+      }
+    }
+
+    // One that flies hangs in the air, rising and falling a little, and
+    // leans into the way it is going.
+    if (flies && this.alive) {
+      p.y = damp(p.y, this.lift + Math.sin(this.time * 2.3) * 0.07, 3, dt);
+      this.flinchLean = damp(this.flinchLean, clamp(this.speed / 14, 0, 0.42), 5, dt);
+    } else if (flies) {
+      // Destroyed: it drops.
+      this.fallSpeed += 12 * dt;
+      p.y = Math.max(-this.model.chestHeight + 0.2, p.y - this.fallSpeed * dt);
     }
 
     this.mixer.update(dt);
 
     // The animations were recorded for an upright figure. Layer the
     // design's hunch on top, and a quick lean away from any bullet.
-    this.flinchLean = damp(this.flinchLean, 0, 9, dt);
+    if (!flies) this.flinchLean = damp(this.flinchLean, 0, 9, dt);
     this.flinchTwist = damp(this.flinchTwist, 0, 9, dt);
     if (Math.abs(this.flinchLean) > 0.002 || Math.abs(this.flinchTwist) > 0.002) {
       this.pose.apply([
@@ -442,12 +567,34 @@ export class Robot {
     let best = maxDistance;
     let zone: HitZone | null = null;
 
-    const head = this.bones.get('Head')!;
-    _headCentre.copy(this.model.weakPoint.centre).applyMatrix4(head.matrixWorld);
-    const headHit = raySphere(origin, direction, _headCentre, this.model.weakPoint.radius);
-    if (headHit >= 0 && headHit < best) {
-      best = headHit;
-      zone = 'head';
+    // A body that is not a figure (the drone) is one sphere.
+    const shape = this.model.hitShape;
+    if (shape) {
+      _a.copy(shape.centre).applyMatrix4(this.bones.get(shape.bone)!.matrixWorld);
+      const hit = raySphere(origin, direction, _a, shape.radius);
+      if (hit < 0 || hit >= best) return null;
+      return { distance: hit, zone: 'torso', point: new THREE.Vector3().copy(origin).addScaledVector(direction, hit) };
+    }
+
+    // The weak point: the head, for most; the heavy's is the reactor in its chest.
+    const weak = this.model.weakPoint;
+    if (weak.radius > 0) {
+      _headCentre.copy(weak.centre).applyMatrix4(this.bones.get(weak.bone)!.matrixWorld);
+      const weakHit = raySphere(origin, direction, _headCentre, weak.radius);
+      if (weakHit >= 0 && weakHit < best) {
+        best = weakHit;
+        zone = 'head';
+      }
+    }
+    if (weak.bone !== 'Head') {
+      // Its head is plated like the rest of it: a hit there is a hit on the body.
+      _a.setFromMatrixPosition(this.bones.get('Head')!.matrixWorld);
+      _a.y += 0.08 * girth;
+      const hit = raySphere(origin, direction, _a, 0.15 * girth);
+      if (hit >= 0 && hit < best - (zone ? 0.05 : 0)) {
+        best = hit;
+        zone = 'torso';
+      }
     }
 
     _a.setFromMatrixPosition(this.bones.get('Hips')!.matrixWorld);
@@ -504,6 +651,7 @@ export class Robot {
     this.root.removeFromParent();
     this.eyeMaterial.dispose();
     this.glow.material.dispose();
+    this.shield?.dispose();
   }
 
   private play(name: ClipName, fade: number, restart = false): void {

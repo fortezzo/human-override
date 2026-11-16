@@ -18,10 +18,21 @@ export interface RobotDesign {
   posture: PostureLean[];
   /** Overall size multiplier. */
   scale: number;
-  /** The weak point: a sphere given relative to the head joint in the rest pose. */
-  weakPoint: { centre: [number, number, number]; radius: number };
-  /** Centre of the visor's glow relative to the head joint, and its width and height. */
-  glow: { at: [number, number, number]; size: [number, number] };
+  /**
+   * The weak point: a sphere given relative to a joint in the rest pose
+   * (the head joint, unless another is named: the heavy's is the core in
+   * its chest). A radius of 0 means it has none.
+   */
+  weakPoint: { centre: [number, number, number]; radius: number; bone?: string };
+  /** Centre of the visor's glow relative to a joint (the head's, unless another is named), and its width and height. */
+  glow: { at: [number, number, number]; size: [number, number]; bone?: string };
+  /**
+   * For a body that is not a figure with a trunk and limbs (the drone):
+   * the one sphere a bullet is tested against, relative to a joint.
+   */
+  hitShape?: { bone: string; centre: [number, number, number]; radius: number };
+  /** It flies: it has no walk or run, and hangs in the air at a set height. */
+  flies?: boolean;
   /** Colour of everything on it that glows (the standard red if left out). */
   eyeColor?: number;
   /**

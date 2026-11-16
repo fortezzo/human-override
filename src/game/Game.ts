@@ -7,12 +7,15 @@
 
 import * as THREE from 'three';
 import { acceleratedRaycast } from 'three-mesh-bvh';
+import { BOMBER } from '../entities/robot/designs/bomber';
 import { CUSTODIAN } from '../entities/robot/designs/custodian';
+import { DRONE } from '../entities/robot/designs/drone';
+import { HEAVY } from '../entities/robot/designs/heavy';
 import { PROXY } from '../entities/robot/designs/proxy';
 import { Mission } from './Mission';
 import { Sight } from './Sight';
 import { AudioEngine } from '../audio/AudioEngine';
-import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, type QualityLevel } from '../config';
+import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, SPECIALS, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
 import { Input } from '../core/input';
 import { damp, rand } from '../core/math';
@@ -126,6 +129,9 @@ export class Game {
   private robotModel!: RobotModel;
   private custodianModel!: RobotModel;
   private proxyModel!: RobotModel;
+  private droneModel!: RobotModel;
+  private bomberModel!: RobotModel;
+  private heavyModel!: RobotModel;
   /** A robot that is never shown: it keeps the robots' shaders built. */
   private spare!: Robot;
   private gibs!: Gibs;
@@ -144,7 +150,10 @@ export class Game {
   private fade = 1;
   private fadeTarget = 1;
   private bedsStarted = false;
-  private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2, step: 0 };
+  private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2, step: 0, drone: 1 };
+  /** The light of a blast: how bright it still is (1 at the moment it goes off), and where. */
+  private blast = 0;
+  private readonly blastAt = new THREE.Vector3();
   private nextDrip = 2;
   private nextFocus = 0;
 
@@ -223,6 +232,9 @@ export class Game {
     this.robotModel = new RobotModel(this.assets, DRUDGE);
     this.custodianModel = new RobotModel(this.assets, CUSTODIAN);
     this.proxyModel = new RobotModel(this.assets, PROXY);
+    this.droneModel = new RobotModel(this.assets, DRONE);
+    this.bomberModel = new RobotModel(this.assets, BOMBER);
+    this.heavyModel = new RobotModel(this.assets, HEAVY);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
     // A spare robot that is never shown. While it exists the robots' shaders
@@ -828,7 +840,18 @@ export class Game {
 
   /** Add a robot to the map. */
   addRobot(x: number, z: number, heading: number, traits?: RobotTraits): Robot {
-    const model = traits?.role === 'custodian' ? this.custodianModel : traits?.role === 'proxy' ? this.proxyModel : this.robotModel;
+    const model =
+      traits?.role === 'custodian'
+        ? this.custodianModel
+        : traits?.role === 'proxy'
+          ? this.proxyModel
+          : traits?.kind === 'drone'
+            ? this.droneModel
+            : traits?.kind === 'bomber'
+              ? this.bomberModel
+              : traits?.kind === 'heavy'
+                ? this.heavyModel
+                : this.robotModel;
     const robot = new Robot(model, x, z, heading, traits);
     this.robots.push(robot);
     this.scene.add(robot.root);
@@ -849,6 +872,7 @@ export class Game {
     this.soundClock.voice -= dt;
     this.soundClock.servo -= dt;
     this.soundClock.step -= dt;
+    this.soundClock.drone -= dt;
 
     let lit: Robot | null = null;
     for (let i = this.robots.length - 1; i >= 0; i--) {
@@ -869,7 +893,21 @@ export class Game {
         player.addShake(Math.max(0, 0.35 - robot.position.distanceTo(player.position) * 0.04));
       }
 
-      if (robot.alive && !robot.hold) {
+      // A primed bomber beeps, faster and faster as its fuse runs down.
+      if (robot.fuse >= 0 && robot.alive) {
+        robot.beepIn -= dt;
+        if (events.primed || robot.beepIn <= 0) {
+          robot.beepIn = 0.07 + 0.16 * Math.max(0, robot.fuse / SPECIALS.bomber.fuse);
+          audio.play('bomberBeep', { position: robot.chest(this.tmpB) });
+        }
+      }
+      // Drones can be heard coming.
+      if (robot.kind === 'drone' && robot.alive && !robot.hold && this.soundClock.drone <= 0) {
+        this.soundClock.drone = rand(0.5, 0.9);
+        audio.play('droneBuzz', { position: robot.chest(this.tmpB) });
+      }
+
+      if (robot.alive && !robot.hold && robot.kind !== 'drone') {
         if (this.soundClock.voice <= 0) {
           this.soundClock.voice = rand(4, 9);
           audio.play('robotVoice', { position: robot.chest(this.tmpB) });
@@ -887,6 +925,12 @@ export class Game {
         player.addShake(Math.max(0, 0.5 - centre.distanceTo(this.camera.position) * 0.05));
         robot.dispose();
         this.robots.splice(i, 1);
+        if (robot.kind === 'bomber') {
+          // One that went off by itself was nobody's kill, but it is gone
+          // from the round all the same.
+          if (robot.selfDestructed && !robot.extra) this.director.destroyed();
+          this.explode(centre.clone(), robot);
+        }
       } else if (events.stuck && playing) {
         // Never let a robot stay wedged somewhere: take it off and send it round again.
         robot.dispose();
@@ -901,6 +945,15 @@ export class Game {
     // and so is the floor round it. It dies with the robot.
     const lamp = lit && !lit.removed ? lit.model.lamp : null;
     let wanted = 0;
+    // (With no such robot on the map, the same lamp is the flash of a blast.)
+    this.blast = damp(this.blast, 0, 9, dt);
+    if (!lamp && this.blast > 0.02) {
+      this.escort.position.copy(this.blastAt);
+      this.escort.color.setHex(0xffb060);
+      this.escort.distance = 16;
+      this.escort.intensity = 90 * this.blast;
+      return;
+    }
     if (lit && lamp) {
       const chest = lit.chest(this.tmpB);
       const dx = this.camera.position.x - chest.x;
@@ -917,6 +970,47 @@ export class Game {
     }
     this.escort.intensity = damp(this.escort.intensity, wanted, 5, dt);
     if (this.escort.intensity < 0.02) this.escort.intensity = 0;
+  }
+
+  /**
+   * A bomber goes off at `centre`: everything within reach of the blast
+   * is hurt, less with distance. The player, if they did not get clear;
+   * and every robot round it, which is why it is worth shooting a bomber
+   * while it is still among its own. Robots it destroys are the player's
+   * kills if the player set it off.
+   */
+  private explode(centre: THREE.Vector3, source: Robot): void {
+    const rule = SPECIALS.bomber;
+    const { player, audio } = this;
+    this.effects.explosion(centre, rule.radius);
+    audio.play('explosion', { position: centre });
+    audio.thump(1.6);
+    this.blast = 1;
+    this.blastAt.set(centre.x, centre.y + 0.6, centre.z);
+
+    const reach = (x: number, z: number): number => 1 - Math.hypot(x - centre.x, z - centre.z) / rule.radius;
+    const near = reach(player.position.x, player.position.z);
+    player.addShake(Math.max(0, 0.35 + near * 0.9));
+    // (Not through a wall: the blast needs a clear line to the player.)
+    if (near > 0 && this.sight.clearLineTo(centre)) this.hurtPlayer(rule.damage * near, source);
+
+    const byPlayer = !source.selfDestructed;
+    const ordinary = this.director.rounds.plan.health;
+    for (const robot of this.robots) {
+      if (!robot.alive || robot === source) continue;
+      const share = reach(robot.position.x, robot.position.z);
+      if (share <= 0) continue;
+      const direction = this.tmpA.set(robot.position.x - centre.x, 0.4, robot.position.z - centre.z).normalize();
+      const damage = ordinary * rule.wreck * share;
+      const result = robot.damage(damage, direction);
+      if (!result.killed) continue;
+      if (byPlayer) {
+        this.combat.onHit({ robot, killed: true, weakPoint: false, melee: false, scrap: SCRAP.kill, weapon: 'blast', damage, resisted: false, plated: false, guarded: false, guardBroke: false });
+      } else {
+        if (!robot.extra) this.director.destroyed();
+        this.mission.robotDestroyed(robot);
+      }
+    }
   }
 
   private hurtPlayer(amount: number, robot: Robot): void {

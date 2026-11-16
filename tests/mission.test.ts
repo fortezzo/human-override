@@ -306,3 +306,14 @@ describe('the mission: the numbers in the config', () => {
     expect(MISSION.custodianFromRound).toBeGreaterThan(3);
   });
 });
+
+describe('the mission: the wave at the uplink', () => {
+  it('is small in the early rounds and grows with them, up to a limit', async () => {
+    const { uplinkWave } = await import('../src/sim/mission');
+    const sizes = [1, 3, 4, 5, 6, 8, 9, 12, 30].map((round) => uplinkWave(MISSION, round));
+    expect(sizes[0]).toBe(MISSION.uplinkWaveBase);
+    for (let i = 1; i < sizes.length; i++) expect(sizes[i]!).toBeGreaterThanOrEqual(sizes[i - 1]!);
+    expect(uplinkWave(MISSION, 4)).toBeLessThan(uplinkWave(MISSION, 9));
+    expect(sizes[sizes.length - 1]).toBe(MISSION.uplinkWaveMax);
+  });
+});

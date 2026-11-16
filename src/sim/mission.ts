@@ -46,6 +46,11 @@ export interface MissionRules {
   bossAfter: number;
 }
 
+/** How many extra robots may be on the map at once while the uplink is held, in a given round. */
+export function uplinkWave(rules: { uplinkWaveBase: number; uplinkWaveRounds: number; uplinkWaveMax: number }, round: number): number {
+  return Math.min(rules.uplinkWaveMax, rules.uplinkWaveBase + Math.floor(Math.max(0, round) / rules.uplinkWaveRounds));
+}
+
 export interface MissionState {
   phase: MissionPhase;
   /** Seconds played this run. */

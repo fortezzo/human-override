@@ -309,13 +309,21 @@ export const MISSION = {
    * player, who has the other two keys by then, reaches the final stand
    * around round 10.)
    */
-  custodianFromRound: 8,
+  custodianFromRound: 11,
   /** Seconds the ground round the uplink has to be held, and how far from it that ground reaches (metres). */
   uplinkSeconds: 60,
-  uplinkRadius: 6.5,
-  /** While the uplink is being held an extra robot is sent this often (seconds), up to this many of them on the map. */
-  uplinkWaveInterval: 2.4,
-  uplinkWaveMax: 8,
+  uplinkRadius: 8.5,
+  /**
+   * While the uplink is being held an extra robot is sent this often
+   * (seconds), up to so many of them on the map at once: `uplinkWaveBase`
+   * of them, one more for every `uplinkWaveRounds` rounds played, and never
+   * more than `uplinkWaveMax`. (An uplink started in round 4 with a sidearm
+   * is a smaller fight than one started in round 9 with everything.)
+   */
+  uplinkWaveInterval: 5,
+  uplinkWaveBase: 1,
+  uplinkWaveRounds: 3,
+  uplinkWaveMax: 4,
   /** Seconds the kill switch takes to arm, and how far into that ARGUS's own unit arrives. */
   armSeconds: 75,
   bossAfter: 10,
@@ -328,9 +336,16 @@ export const MISSION = {
    * the room to see it coming.
    */
   proxyEntries: ['dock', 'yard'],
-  /** During the final stand a robot is sent in this often (seconds), on top of whatever the round still owes. */
-  standInterval: 1.5,
-  standMax: 16,
+  /**
+   * During the final stand a robot is sent in this often (seconds), up to
+   * this many of them on the map. The horde of the stand is a heavy one
+   * that presses in at a walk, with this share of runners among it: in a
+   * room the size of the core a crowd of sprinters leaves nothing to do
+   * but go down, and the Proxy is there to be the thing that hunts.
+   */
+  standInterval: 1.9,
+  standMax: 12,
+  standRunners: 0.2,
   /** How near the player must be to pick up a key that is lying on the floor (metres). */
   keyReach: 1.7,
   /**
@@ -344,17 +359,17 @@ export const MISSION = {
    * a hit slows it for, in seconds (an ordinary robot: 0.22).
    */
   custodian: { health: 6, speed: 3.0, damage: 34, scrap: 500, stagger: 2, flinch: 0.1 },
-  proxy: { health: 12, speed: 3.6, damage: 45, scrap: 1500, stagger: 12, flinch: 0 },
+  proxy: { health: 10, speed: 3.6, damage: 45, scrap: 1500, stagger: 12, flinch: 0 },
 };
 
 /** How rounds grow. Round numbers start at 1. */
 export const ROUNDS = {
   /** Seconds from pressing Play to the first robot, and between rounds. */
   firstDelay: 3.2,
-  lull: 10,
+  lull: 15,
   /** Robots sent in each of the first rounds, then this many more per round. */
-  counts: [6, 8, 10, 13, 16, 20, 24, 28, 32, 36],
-  countGrowth: 4,
+  counts: [6, 10, 14, 18, 23, 29, 35, 40, 46, 52],
+  countGrowth: 6,
   /** Most robots on the map at once; the rest wait their turn. */
   maxActive: 24,
   /**
@@ -366,28 +381,114 @@ export const ROUNDS = {
   /** A ceiling vent is not used while the player is standing within this many metres of the spot under it. */
   ventClearance: 1.8,
   /** Seconds between arrivals in round 1, shrinking by `spawnQuicken` a round down to a floor. */
-  spawnInterval: 2.3,
-  spawnQuicken: 0.18,
-  spawnIntervalMin: 0.45,
+  spawnInterval: 2.6,
+  spawnQuicken: 0.08,
+  spawnIntervalMin: 2.0,
   /** Robot health: this much in round 1, growing by a fixed step, then by a percentage. */
   health: 70,
-  healthStep: 22,
-  healthStepRounds: 9,
-  healthGrowth: 1.1,
+  healthStep: 26,
+  healthStepRounds: 6,
+  healthGrowth: 1.03,
   /** Walking speed in round 1 and how it climbs; from `runFrom` on, a growing share run. */
   walkSpeed: 1.25,
   walkSpeedStep: 0.22,
   walkSpeedMax: 2.2,
   runFrom: 5,
-  runShareStep: 0.15,
-  runShareMax: 0.85,
+  runShareStep: 0.08,
+  runShareMax: 0.5,
   // Runners start slower than a walking player (4.3), pass walking pace in
   // round 8, and level off just under sprinting pace (6.4) in round 13.
   runSpeed: 3.4,
-  runSpeedStep: 0.33,
+  runSpeedStep: 0.31,
   runSpeedMax: 6.0,
   /** When this few robots are left in a round, the HUD marks them. */
   markLast: 3,
+};
+
+/**
+ * The special robots mixed in with the horde as the rounds climb. `from` is
+ * the first round a kind appears in; that round has `count` of them, and
+ * one more is added every `every` rounds, up to `most`. They take the place
+ * of ordinary robots, so a round is no longer for having them. `health` is
+ * a multiple of an ordinary robot's in the same round; `speed` is metres
+ * per second (the player walks at 4.3 and sprints at 6.4); `damage` is one
+ * blow, or the middle of the blast.
+ */
+export const SPECIALS = {
+  /** A flying drone: fast, fragile and small. It stings from close up. */
+  drone: { from: 4, count: 2, every: 2, most: 6, health: 0.3, speed: 5.2, damage: 12, hover: 1.5 },
+  /**
+   * A bomber. It runs at the player and, within `trigger` metres, primes:
+   * `fuse` seconds later it goes off, hurting everything within `radius`
+   * metres (less with distance). There is time to back out of the blast,
+   * and a bomber destroyed first goes off where it stands, among its own:
+   * `wreck` is the damage to robots at the middle of the blast, as a
+   * multiple of an ordinary robot's health.
+   */
+  bomber: { from: 6, count: 1, every: 3, most: 3, health: 0.8, speed: 3.9, trigger: 2.4, fuse: 0.8, radius: 4.5, damage: 60, wreck: 2.5 },
+  /**
+   * A heavy: slow, and plated all over, so that a hit anywhere but the
+   * glowing core in its chest does only `plating` of its damage. The core
+   * takes each weapon's weak-point damage.
+   */
+  heavy: { from: 8, count: 1, every: 4, most: 2, health: 4, speed: 1.35, damage: 50, plating: 0.3 },
+};
+
+/**
+ * ARGUS: what it takes for it to notice each habit of the player's, and
+ * what each of its counters amounts to. (The rules are in sim/argus.ts and
+ * sim/horde.ts. This is rule-based game AI: fixed thresholds, no learning.)
+ */
+export const ARGUS = {
+  /** The first round it adapts for; its analysis is shown in the lull before that round. */
+  fromRound: 3,
+  /** The most counters in force at once. */
+  maxCounters: 2,
+  /** Staying within this many metres of one spot is holding it, once it has gone on for this many seconds. */
+  holdRadius: 4.5,
+  holdAfter: 10,
+  /** How often the player's trail is sampled (seconds), and how much of it is kept. */
+  sampleEvery: 0.5,
+  trailSeconds: 45,
+  /**
+   * A lap: coming back within `lapReturn` metres of where the player was
+   * at least `lapSeconds` ago, having walked `lapDistance` metres since
+   * and been `lapSpan` metres away in between.
+   */
+  lapReturn: 3.5,
+  lapSeconds: 8,
+  lapDistance: 25,
+  lapSpan: 8,
+  /** A habit counts when: this share of a round's damage came from one weapon ... */
+  weaponShare: 0.6,
+  /** ... this share of the round was spent holding one spot ... */
+  holdShare: 0.45,
+  /** ... this many laps were run in the round ... */
+  laps: 3,
+  /** ... this share of hits landed on weak points. */
+  weakShare: 0.4,
+  /** A round with less than this to go on is not judged: damage dealt, hits landed, seconds fought. */
+  minDamage: 300,
+  minHits: 10,
+  minSeconds: 12,
+  /** Seconds between its remarks, at the least, and how long one stays on screen. */
+  remarkGap: 18,
+  remarkSeconds: 5,
+  /** Seconds the analysis banner stays up. */
+  bannerSeconds: 8,
+
+  /** Shielding: this share of the round's ordinary robots carry it, and the weapon it answers does this share of its damage to them. */
+  shielding: { share: 0.4, factor: 0.5 },
+  /** Flushing out: this many bombers on top of the round's own, and this share of the round's robots come in at the entry nearest the player. */
+  flush: { bombers: 2, breach: 0.5 },
+  /** Interception: this many drones on top of the round's own, sent in ahead of the way the player is running. */
+  intercept: { drones: 4 },
+  /**
+   * Guarding: this share of the round's ordinary robots wear a plate over
+   * the weak point. A hit there does ordinary damage and wears the plate
+   * down; it comes off after this multiple of an ordinary robot's health.
+   */
+  guard: { share: 0.5, plate: 0.45 },
 };
 
 /** Prices and timings of the doors between areas. */

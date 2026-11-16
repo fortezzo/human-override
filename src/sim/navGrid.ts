@@ -33,6 +33,12 @@ export interface NavGrid {
   distance: Float32Array;
   /** Goal square of the last flood (-1 before the first). */
   goal: number;
+  /**
+   * Counts the times the map of the floor has changed (a door opening or
+   * shutting). Anything that keeps its own flood of this grid compares the
+   * number with the one it saw last, and floods again if it has moved on.
+   */
+  version: number;
   /** The size of robot the grid was built for. */
   agentRadius: number;
   stepHeight: number;
@@ -92,6 +98,7 @@ export function createNavGrid(
     anchors: [],
     distance: new Float32Array(cols * rows).fill(Infinity),
     goal: -1,
+    version: 0,
     agentRadius,
     stepHeight,
     agentHeight,
@@ -186,6 +193,7 @@ export function refreshRegion(grid: NavGrid, region: NavRect, colliders: readonl
   markReach(grid);
   // Whatever was flooded before is out of date.
   grid.goal = -1;
+  grid.version++;
 }
 
 export function cellAt(grid: NavGrid, x: number, z: number): number {

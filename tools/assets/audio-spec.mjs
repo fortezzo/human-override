@@ -221,6 +221,45 @@ export const AUDIO_SPEC = [
     duration: 57.6,
     layers: [{ pack: 'when-the-shadows-gather', file: 'when-the-shadows-gather/when_the_shadows_gather_0.ogg', at: 2.4 }],
   },
+  // ---- Stage 3: the special robots and ARGUS's counters.
+  // A bomber going off: the crunch of the blast over a long low boom.
+  ...[
+    ['explosionCrunch_000.ogg', 'lowFrequency_explosion_000.ogg'],
+    ['explosionCrunch_003.ogg', 'lowFrequency_explosion_001.ogg'],
+  ].map(([crunch, boom], i) => ({
+    name: `explosion_${i}`,
+    peak: 0.97,
+    drive: 3,
+    duration: 2.4,
+    fadeOut: 1.1,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/${crunch}`, { pitch: 0.8 }), whole('sci-fi-sounds', `${KENNEY_SCIFI}/${boom}`, { gain: 0.9, pitch: 0.8 })],
+  })),
+  // A bomber's fuse: one short high pip, played faster and faster.
+  { name: 'bomber_beep', peak: 0.7, fadeOut: 0.1, layers: [whole('interface-sounds', `${KENNEY_UI}/glass_001.ogg`, { pitch: 1.3 })] },
+  // A drone passing: a short stretch of a small engine, pitched up until it whines.
+  ...[0, 2].map((n, i) => ({
+    name: `drone_buzz_${i}`,
+    peak: 0.6,
+    // (The cut is made before the pitch is raised, so it is asked for long: what comes out is under a second.)
+    duration: 2.5,
+    fadeOut: 0.45,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/engineCircular_00${n}.ogg`, { pitch: 1.7, filter: 'highpass=f=250,afade=t=in:st=0:d=0.2' })],
+  })),
+  // Shielding turning a shot: a force field, cut short and pitched up.
+  { name: 'shield_hit', peak: 0.7, duration: 0.7, fadeOut: 0.2, layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_000.ogg`, { pitch: 1.6 })] },
+  // The plate over a weak point coming off: a heavy plate struck, and steel ringing under it.
+  { name: 'plate_break', peak: 0.95, duration: 1.1, fadeOut: 0.5, layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_heavy_002.ogg`), whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_heavy_001.ogg`, { gain: 0.6, pitch: 0.8 })] },
+  // ARGUS has finished its analysis: a stutter of machine noise, low.
+  {
+    name: 'argus_analysis',
+    stereo: true,
+    peak: 0.6,
+    duration: 1.3,
+    fadeOut: 0.6,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/computerNoise_001.ogg`, { pitch: 0.7, filter: 'lowpass=f=2400' }), whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { gain: 0.6, pitch: 0.4 })],
+  },
+  // ARGUS passes a remark: two low notes.
+  { name: 'argus_remark', stereo: true, peak: 0.45, layers: [whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { pitch: 0.55 })] },
   // The round stings. The round number snaps onto the screen the moment a
   // round begins, so each sting opens on something just as sharp: a short
   // burst of machine noise over a low thump. The dark swell underneath is

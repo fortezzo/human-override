@@ -159,6 +159,83 @@ export class Effects {
     this.decals.add('scorch', new THREE.Vector3(centre.x, 0, centre.z), up, rand(1.1, 1.6));
   }
 
+  /**
+   * A bomber going off: a white flash, a ball of fire, sparks thrown out
+   * along the floor, a column of black smoke and a wide scorch. `radius`
+   * is how far the blast reaches, so the picture matches the damage.
+   */
+  explosion(centre: THREE.Vector3, radius: number): void {
+    const p = this.particles;
+    const up = new THREE.Vector3(0, 1, 0);
+    p.emitGlow({ x: centre.x, y: centre.y, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.09, size: radius * 1.1, sizeEnd: radius * 0.5, ...SPARK_HOT, alpha: 0.85 });
+    // The fireball: a few big glows that swell and rise.
+    for (let i = 0; i < p.scaled(7); i++) {
+      scatter(up, 1.5, _dir);
+      const speed = rand(1.5, 4);
+      p.emitGlow({
+        x: centre.x + _dir.x * 0.2,
+        y: centre.y + _dir.y * 0.2,
+        z: centre.z + _dir.z * 0.2,
+        vx: _dir.x * speed,
+        vy: Math.abs(_dir.y) * speed * 0.6 + 0.8,
+        vz: _dir.z * speed,
+        life: rand(0.22, 0.4),
+        size: rand(0.5, 0.9),
+        sizeEnd: rand(1.2, 1.9),
+        r: 7,
+        g: 2.6,
+        b: 0.5,
+        alpha: 0.55,
+        drag: 3,
+      });
+    }
+    this.sparks(centre, up, p.scaled(90), 1.9, 4, 15, SPARK, 1.5);
+    this.sparks(centre, up, p.scaled(26), 1.9, 2, 9, SPARK_HOT, 1.2);
+    for (let i = 0; i < p.scaled(16); i++) {
+      scatter(up, 1.4, _dir);
+      const speed = rand(0.8, 3);
+      p.emitSmoke({
+        x: centre.x + rand(-0.4, 0.4),
+        y: centre.y + rand(-0.3, 0.5),
+        z: centre.z + rand(-0.4, 0.4),
+        vx: _dir.x * speed,
+        vy: Math.abs(_dir.y) * speed + 0.9,
+        vz: _dir.z * speed,
+        life: rand(1.6, 3),
+        size: rand(0.5, 0.8),
+        sizeEnd: rand(1.8, 2.8),
+        r: 0.05,
+        g: 0.05,
+        b: 0.055,
+        alpha: 0.7,
+        drag: 1.8,
+        gravity: -0.4,
+        rotation: rand(0, 6),
+        spin: rand(-0.6, 0.6),
+      });
+    }
+    this.decals.add('scorch', new THREE.Vector3(centre.x, 0, centre.z), up, radius * rand(0.75, 0.9));
+  }
+
+  /** A robot's shielding turning part of a shot: a splash of light in the shielding's own colour. */
+  shieldHit(point: THREE.Vector3, shotDirection: THREE.Vector3, color: THREE.Color): void {
+    const p = this.particles;
+    const tint = { r: color.r * 9, g: color.g * 9, b: color.b * 9 };
+    _dir.copy(shotDirection).negate();
+    this.sparks(point, _dir, p.scaled(10), 1.2, 1.5, 5, tint);
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.12, size: 0.5, sizeEnd: 0.9, ...tint, alpha: 0.5 });
+  }
+
+  /** The plate over a weak point coming off: a clang's worth of sparks, and the plate's fragments. */
+  plateBreak(point: THREE.Vector3, shotDirection: THREE.Vector3): void {
+    const p = this.particles;
+    _dir.copy(shotDirection).negate();
+    this.sparks(point, _dir, p.scaled(30), 1.4, 2, 9, SPARK_HOT, 1.2);
+    this.sparks(point, shotDirection, p.scaled(10), 1, 2, 6, SPARK);
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.07, size: 0.6, sizeEnd: 0.15, ...SPARK_HOT, alpha: 0.8 });
+    this.puff(point, _dir, 3, 0.8, 0.5, 0.3, 0.3, 0.3);
+  }
+
   /** A robot dropping from a vent hits the floor: a ring of dust and a few sparks off its feet. */
   landing(point: THREE.Vector3): void {
     const up = new THREE.Vector3(0, 1, 0);

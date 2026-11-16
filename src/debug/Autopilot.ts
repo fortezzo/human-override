@@ -7,22 +7,32 @@
 // should, and between fights walks to the next thing it can afford (a
 // weapon, then doors) and buys it.
 //
-// It comes in two characters. The "expert" never misses and never
+// It comes in three characters. The "expert" never misses and never
 // hesitates: it is the test tool that proves the game can be played. The
 // "first-timer" is a rough model of someone new to this kind of game: slow
 // to notice, shaky, aims at the body, backs up late and runs when hurt. It
 // exists to answer one question the expert cannot: how far does a beginner
-// usually get? (tools/balance.mjs plays it many times and counts.)
+// usually get? (tools/balance.mjs plays it many times and counts.) The
+// "skilled" player is in between, and is the model of the "focused player"
+// the mission is paced for: quick but not instant, mostly on target, aims
+// for the head a little over half the time, and gets ready before starting
+// a fight.
+//
+// Any of them can also be told to play the mission: it then follows the
+// objective tracker as a player would, walking to each step in the gaps
+// between fights, standing its ground at the uplink and in the core, and
+// pulling the switch. (tools/mission.mjs plays whole missions that way and
+// reports how long they take and how they end.)
 
 import * as THREE from 'three';
-import { MELEE, WEAPONS, type WeaponId } from '../config';
+import { MELEE, MISSION, WEAPONS, type WeaponId } from '../config';
 import type { Action } from '../core/input';
 import { angleDelta, clamp } from '../core/math';
 import type { Robot } from '../entities/robot/Robot';
 import type { Game } from '../game/Game';
 import { rackOffer } from '../sim/economy';
 import { floodFrom, nextWaypoint, type NavGrid } from '../sim/navGrid';
-import { DOOR_PLANS, RACK_PLANS } from '../world/plan';
+import { CORE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, UPLINK } from '../world/plan';
 
 export interface PilotProfile {
   /** Seconds before it reacts to a robot it has just noticed. */
@@ -46,17 +56,82 @@ export interface PilotProfile {
   tidyReloads: boolean;
   /** Seconds between looking round for somewhere better to back away to. */
   rethink: number;
+  /**
+   * The habits of someone who has played this kind of game before. Caught
+   * reloading with robots closing, it sprints clear and then turns to
+   * fight again; with an empty gun and robots close it swaps to the other
+   * gun instead of reloading; and in every quiet moment it sees that both
+   * guns are loaded and tops up their ammunition.
+   */
+  practised: boolean;
+  /**
+   * Holding ground for the mission (the uplink's circle, the core), it
+   * gives the ground up when its health falls below this, or a crowd is
+   * on top of it, and comes back when it has recovered: the clock only
+   * stops while it is away, which is what the pause is for.
+   */
+  yieldBelow: number;
+  /** Playing the mission: how far off the nearest robot must be before it breaks off to do the next step, metres. */
+  errandAt: number;
+  /** Playing the mission: before starting a fight (the uplink, the final stand) it waits until it is healthy and loaded. */
+  prepares: boolean;
 }
 
-export type PilotName = 'expert' | 'firstTimer';
+export type PilotName = 'expert' | 'skilled' | 'firstTimer';
 
 export const PILOTS: Record<PilotName, PilotProfile> = {
-  expert: { reaction: 0, turnRate: 7, headShare: 1, wobble: 0, linedFar: 0.035, linedNear: 0.12, tapEvery: 0, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.2 },
-  firstTimer: { reaction: 0.45, turnRate: 3.4, headShare: 0.15, wobble: 0.5, linedFar: 0.07, linedNear: 0.18, tapEvery: 0.3, retreatAt: 4, panicBelow: 50, tidyReloads: false, rethink: 0.8 },
+  expert: { reaction: 0, turnRate: 7, headShare: 1, wobble: 0, linedFar: 0.035, linedNear: 0.12, tapEvery: 0, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.2, practised: false, yieldBelow: 35, errandAt: 6, prepares: true },
+  skilled: { reaction: 0.22, turnRate: 5.2, headShare: 0.55, wobble: 0.16, linedFar: 0.045, linedNear: 0.14, tapEvery: 0.17, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.3, practised: true, yieldBelow: 45, errandAt: 6, prepares: true },
+  firstTimer: { reaction: 0.45, turnRate: 3.4, headShare: 0.15, wobble: 0.5, linedFar: 0.07, linedNear: 0.18, tapEvery: 0.3, retreatAt: 4, panicBelow: 50, tidyReloads: false, rethink: 0.8, practised: false, yieldBelow: 60, errandAt: 9, prepares: false },
+};
+
+/** A patch of floor: what is inside a circle and inside a rectangle. */
+interface Zone {
+  x: number;
+  z: number;
+  radius: number;
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+const inZone = (zone: Zone, x: number, z: number): boolean => x >= zone.x0 && x <= zone.x1 && z >= zone.z0 && z <= zone.z1 && Math.hypot(x - zone.x, z - zone.z) <= zone.radius;
+
+/** Somewhere the pilot means to walk to, and what to do there. */
+interface Goal {
+  x: number;
+  z: number;
+  label: string;
+  /** For a gun that would take the place of one it carries: which one to give up. */
+  giveUp?: WeaponId;
+  /** What to turn to on arrival (otherwise the spot itself). */
+  face?: { x: number; z: number };
+  /** How near counts as there, metres. */
+  reach?: number;
+  /** Nothing to press on arrival: just stand there. */
+  rest?: boolean;
+  /** It cannot wait for a gap in the fighting. */
+  urgent?: boolean;
+}
+
+/** Something the mission wants done. */
+interface Duty extends Goal {
+  /** Ground to stay on while it is being done. */
+  hold?: Zone;
+}
+
+const PLACE_NAMES: Record<keyof typeof MISSION_PLACES, string> = {
+  breaker: 'the main breaker',
+  cage: 'the key cage',
+  uplink: 'the uplink',
+  coreDoor: "the core's door",
+  killSwitch: 'the kill switch',
 };
 
 /** Which gun is worth more than which: it never trades down. */
 const WORTH: Record<WeaponId, number> = { pistol: 0, shotgun: 1, carbine: 2 };
+/** The wall racks, the best gun's first: that is the one it buys, and tops up, before the others. */
+const RACKS_BEST_FIRST = [...RACK_PLANS].sort((a, b) => WORTH[b.weapon] - WORTH[a.weapon]);
 
 const _eye = new THREE.Vector3();
 const _aim = new THREE.Vector3();
@@ -67,6 +142,12 @@ export class Autopilot {
   status = 'idle';
   /** Which character is playing. */
   profile: PilotProfile = PILOTS.expert;
+  /** Play the mission as well as the rounds: follow the objective tracker. */
+  mission = false;
+  /** Ground it is holding for the mission (the uplink's circle, the core), or null. It does not back away out of it. */
+  private zone: Zone | null = null;
+  /** Seconds left of having given that ground up to save itself. */
+  private givingGround = 0;
 
   private readonly raycaster = new THREE.Raycaster();
   /** Its own copy of the walking-distance map, flooded toward wherever it wants to go. */
@@ -88,6 +169,8 @@ export class Autopilot {
   private target: Robot | null = null;
   private aimAtHead = true;
   private reactTimer = 0;
+  /** Seconds since it last had a robot in its sights. */
+  private sinceContact = 99;
   private readonly wobble = new THREE.Vector3();
   private wobbleTimer = 0;
   private sinceShot = 99;
@@ -139,9 +222,26 @@ export class Autopilot {
     return this.errand !== null;
   }
 
+  /**
+   * Its own flood of the floor map (the game's is flooded toward the
+   * player, for the robots). It shares the map itself with the game's, so
+   * when a door opens it sees the opening; but a flood made before that is
+   * stale, and is thrown away here. (Without this it stood at a door it had
+   * just opened, still following a route worked out while it was shut.)
+   */
+  private routeTo(fresh = false): NavGrid {
+    const nav = this.game.world.nav;
+    this.route ??= { ...nav, distance: new Float32Array(nav.distance.length).fill(Infinity), goal: -1 };
+    if (fresh || this.route.version !== nav.version) {
+      this.route.version = nav.version;
+      this.route.goal = -1;
+    }
+    return this.route;
+  }
+
   /** One frame of an errand. */
   private runErrand(dt: number): void {
-    const { player, input, world } = this.game;
+    const { player, input } = this.game;
     const errand = this.errand!;
     const distance = Math.hypot(errand.x - player.position.x, errand.z - player.position.z);
     if (distance < 0.3) {
@@ -150,10 +250,9 @@ export class Autopilot {
       return;
     }
     this.status = `walking (${distance.toFixed(1)} m to go)`;
-    this.route ??= { ...world.nav, distance: new Float32Array(world.nav.distance.length).fill(Infinity), goal: -1 };
-    floodFrom(this.route, errand.x, errand.z);
+    floodFrom(this.routeTo(), errand.x, errand.z);
     // For the last step, head straight for the spot itself.
-    const waypoint = distance < 0.9 ? { x: errand.x, z: errand.z } : nextWaypoint(this.route, player.position.x, player.position.z);
+    const waypoint = distance < 0.9 ? { x: errand.x, z: errand.z } : nextWaypoint(this.routeTo(), player.position.x, player.position.z);
     if (!waypoint) return;
     const error = this.turnToward(_aim.set(waypoint.x, player.position.y + 1.6, waypoint.z), dt, 7);
     if (error < 0.5) input.press('forward');
@@ -178,13 +277,15 @@ export class Autopilot {
     let seen: Robot | null = null;
     let nearest = Infinity;
     let closestAny = Infinity;
+    let crowd = 0;
+    let standing = 0;
     for (const robot of robots) {
       if (!robot.alive) continue;
-      const head = robot.bones.get('Head');
-      if (!head) continue;
-      _aim.setFromMatrixPosition(head.matrixWorld);
+      standing++;
+      robot.aimPoint(_aim);
       const distance = _aim.distanceTo(_eye);
       closestAny = Math.min(closestAny, distance);
+      if (distance < 3) crowd++;
       if (distance >= nearest) continue;
       _dir.copy(_aim).sub(_eye).divideScalar(distance);
       this.raycaster.set(_eye, _dir);
@@ -194,15 +295,36 @@ export class Autopilot {
       seen = robot;
     }
 
+    // It stays on the robot it is already fighting unless another is
+    // clearly nearer: flicking back and forth between two robots at the
+    // same distance is how a crowd gets through.
+    const current = this.target;
+    if (current && current !== seen && current.alive) {
+      current.aimPoint(_aim);
+      const distance = _aim.distanceTo(_eye);
+      if (distance * 0.7 < nearest) {
+        _dir.copy(_aim).sub(_eye).divideScalar(distance);
+        this.raycaster.set(_eye, _dir);
+        this.raycaster.far = distance - 0.3;
+        if (!this.raycaster.intersectObjects(world.solids, false).length) {
+          seen = current;
+          nearest = distance;
+        }
+      }
+    }
+
     // A new target takes a moment to register, and gets a fresh decision
-    // about where to aim.
+    // about where to aim. The first robot it has seen in a while costs its
+    // whole reaction time; moving on to the next one of a group, less.
     if (seen !== this.target) {
+      const fresh = this.target === null && this.sinceContact > 1;
       this.target = seen;
       if (seen) {
-        this.reactTimer = profile.reaction;
+        this.reactTimer = fresh ? profile.reaction : profile.reaction * 0.4;
         this.aimAtHead = Math.random() < profile.headShare;
       }
     }
+    this.sinceContact = seen ? 0 : this.sinceContact + dt;
     if (this.reactTimer > 0) this.reactTimer -= dt;
 
     const state = weapons.state;
@@ -215,6 +337,10 @@ export class Autopilot {
 
     // Hurt and crowded: the beginner turns and runs, for as long as its legs last.
     if (profile.panicBelow > 0 && player.health < profile.panicBelow && closestAny < 6 && this.fleeTimer <= 0 && !player.stamina.winded) this.fleeTimer = 1.6;
+    // Caught reloading with robots closing: the practised player sprints
+    // clear and turns. (Not once they are within reach: turning its back on
+    // a robot at arm's length only gets it hit from behind.)
+    if (profile.practised && this.fleeTimer <= 0 && !player.stamina.winded && weapons.reloading && closestAny < 6 && closestAny > 2.2) this.fleeTimer = 1.2;
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
       this.releaseTrigger();
@@ -222,32 +348,60 @@ export class Autopilot {
       this.fleeTimer = 0;
     }
 
+    // What the mission wants done next, if it is playing the mission: an
+    // errand (somewhere to go, something to use there) or ground to hold.
+    const duty = this.mission ? this.nextDuty(standing) : null;
+    let zone = duty?.hold ?? null;
+    // Ground is given up when it is about to cost a life, and taken back
+    // once there is the health to hold it again.
+    if (zone) {
+      if (this.givingGround <= 0 && (player.health < profile.yieldBelow || crowd >= 4)) this.givingGround = 7;
+      if (this.givingGround > 0) {
+        this.givingGround -= dt;
+        if (player.health >= 90 && closestAny > 5) this.givingGround = 0;
+        if (this.givingGround > 0) zone = null;
+      }
+    } else {
+      this.givingGround = 0;
+    }
+    this.zone = zone;
+    const outside = zone !== null && !inZone(zone, player.position.x, player.position.z);
+
     // Is there something worth breaking off for? A gun it can now afford,
     // or ammunition when it is running low, matters more than the robot
     // across the room: people do run for the rack in the middle of a round.
-    // Not with one in its face, though, unless every gun is empty.
-    const purchase = this.nextPurchase();
+    // Not with one in its face, though, unless every gun is empty. (And not
+    // while there is ground to hold: a trip to the rack would give it up.)
+    const purchase = zone || this.givingGround > 0 ? null : this.nextPurchase(closestAny > 14);
     const dry = state.ammo === 0 && state.reserve === 0 && !weapons.loadout.slots.some((slot, i) => slot && i !== weapons.loadout.current && (slot.state.ammo > 0 || slot.state.reserve > 0));
-    const shopping = purchase !== null && (!seen || nearest > 6 || (dry && nearest > 2.5));
+    // (The practised player does not wait for a gap when it matters: a
+    // better gun it can now afford, or a gun that is all but empty, is
+    // worth running for with the robots a few steps behind.)
+    const shopping = purchase !== null && (!seen || nearest > 6 || (dry && nearest > 2.5) || (profile.practised && purchase.urgent === true && nearest > 3.5));
+    // The mission's errands wait for a gap in the same way; one that cannot
+    // wait (the armed switch) is run at once. Ground that has been left is
+    // gone back to unless something is close enough to hit.
+    const errand = duty !== null && !shopping && this.givingGround <= 0 && (zone ? outside && (!seen || nearest > 2.5) : duty.urgent === true || !seen || nearest > profile.errandAt);
 
-    if (seen && !shopping) {
+    if (seen && !shopping && !errand) {
       this.lull = 0;
       this.status = `fighting (${nearest.toFixed(1)} m)`;
       // Where it means to hit, plus however far its hands have wandered.
-      if (this.aimAtHead) _aim.setFromMatrixPosition(seen.bones.get('Head')!.matrixWorld);
-      else seen.chest(_aim);
+      seen.aimPoint(_aim, this.aimAtHead);
       if (profile.wobble > 0) {
         this.wobbleTimer -= dt;
         if (this.wobbleTimer <= 0) {
           this.wobbleTimer = 0.35 + Math.random() * 0.3;
           this.wobble.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(2 * profile.wobble);
         }
-        _aim.add(this.wobble);
+        // (The wander is an angle, really: at a robot two metres off it is a few centimetres, not half a metre.)
+        _aim.addScaledVector(this.wobble, clamp(nearest / 5, 0.25, 1));
       }
       const reacting = this.reactTimer > 0;
       const error = reacting ? Infinity : this.turnToward(_aim, dt, profile.turnRate);
       // Pull the trigger when lined up. Tapping, so single-shot weapons fire too.
-      const lined = error < (nearest < 4 ? profile.linedNear : profile.linedFar);
+      // (Up close a robot fills the sights: nobody misses one at arm's length.)
+      const lined = error < Math.max(nearest < 4 ? profile.linedNear : profile.linedFar, Math.atan2(0.22, nearest));
       if (lined && !this.fireHeld && state.ammo > 0 && (def.automatic || this.sinceShot >= profile.tapEvery)) {
         input.press('fire');
         this.fireHeld = true;
@@ -255,8 +409,29 @@ export class Autopilot {
       } else if (this.fireHeld && (!def.automatic || !lined)) {
         this.releaseTrigger();
       }
-      if (nearest < MELEE.range - 0.2 && !reacting) this.tap('melee');
-      if (state.ammo === 0 && state.reserve > 0 && !weapons.reloading) this.tap('reload');
+      // A strike is for a robot it will finish (in the first rounds that
+      // is any robot; later, one that is already damaged), or for when
+      // there is nothing left to shoot with. Otherwise the gun does more,
+      // and a strike in the middle of a reload throws the reload away.
+      const finishing = seen.healthLeft * seen.spec.health <= MELEE.damage;
+      if (nearest < MELEE.range - 0.2 && !reacting && !weapons.reloading && (finishing || dry)) this.tap('melee');
+      else if (!weapons.reloading && !weapons.busy) {
+        const index = weapons.loadout.slots.findIndex((slot, i) => slot && i !== weapons.loadout.current);
+        const other = index >= 0 ? weapons.loadout.slots[index]! : null;
+        const swap = (): void => this.tap(index === 0 ? 'weapon1' : 'weapon2');
+        if (state.ammo === 0) {
+          // An empty gun with robots at arm's length: the other gun, if it
+          // is loaded, is quicker than a reload. Otherwise reload the
+          // better of the two.
+          if (profile.practised && other && other.state.ammo > 0 && nearest < 4) swap();
+          else if (profile.practised && other && WORTH[other.id] > WORTH[def.id] && other.state.reserve > 0) swap();
+          else if (state.reserve > 0) this.tap('reload');
+        } else if (profile.practised && other && WORTH[other.id] > WORTH[def.id]) {
+          // Holding the lesser gun: back to the better one as soon as it
+          // is loaded, or as soon as there is room to load it.
+          if (other.state.ammo > 0 || (other.state.reserve > 0 && nearest > 4.5)) swap();
+        }
+      }
 
       if (dry) {
         // Nothing left to shoot with and nothing it can afford: close in
@@ -272,44 +447,112 @@ export class Autopilot {
 
     this.releaseTrigger();
     this.lull += dt;
-    const wantsReload = profile.tidyReloads ? state.ammo < def.magazine : state.ammo === 0 || (this.lull > 2.5 && state.ammo < def.magazine * 0.5);
+    // (Topping up a magazine that is nearly full is for when nothing is
+    // near: with robots a few steps away it would only take the gun out of
+    // its hands when it is needed.)
+    const wantsReload = profile.tidyReloads ? state.ammo < def.magazine * (closestAny > 12 ? 1 : 0.4) : state.ammo === 0 || (this.lull > 2.5 && state.ammo < def.magazine * 0.5);
     if (wantsReload && state.reserve > 0 && !weapons.reloading) this.tap('reload');
+    else if (profile.practised && !seen && !weapons.reloading && !weapons.busy) {
+      // With this gun seen to, the practised player sees to the other one:
+      // reloads it if it was left empty, and ends up holding the better.
+      const index = weapons.loadout.slots.findIndex((slot, i) => slot && i !== weapons.loadout.current);
+      const other = index >= 0 ? weapons.loadout.slots[index]! : null;
+      if (other) {
+        const needsLoading = other.state.ammo < WEAPONS[other.id].magazine && other.state.reserve > 0;
+        const better = WORTH[other.id] > WORTH[def.id] && (other.state.ammo > 0 || other.state.reserve > 0);
+        if (needsLoading || better) this.tap(index === 0 ? 'weapon1' : 'weapon2');
+      }
+    }
 
-    // Nothing to shoot at (or shopping comes first). If something is close
-    // but out of sight, wait for it (not for ever: after a few seconds go
-    // and find it); otherwise go shopping.
-    if (!shopping && closestAny < 9 && this.lull < 4) {
+    // Nothing to shoot at (or something else comes first). If a robot is
+    // close but out of sight, wait for it (not for ever: after a few seconds
+    // go and find it); otherwise go and do whatever there is to do.
+    if (!shopping && !errand && closestAny < 9 && this.lull < 4) {
       this.status = 'waiting';
       return;
     }
-    const goal = shopping ? purchase : closestAny < 9 ? this.nearestRobot() : this.lull > 8 ? this.nearestRobot() : null;
+    let goal: Goal | null;
+    if (shopping) goal = purchase;
+    else if (errand) goal = duty;
+    else if (zone && duty) {
+      // Holding ground with nothing in sight: drift back to the middle of
+      // it, where there is room to back away in any direction.
+      goal = Math.hypot(duty.x - player.position.x, duty.z - player.position.z) > 2.2 ? duty : null;
+    } else goal = closestAny < 9 || this.lull > 8 ? this.nearestRobot() : null;
     if (!goal) {
-      this.status = 'waiting';
+      this.status = zone ? `holding ${duty!.label}` : 'waiting';
       return;
     }
     this.status = `going to ${goal.label}`;
     const distance = Math.hypot(goal.x - player.position.x, goal.z - player.position.z);
-    if (distance < 1.5) {
+    if (distance < (goal.reach ?? 1.5)) {
+      if (goal.rest) return;
       // Face it and press the button. A new gun takes the place of the one
       // in hand, so make sure that is the one worth less.
-      this.turnToward(_aim.set(goal.x, 1.4, goal.z), dt, profile.turnRate);
-      const giveUp = 'giveUp' in goal ? goal.giveUp : undefined;
-      if (giveUp && def.id !== giveUp) {
-        if (!weapons.busy) this.tap(weapons.loadout.slots.findIndex((slot) => slot?.id === giveUp) === 0 ? 'weapon1' : 'weapon2');
+      const face = goal.face ?? goal;
+      this.turnToward(_aim.set(face.x, 1.4, face.z), dt, Math.max(profile.turnRate, 4));
+      if (goal.giveUp && def.id !== goal.giveUp) {
+        if (!weapons.busy) this.tap(weapons.loadout.slots.findIndex((slot) => slot?.id === goal.giveUp) === 0 ? 'weapon1' : 'weapon2');
       } else if (game.interactions.prompt?.usable && !weapons.busy) {
         this.tap('interact');
       }
       return;
     }
-    this.route ??= { ...world.nav, distance: new Float32Array(world.nav.distance.length).fill(Infinity), goal: -1 };
-    floodFrom(this.route, goal.x, goal.z);
-    const waypoint = nextWaypoint(this.route, player.position.x, player.position.z);
+    floodFrom(this.routeTo(), goal.x, goal.z);
+    // (For the last step, head straight for the spot itself.)
+    const waypoint = distance < 0.9 ? goal : nextWaypoint(this.routeTo(), player.position.x, player.position.z);
     if (!waypoint) return;
-    const error = this.turnToward(_aim.set(waypoint.x, 1.5, waypoint.z), dt, profile.turnRate);
+    const error = this.turnToward(_aim.set(waypoint.x, 1.5, waypoint.z), dt, Math.max(profile.turnRate, 4));
     if (error < 0.6) {
       input.press('forward');
       if (error < 0.2 && distance > 4) input.press('sprint');
     }
+  }
+
+  /**
+   * What the mission wants done next, read off the objective tracker the
+   * way a player reads it: somewhere to go and something to use there, or
+   * ground to hold. Null when there is nothing to do but fight (the
+   * Custodian comes to the player; so does everything else), or when the
+   * way there is still shut.
+   */
+  private nextDuty(standing = 0): Duty | null {
+    const { mission, world, player, weapons } = this.game;
+    const state = mission.state;
+    const target = mission.objective.target;
+    if (!target || target === 'custodian' || state.phase === 'saved') return null;
+    if (target === 'custodianKey') {
+      const at = world.mission.droppedAt;
+      return at ? { x: at.x, z: at.z, label: "the Custodian's key", reach: 1.1 } : null;
+    }
+    const place = MISSION_PLACES[target];
+    if (!world.reachable.has(place.area)) return null;
+    const at = { x: place.stand[0], z: place.stand[1], face: { x: place.at[0], z: place.at[2] }, reach: 0.8 };
+    if (state.uplink === 'running' && target === 'uplink') {
+      // The ground round the uplink: inside its circle and inside the hall.
+      const inset = 0.7;
+      return { x: UPLINK.zone.x, z: UPLINK.zone.z, label: 'the ground round the uplink', reach: 1.2, rest: true, hold: { x: UPLINK.zone.x, z: UPLINK.zone.z, radius: MISSION.uplinkRadius - 0.9, x0: HALL.x0 + inset, z0: HALL.z0 + inset, x1: HALL.x1 - inset, z1: HALL.z1 - inset } };
+    }
+    if (state.phase === 'arming') {
+      const inset = 0.8;
+      return { x: at.x, z: at.z, label: 'the core', reach: 1.2, rest: true, hold: { x: at.x, z: at.z, radius: Infinity, x0: CORE.x0 + inset, z0: CORE.z0 + inset, x1: CORE.x1 - inset, z1: CORE.z1 - inset } };
+    }
+    if (state.phase === 'armed') return { ...at, label: 'the kill switch', urgent: true };
+    // Before anything that starts a fight (the uplink, the final stand), it
+    // gets ready the way a careful player does: on its feet, loaded, and
+    // not in the middle of something else.
+    const startsFight = (target === 'uplink' && state.uplink === 'idle') || (target === 'killSwitch' && state.phase === 'core');
+    if (startsFight && this.profile.prepares) {
+      const slot = weapons.loadout.slots[weapons.loadout.current];
+      const loaded = !slot || slot.state.ammo >= WEAPONS[slot.id].magazine * 0.6 || slot.state.reserve === 0;
+      // (And it does not start one with less than the best gun on the map,
+      // once the rack that sells it can be reached.)
+      const best = RACKS_BEST_FIRST[0]!;
+      const armed = !world.reachable.has(best.area) || weapons.loadout.slots.some((s) => s?.id === best.weapon);
+      // (Nor with the room still full of the last one.)
+      if (player.health < 85 || !loaded || !armed || standing > 3) return null;
+    }
+    return { ...at, label: PLACE_NAMES[target] };
   }
 
   /** The nearest robot still standing, as somewhere to walk to. */
@@ -365,15 +608,26 @@ export class Autopilot {
         if (distance < 3 || distance > 9.5) continue;
         const x = player.position.x + gx;
         const z = player.position.z + gz;
+        if (this.zone && !inZone(this.zone, x, z)) continue;
         const c = Math.floor((x - nav.x0) / nav.cell);
         const r = Math.floor((z - nav.z0) / nav.cell);
         if (c < 3 || r < 3 || c >= nav.cols - 3 || r >= nav.rows - 3 || !nav.reach[r * nav.cols + c]) continue;
         // Open floor around it: corners and dead ends score low.
+        // (Measured over the few metres round the spot, not just the square it is in:
+        // the corner of a room is open floor too, and the worst place to be caught.)
         let open = 0;
-        for (let dr = -3; dr <= 3; dr++) for (let dc = -3; dc <= 3; dc++) open += nav.reach[(r + dr) * nav.cols + (c + dc)]!;
+        let squares = 0;
+        for (let dr = -8; dr <= 8; dr += 2) {
+          for (let dc = -8; dc <= 8; dc += 2) {
+            const rr = r + dr;
+            const cc = c + dc;
+            squares++;
+            if (rr >= 0 && cc >= 0 && rr < nav.rows && cc < nav.cols) open += nav.reach[rr * nav.cols + cc]!;
+          }
+        }
         let nearestRobot = 12;
         for (const robot of robots) if (robot.alive) nearestRobot = Math.min(nearestRobot, Math.hypot(robot.position.x - x, robot.position.z - z));
-        let score = nearestRobot + (open / 49) * 5;
+        let score = nearestRobot + (open / squares) * 9;
         // Not through the robots.
         if (threat < 9 && (gx * threatX + gz * threatZ) / distance > 0.35) score -= 8;
         if (speed > 0.5) score += ((player.velocity.x * gx + player.velocity.z * gz) / (speed * distance)) * 1.5;
@@ -386,9 +640,7 @@ export class Autopilot {
       }
     }
     if (!escape.found) return false;
-    this.route ??= { ...nav, distance: new Float32Array(nav.distance.length).fill(Infinity), goal: -1 };
-    this.route.goal = -1;
-    floodFrom(this.route, bestX, bestZ);
+    floodFrom(this.routeTo(true), bestX, bestZ);
     return true;
   }
 
@@ -397,7 +649,7 @@ export class Autopilot {
     const { player } = this.game;
     const escape = this.escape;
     if (!escape.found || !this.route) return false;
-    const waypoint = nextWaypoint(this.route, player.position.x, player.position.z);
+    const waypoint = nextWaypoint(this.routeTo(), player.position.x, player.position.z);
     if (!waypoint) return false;
     const dx = waypoint.x - player.position.x;
     const dz = waypoint.z - player.position.z;
@@ -490,32 +742,40 @@ export class Autopilot {
    * The next thing worth walking to that it can pay for right now. For a
    * gun that would take the place of one it carries, `giveUp` names which.
    */
-  private nextPurchase(): { x: number; z: number; label: string; giveUp?: WeaponId } | null {
+  private nextPurchase(quiet = false): Goal | null {
     const { wallet, weapons, world } = this.game;
+    // Ammunition is worth the walk when a gun is running low; in a quiet
+    // moment the practised player tops up well before that, and with the
+    // final stand ahead, sooner still.
+    const lowAt = this.mission && this.profile.prepares && this.game.mission.state.phase === 'core' ? 0.8 : this.profile.practised && quiet ? 0.7 : 0.34;
     const reachable = world.reachable;
     const carried = weapons.loadout.slots.filter((slot) => slot !== null).map((slot) => slot!.id);
     const full = carried.length === weapons.loadout.slots.length;
     const least = carried.reduce((a, b) => (WORTH[a] <= WORTH[b] ? a : b));
-    for (const rack of RACK_PLANS) {
+    for (const rack of RACKS_BEST_FIRST) {
       if (!reachable.has(rack.area)) continue;
       const offer = rackOffer(wallet, weapons.loadout, rack.weapon, WEAPONS[rack.weapon]);
       if (offer.kind === 'weapon' && full) {
         // Both hands full: only a better gun than its worst is worth having.
         if (WORTH[rack.weapon] <= WORTH[least] || !offer.affordable) continue;
-        return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack`, giveUp: least };
+        return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack`, giveUp: least, urgent: true };
       }
+      let urgent = offer.kind === 'weapon';
       if (offer.kind === 'ammo') {
         // Ammunition is worth the walk only when the weapon is running low.
         const slot = weapons.loadout.slots.find((s) => s?.id === rack.weapon);
-        if (!slot || slot.state.reserve > WEAPONS[rack.weapon].reserveMax * 0.34) continue;
+        if (!slot || slot.state.reserve > WEAPONS[rack.weapon].reserveMax * lowAt) continue;
+        urgent = slot.state.reserve <= WEAPONS[rack.weapon].reserveMax * 0.12;
       }
       if (offer.kind !== 'full' && offer.affordable) {
-        return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack` };
+        return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack`, urgent };
       }
     }
     for (const plan of DOOR_PLANS) {
       const door = world.door(plan.id);
       if (door.open || plan.cost === null || wallet.scrap < plan.cost) continue;
+      // (The mission needs the server hall and the power room; the door between them is a luxury.)
+      if (this.mission && plan.id === 'hallPower') continue;
       const near = reachable.has(plan.a) ? plan.a : reachable.has(plan.b) ? plan.b : null;
       if (!near) continue;
       // Stand a little way back from the door, on the side it can be reached from.

@@ -4,6 +4,9 @@
 
 import * as THREE from 'three';
 import { MELEE, SCRAP, type WeaponDef, type WeaponId } from '../config';
+import { SHIELD_COLOR } from '../entities/robot/attachments';
+import type { WeaponKey } from '../sim/argus';
+import { resolveHit } from '../sim/armour';
 import type { AudioEngine } from '../audio/AudioEngine';
 import type { SoundId } from '../audio/soundList';
 import { lerp, rand } from '../core/math';
@@ -15,7 +18,6 @@ import type { Casings } from '../fx/Casings';
 import type { Effects } from '../fx/Effects';
 import type { SurfaceKind } from '../render/materials';
 import { awardFor } from '../sim/economy';
-import { damageForZone } from '../sim/robotMind';
 import type { World } from '../world/World';
 
 const SHOT_SOUND: Record<WeaponId, SoundId> = { pistol: 'pistolShot', shotgun: 'shotgunShot', carbine: 'rifleShot' };
@@ -28,13 +30,31 @@ export interface HitResult {
   melee: boolean;
   /** Scrap it paid. */
   scrap: number;
+  /** What did it: a weapon's id, or 'melee'. */
+  weapon: WeaponKey;
+  /** Damage done to the robot. */
+  damage: number;
+  /** The robot's shielding against this weapon took half of it. */
+  resisted: boolean;
+  /** It landed on a heavy's plating, not its core. */
+  plated: boolean;
+  /** It landed on the plate over the weak point; `guardBroke` if that knocked the plate off. */
+  guarded: boolean;
+  guardBroke: boolean;
 }
 
 interface Tally {
   damage: number;
   weak: boolean;
+  resisted: boolean;
+  plated: boolean;
+  guarded: boolean;
+  guardBroke: boolean;
   point: THREE.Vector3;
 }
+
+const STRIKE = { damage: MELEE.damage, weakPointMultiplier: 1, limbMultiplier: 1 };
+const _tint = new THREE.Color();
 
 const _end = new THREE.Vector3();
 const _normal = new THREE.Vector3();
@@ -103,13 +123,26 @@ export class Combat {
       }
 
       if (struck && point) {
-        const damage = damageForZone(weapon, zone) * Combat.falloff(weapon, limit);
+        // Plating, shielding and a plate over the weak point each take their share (sim/armour.ts).
+        const hit = resolveHit(struck.armour, zone, weapon.id, weapon, Combat.falloff(weapon, limit));
         const tally = this.tallies.get(struck);
         if (tally) {
-          tally.damage += damage;
-          tally.weak ||= zone === 'head';
+          tally.damage += hit.damage;
+          tally.weak ||= hit.weakPoint;
+          tally.resisted ||= hit.resisted;
+          tally.plated ||= hit.plated;
+          tally.guarded ||= hit.guarded;
+          tally.guardBroke ||= hit.guardBroke;
         } else {
-          this.tallies.set(struck, { damage, weak: zone === 'head', point: (this.pool[this.tallies.size] ??= new THREE.Vector3()).copy(point) });
+          this.tallies.set(struck, {
+            damage: hit.damage,
+            weak: hit.weakPoint,
+            resisted: hit.resisted,
+            plated: hit.plated,
+            guarded: hit.guarded,
+            guardBroke: hit.guardBroke,
+            point: (this.pool[this.tallies.size] ??= new THREE.Vector3()).copy(point),
+          });
         }
       } else if (worldHit) {
         _normal.copy(worldHit.face!.normal).transformDirection(worldHit.object.matrixWorld);
@@ -127,10 +160,12 @@ export class Combat {
     for (const [robot, tally] of this.tallies) {
       const result = robot.damage(tally.damage, centre);
       effects.robotHit(tally.point, centre, tally.weak);
-      audio.play(tally.weak ? 'robotHitWeak' : 'robotHit', { position: tally.point });
+      this.armourFeedback(robot, tally, centre);
+      // (A shot the plating or the shielding took most of sounds like one: steel, not machinery.)
+      audio.play(tally.weak ? 'robotHitWeak' : tally.plated || tally.guarded ? 'impactMetal' : 'robotHit', { position: tally.point });
       audio.play(result.killed ? 'killTick' : 'hitTick');
       const report = { killed: result.killed, weakPoint: tally.weak, melee: false };
-      this.onHit({ robot, ...report, scrap: awardFor(report, SCRAP) });
+      this.onHit({ robot, ...report, scrap: awardFor(report, SCRAP), weapon: weapon.id, damage: tally.damage, resisted: tally.resisted, plated: tally.plated, guarded: tally.guarded, guardBroke: tally.guardBroke });
     }
     this.onShotFired(this.tallies.size > 0);
 
@@ -152,6 +187,22 @@ export class Combat {
         .add(player.velocity);
       velocity.y += rand(1.4, 2.2);
       this.casings.eject(port, velocity);
+    }
+  }
+
+  /** What is seen and heard when a robot's shielding turns a shot, or the plate over its weak point comes off. */
+  private armourFeedback(robot: Robot, hit: { resisted: boolean; guardBroke: boolean; point: THREE.Vector3 }, direction: THREE.Vector3): void {
+    if (hit.resisted) {
+      robot.flashShield();
+      this.effects.shieldHit(hit.point, direction, _tint.setHex(SHIELD_COLOR[robot.shieldedAgainst ?? ''] ?? 0xffffff));
+      this.audio.play('shieldHit', { position: hit.point });
+    }
+    if (hit.guardBroke) {
+      const at = robot.dropGuard(_end);
+      if (at) {
+        this.effects.plateBreak(at, direction);
+        this.audio.play('plateBreak', { position: at });
+      }
     }
   }
 
@@ -182,13 +233,15 @@ export class Combat {
     }
     if (!target) return;
 
-    const point = target.chest(_end);
-    const result = target.damage(MELEE.damage, _forward);
+    const point = target.chest(new THREE.Vector3());
+    const hit = resolveHit(target.armour, 'torso', 'melee', STRIKE);
+    const result = target.damage(hit.damage, _forward);
     this.effects.robotHit(point, _forward, false);
+    this.armourFeedback(target, { resisted: hit.resisted, guardBroke: false, point }, _forward);
     this.audio.play('meleeHit', { position: point });
     this.audio.play(result.killed ? 'killTick' : 'hitTick');
     player.addShake(MELEE.shake);
     const report = { killed: result.killed, weakPoint: false, melee: true };
-    this.onHit({ robot: target, ...report, scrap: awardFor(report, SCRAP) });
+    this.onHit({ robot: target, ...report, scrap: awardFor(report, SCRAP), weapon: 'melee', damage: hit.damage, resisted: hit.resisted, plated: hit.plated, guarded: false, guardBroke: false });
   }
 }

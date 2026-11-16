@@ -34,6 +34,7 @@ import {
   startUplink,
   updateMission,
   uplinkReady,
+  uplinkWave,
   KEY_IDS,
   type KeyId,
   type MissionPhase,
@@ -200,7 +201,7 @@ export class Mission {
     // While the uplink is being defended, more robots come for it than the round sends.
     if (state.uplink === 'running') {
       this.waveClock -= dt;
-      if (this.waveClock <= 0 && this.director.room && this.extras() < MISSION.uplinkWaveMax) {
+      if (this.waveClock <= 0 && this.director.room && this.extras() < uplinkWave(MISSION, this.director.rounds.round)) {
         this.waveClock = this.director.sendExtra(['hall']) ? MISSION.uplinkWaveInterval : 0.4;
       }
     }
@@ -208,7 +209,9 @@ export class Mission {
     if (state.phase === 'arming' || state.phase === 'armed') {
       this.standClock -= dt;
       if (this.standClock <= 0 && this.director.room && this.extras() < MISSION.standMax) {
-        this.standClock = this.director.sendExtra(['core', 'hall']) ? MISSION.standInterval : 0.4;
+        const plan = this.director.rounds.plan;
+        const speed = Math.random() < MISSION.standRunners ? plan.runSpeed : plan.walkSpeed;
+        this.standClock = this.director.sendExtra(['core', 'hall'], { speed }) ? MISSION.standInterval : 0.4;
       }
     }
 

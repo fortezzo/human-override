@@ -97,7 +97,7 @@ export interface DebugApi {
    * Let the game play itself: as the "expert" that never misses (the
    * default), or as the "firstTimer", a rough model of a beginner.
    */
-  autopilot(on: boolean, pilot?: PilotName): void;
+  autopilot(on: boolean, pilot?: PilotName, mission?: boolean): void;
   /** Advance the game without drawing it (much faster; for playing whole runs in a tool). */
   simulate(dt: number, frames?: number): void;
   /**
@@ -245,9 +245,10 @@ export interface DebugTools {
 
 export function installDebugApi(game: Game): DebugTools {
   const pilot = new Autopilot(game);
-  const setAutopilot = (on: boolean, name: PilotName = 'expert') => {
+  const setAutopilot = (on: boolean, name: PilotName = 'expert', mission = false) => {
     if (!on) pilot.release();
     pilot.profile = PILOTS[name];
+    pilot.mission = mission;
     game.autopilot = on ? pilot : null;
   };
   /** True while the pilot is only running an errand for a test, not playing. */
@@ -662,8 +663,8 @@ export function installDebugApi(game: Game): DebugTools {
     simulate(dt, frames = 1) {
       for (let i = 0; i < frames; i++) game.frame(dt, false);
     },
-    autopilot(on, name) {
-      setAutopilot(on, name);
+    autopilot(on, name, mission) {
+      setAutopilot(on, name, mission);
     },
     grain(on) {
       game.renderer.grade.grain = on ? QUALITY[game.qualityLevel].filmGrain : 0;

@@ -44,6 +44,11 @@ export const SOUNDS = {
   robotLand: { files: variations('robot_land', 2), bus: 'robots', gain: 0.9, pitchJitter: 0.08, reverb: 0.5, maxVoices: 4 },
   robotDeath: { files: variations('robot_death', 2), bus: 'robots', gain: 1.0, pitchJitter: 0.06, reverb: 0.6, maxVoices: 4 },
   scrap: { files: variations('scrap', 4), bus: 'impacts', gain: 0.6, pitchJitter: 0.15, reverb: 0.4, maxVoices: 5 },
+  explosion: { files: variations('explosion', 2), bus: 'impacts', gain: 1.0, pitchJitter: 0.06, reverb: 0.7, maxVoices: 3 },
+  bomberBeep: { files: ['bomber_beep.mp3'], bus: 'robots', gain: 0.8, reverb: 0.2, maxVoices: 4 },
+  droneBuzz: { files: variations('drone_buzz', 2), bus: 'robots', gain: 0.5, pitchJitter: 0.1, reverb: 0.3, maxVoices: 4 },
+  shieldHit: { files: ['shield_hit.mp3'], bus: 'robots', gain: 0.7, pitchJitter: 0.12, reverb: 0.3, maxVoices: 4 },
+  plateBreak: { files: ['plate_break.mp3'], bus: 'robots', gain: 1.0, pitchJitter: 0.08, reverb: 0.5, maxVoices: 3 },
 
   step: { files: variations('step', 5), bus: 'player', gain: 0.5, pitchJitter: 0.1, reverb: 0.25, maxVoices: 3 },
   land: { files: ['land.mp3'], bus: 'player', gain: 0.6, reverb: 0.25 },
@@ -65,6 +70,8 @@ export const SOUNDS = {
   missionSwitch: { files: ['mission_switch.mp3'], bus: 'impacts', gain: 1.0, reverb: 0.5 },
   missionSaved: { files: ['mission_saved.mp3'], bus: 'music', gain: 0.9, reverb: 0.5 },
   gameOver: { files: ['game_over.mp3'], bus: 'music', gain: 0.95, reverb: 0.3 },
+  argusAnalysis: { files: ['argus_analysis.mp3'], bus: 'ui', gain: 0.7 },
+  argusRemark: { files: ['argus_remark.mp3'], bus: 'ui', gain: 0.5 },
 
   ambienceRoom: { files: ['ambience_room.mp3'], bus: 'ambience', gain: 0.8 },
   musicBed: { files: ['music_bed.mp3'], bus: 'music', gain: 0.9 },

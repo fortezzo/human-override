@@ -24,10 +24,23 @@ export class RobotModel {
   readonly glowTexture: THREE.Texture;
   /** Extra rotations layered over every animation (the hunch). */
   readonly posture: Array<{ bone: string; rotation: THREE.Quaternion }>;
-  /** The weak point: a sphere in the head bone's own space. */
-  readonly weakPoint: { centre: THREE.Vector3; radius: number };
-  /** Where the visor's soft glow sits in the head bone's space, and its size. */
-  readonly glow: { at: THREE.Vector3; size: THREE.Vector2 };
+  /** The weak point: a sphere in the space of the bone it rides on (the head, for most). Radius 0: it has none. */
+  readonly weakPoint: { bone: string; centre: THREE.Vector3; radius: number };
+  /** Where the visor's soft glow sits, in the space of the bone it rides on, and its size. */
+  readonly glow: { bone: string; at: THREE.Vector3; size: THREE.Vector2 };
+  /** The one sphere a bullet is tested against, for a body that is not a figure (the drone); null for the rest. */
+  readonly hitShape: { bone: string; centre: THREE.Vector3; radius: number } | null;
+  /** It flies. */
+  readonly flies: boolean;
+  /** How high its chest is off the ground when it stands, in metres. */
+  readonly chestHeight: number;
+  /**
+   * Where things are hung on it (ARGUS's shielding round the chest, its
+   * plate over the visor). Each is authored in the rest pose like the body
+   * itself: `at` is the spot in the rest pose, and `toBone` carries
+   * rest-pose positions into the space of the bone it rides on.
+   */
+  readonly mounts: Record<'chest' | 'visor', { bone: string; at: THREE.Vector3; toBone: THREE.Matrix4 }>;
   /** Overall size multiplier of this robot type. */
   readonly scale: number;
   /** How much thicker its body and limbs are than the standard robot's (for hit testing). */
@@ -59,10 +72,19 @@ export class RobotModel {
     this.eyeColor = design.eyeColor ?? ROBOT.eyeColor;
     this.carry = design.carry ? { bone: design.carry.bone, at: rig.at(design.carry.bone).add(new THREE.Vector3(...design.carry.at)).applyMatrix4(rig.toBone(design.carry.bone)) } : null;
 
-    const headJoint = rig.at('Head');
-    const inHead = (offset: [number, number, number]) => headJoint.clone().add(new THREE.Vector3(...offset)).applyMatrix4(rig.toBone('Head'));
-    this.weakPoint = { centre: inHead(design.weakPoint.centre), radius: design.weakPoint.radius * design.scale };
-    this.glow = { at: inHead(design.glow.at), size: new THREE.Vector2(...design.glow.size) };
+    /** A point given relative to a joint in the rest pose, in that joint's bone's own space. */
+    const inBone = (bone: string, offset: [number, number, number]) => rig.at(bone).add(new THREE.Vector3(...offset)).applyMatrix4(rig.toBone(bone));
+    const weakBone = design.weakPoint.bone ?? 'Head';
+    this.weakPoint = { bone: weakBone, centre: inBone(weakBone, design.weakPoint.centre), radius: design.weakPoint.radius * design.scale };
+    const glowBone = design.glow.bone ?? 'Head';
+    this.glow = { bone: glowBone, at: inBone(glowBone, design.glow.at), size: new THREE.Vector2(...design.glow.size) };
+    this.hitShape = design.hitShape ? { bone: design.hitShape.bone, centre: inBone(design.hitShape.bone, design.hitShape.centre), radius: design.hitShape.radius * design.scale } : null;
+    this.flies = design.flies ?? false;
+    this.chestHeight = rig.at('Spine2').y * design.scale;
+    this.mounts = {
+      chest: { bone: 'Spine2', at: rig.at('Spine2').add(new THREE.Vector3(0, 0.04, 0)), toBone: rig.toBone('Spine2').clone() },
+      visor: { bone: 'Head', at: rig.at('Head').add(new THREE.Vector3(...(design.glow.bone ? [0, 0.09, 0.14] : design.glow.at))), toBone: rig.toBone('Head').clone() },
+    };
 
     const { color: edgeColor, ...edge } = design.edge ?? {};
     this.material = createRobotMaterial(assets, edgeColor ? { ...edge, color: new THREE.Color(...edgeColor) } : edge);

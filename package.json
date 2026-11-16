@@ -16,7 +16,8 @@
     "assets:fetch": "node tools/assets/fetch.mjs",
     "assets:build": "node tools/assets/build-all.mjs",
     "check:credits": "node tools/check-credits.mjs",
-    "balance": "node tools/balance.mjs"
+    "balance": "node tools/balance.mjs",
+    "mission": "node tools/mission.mjs"
   },
   "dependencies": {
     "n8ao": "^2.0.2",
