@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { BENCH, BOOSTS, MISSION, PLAYER, QUALITY, ROBOT, SHUTTERS, SPECIALS, WEAPONS } from '../config';
+import { BENCH, BOOSTS, CRATE, GRENADE, MISSION, PICKUPS, PLAYER, QUALITY, ROBOT, SCRAP, SHUTTERS, SPECIALS, SWARM, TURNCOAT, WEAPONS } from '../config';
 import { boostPrice, type BoostId } from '../sim/boosts';
 import { takeOffer } from '../sim/loadout';
 import type { PickupId } from '../sim/pickups';
@@ -337,7 +337,7 @@ export interface DebugApi {
     turned: number;
     revives: number;
     /** The config's numbers for all of it. */
-    rules: { bench: typeof BENCH; boosts: typeof BOOSTS; shutters: typeof SHUTTERS };
+    rules: { bench: typeof BENCH; boosts: typeof BOOSTS; shutters: typeof SHUTTERS; crate: typeof CRATE; pickups: typeof PICKUPS; grenade: typeof GRENADE; swarm: typeof SWARM; turncoat: typeof TURNCOAT; scrap: typeof SCRAP };
   };
   /** Leave a timed pickup on the floor. */
   dropPickup(id: PickupId, x: number, z: number): void;
@@ -957,7 +957,7 @@ export function installDebugApi(game: Game): DebugTools {
         swarm: game.director.swarm,
         turned: game.robots.filter((robot) => robot.alive && robot.turned > 0).length,
         revives: game.stats.revives,
-        rules: { bench: BENCH, boosts: BOOSTS, shutters: SHUTTERS },
+        rules: { bench: BENCH, boosts: BOOSTS, shutters: SHUTTERS, crate: CRATE, pickups: PICKUPS, grenade: GRENADE, swarm: SWARM, turncoat: TURNCOAT, scrap: SCRAP },
       };
     },
     dropPickup(id, x, z) {

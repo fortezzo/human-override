@@ -20,6 +20,7 @@ Used under the Adobe Mixamo terms. Only the skeleton and the recorded movements 
 | [Sci-Fi Rifle](https://sketchfab.com/3d-models/sci-fi-rifle-a78881c37ceb4303814279c0807f2f0f) — Changes: re-centred and scaled; its folding sight and two side knobs removed, and a reflex sight made for the game mounted where the old sight stood; textures re-packed and compressed; paint lightened in the game. | Slayver | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | [Sci-fi Pistol [PBR]](https://sketchfab.com/3d-models/sci-fi-pistol-pbr-4e05d6bd3b2f4854b7c999e8fc9ebe51) — Changes: only the pistol itself is used (its display magazine and loose rounds are left out); levelled, re-centred and scaled; textures re-packed and compressed. | StarGames studio | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 | [Sci-fi Super Shotgun](https://sketchfab.com/3d-models/sci-fi-super-shotgun-5929e6949d1e421e927116e117248f07) — Changes: re-centred and scaled; textures re-packed and compressed; paint lightened in the game. | tnnv | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| [arma sci-fi/sci-fi weapon](https://sketchfab.com/3d-models/arma-sci-fisci-fi-weapon-7a983d742dc94505ae399826136f1e62) — Changes: only the shape of the model is used, and none of the images that came with it; simplified from about 330,000 triangles to 28,000; re-centred and scaled; painted in the game from the surfaces credited on this page. | LoonaUwU (semoi0055) | [CC-BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
 
 ## Props and fixtures
 

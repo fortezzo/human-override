@@ -45,8 +45,12 @@
 //   - with the browser slowed down to imitate a weak computer, the game
 //     lowers its own quality and says so
 //
-// ARGUS's adaptations and the rest of the economy arrive in later stages
-// and are added to this script with them.
+//   - ARGUS: the special robots, its counters, its analysis and its profile
+//   - the full economy: a station in every area, each of the four boosts
+//     bought and doing what it says, the Overclock Bench more than once, the
+//     Prototype Crate and its special weapon, the fail-safe, shutters
+//     battered and repaired, every timed pickup, grenades, a swarm round,
+//     and the how-to-play and settings screens
 
 import fs from 'node:fs';
 import sharp from 'sharp';
@@ -647,8 +651,13 @@ try {
   const safe = await ev(() => window.__HO.safeSpots());
   check('there is nowhere the player can stand that no robot can reach', safe.length === 0, safe.length ? safe.map((s) => `${(s.squares * 0.0225).toFixed(1)} square metres around (${s.x.toFixed(1)}, ${s.z.toFixed(1)})`).join('; ') : 'checked every square the player can walk to');
 
+  // (The main entrance has a shutter now. Down, it keeps the player in as
+  // well as the robots out; forced up, the way to the yard is open.)
+  await ev(() => window.__HO.setShutter(true, 'yard'));
+  const shutIn = await sprintFrom(-0.6, -6, 0, 150);
+  await ev(() => window.__HO.setShutter(false, 'yard'));
   const outside = await sprintFrom(-0.6, -6, 0, 150);
-  check('the player can step out into the yard', outside[1] < -13.5, `reached z ${outside[1].toFixed(1)}`);
+  check('the player can step out into the yard once its shutter has been forced, and not while it is down', outside[1] < -13.5 && shutIn[1] > -7.3, `down: stopped at z ${shutIn[1].toFixed(1)}; forced: reached z ${outside[1].toFixed(1)}`);
   const pushes = [];
   for (const [x, z, yaw] of [[4.5, -18.5, -90], [-4.5, -18.5, 90], [0, -18.5, 0], [5.2, -19, -45], [-5.2, -19, 45], [5.4, -13.2, -90], [-5.4, -13.2, 90], [5.3, -13.4, 180], [-5.3, -13.4, 180]]) {
     pushes.push(await sprintFrom(x, z, yaw, 240));
@@ -1078,6 +1087,8 @@ try {
   // Nothing may stand across a doorway. (A rail along the server hall's
   // walls once carried on across all four of its openings, and showed
   // through the open blast door as a dark bar at waist height.)
+  // (With every shutter up, as with every door open: a shutter that is down is meant to be in the way.)
+  await ev(() => window.__HO.setShutter(false));
   const across = await ev(() => window.__HO.doorwayObstructions());
   const crossed = Object.entries(across).filter(([, count]) => count > 0);
   check(
@@ -1591,7 +1602,8 @@ try {
   // ---- 2c. The Custodian arrives with a later round (the config says which) and carries the third key.
   m = await mission();
   const waitingFor = m.objective;
-  const dueRound = m.rules.custodianFromRound;
+  // (With the round after the second key, and never before the config's round.)
+  const dueRound = Math.max(m.rules.custodianFromRound, (await run()).round + 1);
   await ev((dueRound) => {
     const ho = window.__HO;
     ho.clearRobots();
@@ -2953,6 +2965,632 @@ try {
   check('script ran to the end', false, String(error.message ?? error).split('\n')[0]);
 }
 
+// ---- Stage 4: the full economy. The six stations, the shutters, the
+// timed pickups, grenades, swarm rounds and the crate's special weapon.
+try {
+  const eco = () => ev(() => window.__HO.economy());
+  const facing = (stand, look) => (Math.atan2(-(look[0] - stand[0]), -(look[1] - stand[1])) * 180) / Math.PI;
+  /** A run with nothing going on: god mode, no rounds, no robots, every door open, plenty of scrap. */
+  const quiet = (power) =>
+    ev((power) => {
+      const ho = window.__HO;
+      ho.restart();
+      ho.step(1 / 60, 3);
+      if (power) ho.missionJump('keys');
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
+      ho.scrap(60000);
+      ho.step(1 / 60, 150);
+      ho.sounds();
+    }, power);
+  /** Stand in front of a station, facing it. */
+  const goTo = async (id) => {
+    const station = (await eco()).stations.find((s) => s.id === id);
+    await ev(([x, z, yaw]) => {
+      const ho = window.__HO;
+      ho.place(x, z, yaw, -4);
+      ho.step(1 / 60, 4);
+    }, [station.stand[0], station.stand[1], facing(station.stand, station.look)]);
+    return station;
+  };
+  const prompt = () => ev(() => window.__HO.game.interactions.prompt);
+  const press = async (frames = 6) => {
+    await tap('interact');
+    await step(frames);
+  };
+  const { rules } = await eco();
+
+  // ---- One station in every area.
+  await quiet(false);
+  const plan = await eco();
+  const byArea = Object.fromEntries(plan.stations.map((s) => [s.area, s.id]));
+  check(
+    'there is a station in every one of the six areas: four Boost Stations, the Prototype Crate and the Overclock Bench',
+    plan.stations.length === 6 && Object.keys(byArea).length === 6 && byArea.dock === 'crate' && byArea.lab === 'bench',
+    Object.entries(byArea).map(([area, id]) => `${area}: ${id}`).join(', '),
+  );
+
+  // ---- With the power out, the boost stations and the bench are dead. (The crate has no need of it.)
+  const dead = [];
+  for (const id of ['failsafe', 'carapace', 'autoloader', 'hairTrigger', 'bench']) {
+    await goTo(id);
+    const before = (await run()).spent;
+    const offered = await prompt();
+    await press();
+    const state = await eco();
+    if (!offered || !/no power/.test(offered.text) || offered.usable || offered.cost !== null || (await run()).spent !== before || state.boosts[id]) dead.push(`${id}: ${JSON.stringify(offered)}`);
+  }
+  await goTo('crate');
+  const crateCold = await prompt();
+  check('with the power out the four Boost Stations and the Overclock Bench sell nothing and say why; the Prototype Crate works without it', dead.length === 0 && crateCold?.usable === true && crateCold.cost === rules.crate.price, dead.join(' | ') || `the crate: "${crateCold?.text}" for ${crateCold?.cost}`);
+
+  // ---- With the power on: each boost is bought with F, charges its price once, and does what it says.
+  await quiet(true);
+  const plain = (await eco()).weapons[0];
+  const bought = [];
+  const wrong = [];
+  for (const id of ['carapace', 'autoloader', 'hairTrigger', 'failsafe']) {
+    await goTo(id);
+    const offered = await prompt();
+    const before = (await run()).spent;
+    await press();
+    const paid = (await run()).spent - before;
+    await press();
+    const again = (await run()).spent - before - paid;
+    const after = await prompt();
+    const state = await eco();
+    bought.push(`${rules.boosts[id].name} ${paid}`);
+    if (offered?.cost !== rules.boosts[id].price || !offered.usable || paid !== rules.boosts[id].price || again !== 0 || !state.boosts[id] || !/active/.test(after?.text ?? '')) wrong.push(`${id}: offered ${offered?.cost}, paid ${paid}, a second press ${again}, then "${after?.text}"`);
+  }
+  check('every Boost Station sells its boost for its price with F, once: a second press charges nothing', wrong.length === 0, wrong.join(' | ') || bought.join(', '));
+  const boosted = await eco();
+  const gun = boosted.weapons[0];
+  const health = (await run()).health;
+  check(
+    'the boosts do what they say: more health (and it is filled), a faster reload, a faster rate of fire, and a fail-safe in hand',
+    boosted.maxHealth === rules.boosts.carapace.maxHealth &&
+      Math.abs(health - boosted.maxHealth) < 0.5 &&
+      Math.abs(gun.reloadTime - plain.reloadTime * rules.boosts.autoloader.reloadFactor) < 1e-6 &&
+      Math.abs(gun.fireInterval - plain.fireInterval * rules.boosts.hairTrigger.fireFactor) < 1e-6 &&
+      gun.damage === plain.damage &&
+      boosted.boosts.failsafe,
+    `health ${health} of ${boosted.maxHealth} (it was 100); reload ${plain.reloadTime} s -> ${gun.reloadTime.toFixed(2)} s; ${plain.fireInterval} s between shots -> ${gun.fireInterval.toFixed(3)} s`,
+  );
+  await page.waitForTimeout(250);
+  const tags = await ev(() => [...document.querySelectorAll('.hud-boost')].map((node) => node.textContent));
+  check('the HUD lists the boosts the player has', tags.length === 4 && tags.includes('CARAPACE') && tags.includes('FAILSAFE'), tags.join(', '));
+
+  // ---- The Overclock Bench: the weapon in hand, again and again, each time for more.
+  await goTo('bench');
+  const benchOffers = [];
+  for (let level = 1; level <= 2; level++) {
+    const offered = await prompt();
+    const before = (await run()).spent;
+    await ev(() => {
+      const state = window.__HO.game.weapons.state;
+      state.ammo = 1;
+      state.reserve = 3;
+    });
+    await press(50);
+    const weapon = (await eco()).weapons[0];
+    benchOffers.push({ text: offered?.text, cost: offered?.cost, paid: (await run()).spent - before, level: weapon.level, damage: weapon.damage, magazine: weapon.magazine, full: weapon.ammo === weapon.magazine && weapon.reserve === weapon.reserveMax });
+  }
+  const b = rules.bench;
+  check(
+    'the Overclock Bench upgrades the weapon in hand, more than once, each upgrade costing more: more damage, a bigger magazine, and it comes back full',
+    benchOffers[0].cost === b.price &&
+      benchOffers[0].paid === b.price &&
+      benchOffers[1].cost === b.price + b.priceStep &&
+      benchOffers[1].paid === b.price + b.priceStep &&
+      benchOffers[1].level === 2 &&
+      Math.abs(benchOffers[0].damage - plain.damage * (1 + b.damagePerLevel)) < 1e-6 &&
+      Math.abs(benchOffers[1].damage - plain.damage * (1 + 2 * b.damagePerLevel)) < 1e-6 &&
+      benchOffers[1].magazine > plain.magazine &&
+      benchOffers.every((o) => o.full) &&
+      /Mk II$/.test(benchOffers[0].text ?? '') &&
+      /Mk III$/.test(benchOffers[1].text ?? ''),
+    benchOffers.map((o) => `"${o.text}" ${o.cost}: damage ${o.damage.toFixed(1)}, magazine ${o.magazine}`).join('; ') + ` (off the wall: damage ${plain.damage}, magazine ${plain.magazine})`,
+  );
+  await page.waitForTimeout(250);
+  const benchName = await ev(() => document.querySelector('.hud-ammo .hud-label:not(.hud-scrap .hud-label)')?.textContent ?? [...document.querySelectorAll('.hud-ammo .hud-label')].map((n) => n.textContent).join('|'));
+  await ev((top) => window.__HO.giveWeapon('pistol', top), b.maxLevel);
+  await step(40);
+  const topOffer = await prompt();
+  const beforeTop = (await run()).spent;
+  await press(20);
+  check('a weapon that has had every upgrade is refused, and nothing is charged; the HUD names the weapon with its mark', /fully overclocked/.test(topOffer?.text ?? '') && !topOffer.usable && (await run()).spent === beforeTop && /MK III/.test(benchName), `"${topOffer?.text}"; the HUD read "${benchName}"`);
+
+  // ---- The Prototype Crate.
+  await quiet(false);
+  await goTo('crate');
+  await ev(() => window.__HO.crateDice([0]));
+  let before = (await run()).spent;
+  await press(3);
+  const choosing = await eco();
+  const midPrompt = await prompt();
+  await step(Math.round(rules.crate.cycleSeconds * 60) + 10);
+  const offering = await eco();
+  const takePrompt = await prompt();
+  await press(40);
+  const took = await eco();
+  const crateSounds = await ev(() => window.__HO.sounds());
+  check(
+    'the Prototype Crate: F charges its price, it takes a moment to choose, and what it offers is taken with a second F for nothing more. It can give the Turncoat, which is found nowhere else',
+    choosing.crate.phase === 'choosing' &&
+      midPrompt?.usable === false &&
+      offering.crate.phase === 'offer' &&
+      offering.crate.offer?.weapon === 'turncoat' &&
+      /Take the XM-0 Turncoat/.test(takePrompt?.text ?? '') &&
+      took.weapons.some((w) => w?.id === 'turncoat') &&
+      (await run()).weapon === 'turncoat' &&
+      (await run()).spent - before === rules.crate.price &&
+      took.crate.phase === 'shut' &&
+      ['crateOpen', 'crateTick', 'crateOffer', 'crateClose'].every((sound) => crateSounds.includes(sound)),
+    `charged ${(await run()).spent - before}; "${takePrompt?.text}"; carrying ${took.weapons.map((w) => w?.id).join(' + ')}; sounds: ${[...new Set(crateSounds)].filter((s) => s.startsWith('crate')).join(', ')}`,
+  );
+  // An ordinary gun comes overclocked; left alone, the lid shuts on it and nothing changes hands.
+  await ev(() => window.__HO.crateDice([0.99, 0.99]));
+  before = (await run()).spent;
+  await press(3);
+  await step(Math.round(rules.crate.cycleSeconds * 60) + 10);
+  const second = await eco();
+  await step(Math.round(rules.crate.offerSeconds * 60) + 20);
+  const left = await eco();
+  check(
+    'an ordinary gun from the crate comes already overclocked, and one that is left where it is costs the roll and nothing else: the lid shuts and the player keeps what they had',
+    second.crate.offer !== null &&
+      !second.crate.offer.special &&
+      second.crate.offer.level >= rules.crate.freshLevel &&
+      left.crate.phase === 'shut' &&
+      JSON.stringify(left.weapons.map((w) => w?.id)) === JSON.stringify(took.weapons.map((w) => w?.id)) &&
+      (await run()).spent - before === rules.crate.price,
+    `offered the ${second.crate.offer?.weapon} at level ${second.crate.offer?.level}; still carrying ${left.weapons.map((w) => w?.id).join(' + ')}`,
+  );
+
+  // ---- The Turncoat: its beam turns a robot to the player's side.
+  const turnedRun = await ev(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 3, 0, 0);
+    ho.step(1 / 60, 30);
+    const kills = ho.run().kills;
+    const earned = ho.run().earned;
+    ho.spawnKind(0, -2.2, 180, {});
+    ho.spawnKind(1.2, -3.4, 180, {});
+    ho.step(1 / 60, 20);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+    ho.sounds();
+    ho.tap('fire');
+    ho.step(1 / 60, 3);
+    const turned = ho.economy().turned;
+    const sounds = ho.sounds();
+    const health = ho.run().health;
+    // It goes for the other one; when its time is up, its own core burns out.
+    let firstKill = -1;
+    let frames = 0;
+    for (; frames < 60 * 16 && ho.run().robots.filter((r) => r.alive).length > 0; frames++) {
+      ho.step(1 / 60, 1);
+      if (firstKill < 0 && ho.run().kills > kills) firstKill = frames / 60;
+    }
+    return { turned, sounds, firstKill, seconds: frames / 60, kills: ho.run().kills - kills, earned: ho.run().earned - earned, hurt: health - ho.run().health, left: ho.run().robots.filter((r) => r.alive).length };
+  });
+  await page.waitForTimeout(50);
+  check(
+    "the Turncoat's beam turns a robot to the player's side: it destroys the robot beside it, and when its time is up its own core burns out. Both are the player's kills",
+    turnedRun.turned === 1 && turnedRun.sounds.includes('beamShot') && turnedRun.sounds.includes('turned') && turnedRun.kills === 2 && turnedRun.left === 0 && turnedRun.firstKill > 0 && turnedRun.seconds <= rules.turncoat.seconds + 1.5 && turnedRun.earned >= 2 * rules.scrap.kill,
+    `turned ${turnedRun.turned}; the other robot destroyed after ${turnedRun.firstKill.toFixed(1)} s; both gone after ${turnedRun.seconds.toFixed(1)} s (it fights for ${rules.turncoat.seconds}); ${turnedRun.kills} kills, ${turnedRun.earned} scrap`,
+  );
+  const immune = await ev(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.giveWeapon('turncoat');
+    ho.step(1 / 60, 40);
+    ho.spawnRobot(0, -2.5, 180, true, 1.2, 2000, 'custodian');
+    ho.step(1 / 60, 10);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+    ho.tap('fire');
+    ho.step(1 / 60, 3);
+    const robot = ho.game.robots.find((r) => r.alive);
+    const out = { turned: ho.economy().turned, health: robot ? robot.healthLeft : -1 };
+    ho.clearRobots();
+    return out;
+  });
+  await page.waitForTimeout(150);
+  const immuneNote = await ev(() => document.querySelector('.hit-note')?.textContent ?? '');
+  check("ARGUS's own machines cannot be turned: the beam only hurts them, and the HUD says so", immune.turned === 0 && immune.health > 0 && immune.health < 1 && /CANNOT BE TURNED/.test(immuneNote), `a Custodian struck: not turned, ${Math.round(immune.health * 100)}% of its health left; the HUD: "${immuneNote}"`);
+
+  // ---- The fail-safe: the blow that would put the player down does not, once.
+  await quiet(true);
+  await goTo('failsafe');
+  await press();
+  const saved = await ev(() => {
+    const ho = window.__HO;
+    ho.god(false);
+    ho.place(0, 0, 0, 0);
+    ho.sounds();
+    const ring = () => {
+      const p = ho.game.player.position;
+      for (const [dx, dz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [0.9, 0.9], [-0.9, -0.9]]) ho.spawnKind(p.x + dx, p.z + dz, 0, {});
+    };
+    ring();
+    let frames = 0;
+    for (; frames < 60 * 25 && ho.economy().revives === 0 && ho.run().state === 'playing'; frames++) ho.step(1 / 60, 1);
+    const at = { state: ho.run().state, health: ho.run().health, grace: ho.economy().grace, owned: ho.economy().boosts.failsafe, price: ho.economy().boostPrices.failsafe, revives: ho.economy().revives, sounds: ho.sounds() };
+    // Untouchable for a moment: a second of blows changes nothing.
+    ho.step(1 / 60, 60);
+    const held = ho.run().health >= at.health - 0.01;
+    // And then they are on their own: with no second fail-safe, the run ends.
+    ring();
+    for (frames = 0; frames < 60 * 40 && ho.run().state === 'playing'; frames++) ho.step(1 / 60, 1);
+    return { ...at, held, end: ho.run().state, revivesAtEnd: ho.economy().revives };
+  });
+  await page.waitForTimeout(100);
+  check(
+    'the fail-safe brings the player back from the blow that would have ended the run: on their feet with part of their health, untouchable for a moment, and the fail-safe used up. It costs more to buy again, and without one the next time is the end',
+    saved.revives === 1 && saved.state === 'playing' && Math.abs(saved.health - 100 * rules.boosts.failsafe.health) < 1 && saved.grace > 0 && !saved.owned && saved.price === rules.boosts.failsafe.price + rules.boosts.failsafe.priceStep && saved.sounds.includes('revive') && saved.held && saved.end === 'over' && saved.revivesAtEnd === 1,
+    `back up with ${saved.health.toFixed(0)} health; the next one costs ${saved.price} (the first was ${rules.boosts.failsafe.price}); a second of blows afterwards did ${saved.held ? 'nothing' : 'damage'}; then the run ended: ${saved.end}`,
+  );
+
+  // ---- Shutters.
+  await quiet(false);
+  const fresh = await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.scrap(500);
+    return ho.economy().shutters;
+  });
+  check('a run begins with all five shutters down and sound', fresh.length === 5 && fresh.every((s) => s.shut && s.strength === rules.shutters.strength), fresh.map((s) => `${s.id} ${s.strength}`).join(', '));
+  const battered = await ev(() => {
+    const ho = window.__HO;
+    ho.place(0, 2, 0, 0);
+    ho.sounds();
+    ho.spawnRobot(0, -10.5, 180, false, 3.0, 400);
+    const strength = () => ho.economy().shutters.find((s) => s.id === 'yard').strength;
+    const blows = [];
+    let last = strength();
+    let frames = 0;
+    for (; frames < 60 * 40 && strength() > 0; frames++) {
+      ho.step(1 / 60, 1);
+      if (strength() < last) {
+        last = strength();
+        blows.push(frames / 60);
+      }
+    }
+    const forcedAt = frames / 60;
+    const robotStillOutside = ho.run().robots[0].z < -7.5;
+    // Then it comes in.
+    for (frames = 0; frames < 60 * 30; frames++) {
+      ho.step(1 / 60, 1);
+      const robot = ho.run().robots.find((r) => r.alive);
+      if (robot && Math.hypot(robot.x - ho.run().position.x, robot.z - ho.run().position.z) < 1.6) break;
+    }
+    return { blows, forcedAt, robotStillOutside, reachedAfter: frames / 60, sounds: ho.sounds() };
+  });
+  check(
+    'a robot outside a shutter that is down has to batter it: so many blows, and it is forced up; only then does the robot come in and reach the player',
+    battered.blows.length === rules.shutters.strength && battered.robotStillOutside && battered.reachedAfter < 25 && battered.sounds.filter((s) => s === 'shutterHit').length === rules.shutters.strength && battered.sounds.includes('shutterBreak'),
+    `${battered.blows.length} blows, the last ${battered.forcedAt.toFixed(1)} s after it set out; it reached the player ${battered.reachedAfter.toFixed(1)} s later`,
+  );
+  // Repair: from indoors, for a little scrap; not offered for a sound one; not from the wrong side.
+  const repair = await ev(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, -5.5, 0, 0);
+    ho.step(1 / 60, 4);
+    const offered = ho.game.interactions.prompt;
+    const before = ho.run().spent;
+    ho.tap('interact');
+    ho.step(1 / 60, 50);
+    const paid = ho.run().spent - before;
+    const after = ho.economy().shutters.find((s) => s.id === 'yard');
+    const sound = ho.game.interactions.prompt;
+    // A robot outside is held again.
+    ho.spawnRobot(0, -10.5, 180, false, 3.0, 400);
+    ho.step(1 / 60, 60 * 3);
+    const held = ho.run().robots[0].z < -7.5;
+    ho.clearRobots();
+    // From outside: force it, stand in the corridor and face it.
+    ho.setShutter(false, 'yard');
+    ho.place(0, -9.6, 180, 0);
+    ho.step(1 / 60, 4);
+    const outside = ho.game.interactions.prompt;
+    return { offered, paid, after, sound, held, outside };
+  });
+  check(
+    'a forced shutter is repaired with F from indoors for a little scrap, and robots outside are held again; a sound one offers nothing; and it cannot be run down from the wrong side',
+    /Repair the shutter/.test(repair.offered?.text ?? '') && repair.offered.cost === rules.shutters.repairCost && repair.paid === rules.shutters.repairCost && repair.after.shut && repair.after.strength === rules.shutters.strength && !/Repair/.test(repair.sound?.text ?? '') && repair.held && !/Repair/.test(repair.outside?.text ?? ''),
+    `"${repair.offered?.text}" for ${repair.offered?.cost}: paid ${repair.paid}; afterwards the prompt read ${repair.sound ? `"${repair.sound.text}"` : 'nothing'}; from outside: ${repair.outside ? `"${repair.outside.text}"` : 'nothing'}`,
+  );
+  const walked = await ev(() => {
+    const ho = window.__HO;
+    const walk = () => {
+      ho.place(0, -5.2, 0, 0);
+      ho.press('forward', true);
+      ho.step(1 / 60, 150);
+      ho.press('forward', false);
+      return ho.run().position.z;
+    };
+    ho.setShutter(true, 'yard');
+    const shut = walk();
+    ho.setShutter(false, 'yard');
+    const open = walk();
+    return { shut, open };
+  });
+  check('a shutter that is down stops the player too; forced, they can walk out under it as before', walked.shut > -7.2 && walked.open < -9, `down: stopped at z ${walked.shut.toFixed(1)}; forced: reached z ${walked.open.toFixed(1)}`);
+
+  // ---- Pickups.
+  const pick = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const drop = (id) => {
+      const p = game.player.position;
+      ho.dropPickup(id, p.x, p.z);
+      ho.step(1 / 60, 3);
+    };
+    ho.clearRobots();
+    ho.place(0, 2, 0, 0);
+    ho.step(1 / 60, 10);
+    const out = {};
+
+    // Lockdown: every forced shutter runs down; but not one the player is outside of.
+    ho.setShutter(false);
+    drop('lockdown');
+    out.lockdown = ho.economy().shutters.filter((s) => s.shut).length;
+    ho.setShutter(false);
+    ho.place(0, -9.6, 180, 0);
+    ho.step(1 / 60, 3);
+    drop('lockdown');
+    out.lockedOut = ho.economy().shutters.filter((s) => !s.shut).map((s) => s.id);
+    ho.setShutter(true);
+    ho.setShutter(false, 'yard');
+    ho.place(0, 2, 0, 0);
+    ho.step(1 / 60, 10);
+
+    // Full Resupply: every weapon filled, and the grenades.
+    game.weapons.state.ammo = 1;
+    game.weapons.state.reserve = 0;
+    game.economy.grenades.count = 0;
+    drop('resupply');
+    const w = ho.economy().weapons[0];
+    out.resupply = w.ammo === w.magazine && w.reserve === w.reserveMax && ho.economy().grenades === ho.economy().rules.grenade.max;
+
+    // Double Scrap: a strike that destroys a robot pays twice.
+    ho.spawnRobot(0, 0.6, 180, true, 1.2, 10);
+    ho.step(1 / 60, 5);
+    let earned = ho.run().earned;
+    ho.tap('melee');
+    ho.step(1 / 60, 30);
+    out.single = ho.run().earned - earned;
+    drop('doubleScrap');
+    ho.spawnRobot(0, 0.6, 180, true, 1.2, 10);
+    ho.step(1 / 60, 45);
+    earned = ho.run().earned;
+    ho.tap('melee');
+    ho.step(1 / 60, 30);
+    out.double = ho.run().earned - earned;
+    out.doubleLeft = ho.economy().effects.doubleScrap;
+
+    // Overload: one hit destroys a robot with twenty times the health a shot does.
+    ho.clearRobots();
+    drop('overload');
+    ho.spawnRobot(0, -1.5, 180, true, 1.2, 28 * 20);
+    ho.step(1 / 60, 10);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+    ho.tap('fire');
+    ho.step(1 / 60, 40);
+    out.overloadKill = ho.run().robots.filter((r) => r.alive).length === 0;
+    out.overloadLeft = ho.economy().effects.overload;
+    return out;
+  });
+  await page.waitForTimeout(250);
+  const timers = await ev(() => [...document.querySelectorAll('.hud-effect span')].map((node) => node.textContent));
+  const afterTimers = await ev(() => {
+    const ho = window.__HO;
+    ho.step(1 / 60, 60 * 31);
+    ho.clearRobots();
+    ho.spawnRobot(0, -1.5, 180, true, 1.2, 28 * 20);
+    ho.step(1 / 60, 10);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+    ho.tap('fire');
+    ho.step(1 / 60, 40);
+    const alive = ho.run().robots.filter((r) => r.alive).length;
+    ho.clearRobots();
+    return { effects: ho.economy().effects, alive };
+  });
+  check(
+    'Lockdown runs every forced shutter back down (but never shuts the player out); a Full Resupply fills every weapon and the grenades',
+    pick.lockdown === 5 && pick.lockedOut.length === 1 && pick.lockedOut[0] === 'yard' && pick.resupply,
+    `all five down after a Lockdown indoors; taken in the entry corridor, it left ${pick.lockedOut.join(', ')} up`,
+  );
+  check(
+    'Double Scrap doubles what a kill pays and Overload makes one hit destroy what it lands on, each for its time and no longer; the HUD shows both with their time running down',
+    pick.single === rules.scrap.meleeKill && pick.double === 2 * rules.scrap.meleeKill && pick.overloadKill && pick.doubleLeft > 0 && pick.overloadLeft > 0 && timers.includes('OVERLOAD') && timers.includes('DOUBLE SCRAP') && afterTimers.effects.overload === 0 && afterTimers.effects.doubleScrap === 0 && afterTimers.alive === 1,
+    `a strike that destroys a robot paid ${pick.single}, then ${pick.double}; one sidearm shot destroyed a robot with twenty shots' worth of health; on the HUD: ${timers.join(', ')}; half a minute later the same shot left it standing`,
+  );
+  const emp = await ev(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 2, 0, 0);
+    ho.step(1 / 60, 5);
+    const kills = ho.run().kills;
+    const earned = ho.run().earned;
+    for (const [x, z] of [[-4, -3], [-2, -4], [0, -5], [2, -4], [4, -3], [6, 1], [-6, 1], [0, 6]]) ho.spawnKind(x, z, 0, { hold: true });
+    ho.spawnRobot(3, 5, 0, true, 1.2, 1000, 'custodian');
+    ho.step(1 / 60, 5);
+    ho.sounds();
+    const p = ho.game.player.position;
+    ho.dropPickup('emp', p.x, p.z);
+    ho.step(1 / 60, 3);
+    const elite = ho.game.robots.find((r) => r.alive);
+    const out = { kills: ho.run().kills - kills, earned: ho.run().earned - earned, standing: ho.run().robots.filter((r) => r.alive).length, elite: elite ? elite.healthLeft : -1, role: elite?.role, sounds: ho.sounds() };
+    ho.step(1 / 60, 60);
+    ho.clearRobots();
+    return out;
+  });
+  check(
+    "an EMP Blast destroys every robot of the horde on the map, and they are the player's kills; ARGUS's own machines lose part of their health and stand",
+    emp.kills === 8 && emp.earned === 8 * rules.scrap.kill && emp.standing === 1 && emp.role === 'custodian' && Math.abs(emp.elite - (1 - rules.pickups.empElite)) < 0.01 && emp.sounds.includes('empBlast'),
+    `8 robots and a Custodian on the map: ${emp.kills} destroyed for ${emp.earned} scrap; the Custodian left standing with ${Math.round(emp.elite * 100)}% of its health`,
+  );
+  const lapsed = await ev(() => {
+    const ho = window.__HO;
+    ho.dropPickup('emp', 6, 5);
+    ho.step(1 / 60, 30);
+    const lying = ho.economy().pickups.length;
+    ho.step(1 / 60, Math.round((ho.economy().rules.pickups.lifetime + 1) * 60));
+    return { lying, after: ho.economy().pickups.length };
+  });
+  check('a pickup nobody walks into is gone after its time', lapsed.lying === 1 && lapsed.after === 0, `${rules.pickups.lifetime} s`);
+
+  // ---- Grenades.
+  const grenade = await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.setShutter(false);
+    ho.place(0, 4, 0, 0);
+    ho.step(1 / 60, 20);
+    const start = ho.economy().grenades;
+    for (const [x, z] of [[0, -4.5], [0.9, -5.1], [-0.9, -5.1], [0, -5.8]]) ho.spawnKind(x, z, 0, { hold: true });
+    ho.step(1 / 60, 5);
+    const kills = ho.run().kills;
+    ho.sounds();
+    ho.tap('grenade');
+    ho.step(1 / 60, 2);
+    const thrown = { count: ho.economy().grenades, inAir: ho.economy().grenadesInAir };
+    // Not again at once.
+    ho.tap('grenade');
+    ho.step(1 / 60, 2);
+    const again = ho.economy().grenadesInAir;
+    let frames = 0;
+    for (; frames < 60 * 4 && ho.economy().grenadesInAir > 0; frames++) ho.step(1 / 60, 1);
+    ho.step(1 / 60, 40);
+    const out = { start, thrown, again, fuse: frames / 60, kills: ho.run().kills - kills, sounds: ho.sounds() };
+    ho.clearRobots();
+    // One at the player's own feet hurts them (less than a bomber would).
+    ho.god(false);
+    ho.place(0, 4, 0, -85);
+    ho.step(1 / 60, 60);
+    const health = ho.run().health;
+    ho.tap('grenade');
+    ho.step(1 / 60, Math.round((ho.economy().rules.grenade.fuse + 0.3) * 60));
+    out.selfHurt = health - ho.run().health;
+    out.left = ho.economy().grenades;
+    ho.god(true);
+    return out;
+  });
+  check(
+    'G throws a grenade: one fewer in the pouch, it goes off when its fuse runs out, and it destroys the robots round where it lands. A second cannot be thrown in the same breath',
+    grenade.start === rules.grenade.start && grenade.thrown.count === grenade.start - 1 && grenade.thrown.inAir === 1 && grenade.again === 1 && Math.abs(grenade.fuse - rules.grenade.fuse) < 0.15 && grenade.kills >= 3 && grenade.sounds.includes('explosion'),
+    `${grenade.start} to start with; went off after ${grenade.fuse.toFixed(2)} s and destroyed ${grenade.kills} of 4 robots standing together nine metres away`,
+  );
+  check("a grenade at the thrower's own feet hurts them, but less than a bomber's blast would", grenade.selfHurt > 8 && grenade.selfHurt <= rules.grenade.selfDamage + 0.5 && grenade.left === 0, `${grenade.selfHurt.toFixed(0)} of their health`);
+  const refilled = await ev(() => {
+    const ho = window.__HO;
+    ho.holdRounds(false);
+    for (let frames = 0; frames < 60 * 20 && ho.run().round < 1; frames++) ho.step(1 / 60, 1);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    return { round: ho.run().round, count: ho.economy().grenades };
+  });
+  check('each new round hands out another grenade', refilled.round === 1 && refilled.count === rules.grenade.perRound, `${refilled.count} in the pouch when round 1 began, having thrown them all`);
+
+  // ---- Swarm rounds.
+  const swarm = await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.setShutter(false);
+    ho.place(0, 2, 0, 0);
+    const seen = {};
+    // Skip to the round before, then let the swarm begin by itself.
+    for (let frames = 0; frames < 60 * 600 && ho.run().round < 5; frames++) {
+      ho.step(1 / 60, 1);
+      if (ho.run().phase === 'active' && ho.run().round < 5) ho.skipRound();
+      if (ho.run().phase === 'waiting' && frames % 30 === 0) ho.skipRound();
+    }
+    ho.step(1 / 60, 2);
+    seen.round = ho.run().round;
+    seen.swarm = ho.economy().swarm;
+    seen.composition = ho.composition();
+    seen.sub = document.querySelector('.announce-sub')?.textContent ?? '';
+    // Let some of it arrive, and look at what came.
+    ho.step(1 / 60, 60 * 8);
+    seen.kinds = [...new Set(ho.run().robots.filter((r) => r.alive).map((r) => r.kind))];
+    seen.onMap = ho.run().robots.filter((r) => r.alive).length;
+    // Its last drone destroyed, it leaves a Full Resupply.
+    ho.game.weapons.state.reserve = 0;
+    ho.skipRound();
+    ho.step(1 / 60, 3);
+    ho.holdRounds(true);
+    ho.step(1 / 60, 3);
+    seen.left = ho.economy().pickups.map((p) => p.id);
+    const drop = ho.economy().pickups[0];
+    if (drop) {
+      ho.place(drop.x, drop.z, 0, 0);
+      ho.step(1 / 60, 3);
+    }
+    const w = ho.economy().weapons[0];
+    seen.filled = w.reserve === w.reserveMax;
+    return seen;
+  });
+  check(
+    'every fifth round is a swarm: drones and nothing else, announced as one, no more than a few on the map at once, and it ends with a Full Resupply on the floor that fills the player up',
+    swarm.round === 5 && swarm.swarm && swarm.composition.total === rules.swarm.count && swarm.composition.drone === rules.swarm.count && /SWARM/.test(swarm.sub) && swarm.kinds.length === 1 && swarm.kinds[0] === 'drone' && swarm.onMap <= rules.swarm.maxActive && swarm.left.includes('resupply') && swarm.filled,
+    `round ${swarm.round}: ${swarm.composition.drone} drones of ${swarm.composition.total}; "${swarm.sub}"; ${swarm.onMap} on the map eight seconds in; it left: ${swarm.left.join(', ')}`,
+  );
+
+  // ---- The screens Stage 4 adds: how to play, and settings from the start screen.
+  await ev(() => window.__HO.game.toTitle());
+  await page.waitForTimeout(200);
+  const titleButtons = await ev(() => [...document.querySelectorAll('.screen.title button')].map((button) => button.textContent));
+  await page.click('.screen.title [data-action="howto"]');
+  const guide = await ev(() => ({ shown: !document.querySelector('.screen.howto').classList.contains('hidden'), text: document.querySelector('.screen.howto').textContent, sections: document.querySelectorAll('.screen.howto section').length }));
+  await page.click('.screen.howto [data-action="back"]');
+  const backToTitle = await page.locator('.screen.title').isVisible();
+  check(
+    'the start screen offers How to Play, which explains the game to someone new to it (the rounds, staying alive, scrap and every station, the mission, ARGUS, the controls) and goes back where it came from',
+    titleButtons.includes('HOW TO PLAY') && titleButtons.includes('SETTINGS') && titleButtons.includes('CREDITS') && guide.shown && guide.sections >= 6 && ['Carapace', 'Autoloader', 'Hair Trigger', 'Failsafe', 'Overclock Bench', 'Prototype Crate', 'Custodian', 'ARGUS', 'grenade', 'Shutters'].every((word) => guide.text.includes(word)) && backToTitle,
+    `buttons: ${titleButtons.join(', ')}; ${guide.sections} sections`,
+  );
+  await page.click('.screen.title [data-action="settings"]');
+  const settingsShown = await page.locator('.screen.settings').isVisible();
+  const labels = await ev(() => [...document.querySelectorAll('.screen.settings .setting')].map((node) => node.textContent.replace(/[\d.×%]+/g, '').trim()));
+  await setSlider('Volume', 0.3);
+  await page.click('.screen.settings [data-action="back"]');
+  const stored = await ev(() => JSON.parse(localStorage.getItem('human-override.settings.v1')));
+  const titleAgain = await page.locator('.screen.title').isVisible();
+  check(
+    'the start screen offers Settings: graphics quality, mouse sensitivity, brightness, volume, sound off, and reduced shake and flashing. What is chosen is remembered',
+    settingsShown && ['Graphics quality', 'Mouse sensitivity', 'Brightness', 'Volume', 'Sound off', 'Reduce screen shake and flashing'].every((label) => labels.some((text) => text.includes(label))) && Math.abs(stored.volume - 0.3) < 0.011 && titleAgain,
+    `${labels.length} settings; the volume, moved to 30%, was stored as ${stored.volume}`,
+  );
+  await ev(() => window.__HO.play());
+  await page.waitForTimeout(100);
+  await ev(() => {
+    // (Back to where it was, for the checks that follow.)
+    const input = [...document.querySelectorAll('.setting')].find((node) => node.textContent.includes('Volume')).querySelector('input');
+    input.value = '0.8';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+} catch (error) {
+  check('the Stage 4 checks ran to the end', false, String(error.message ?? error).split('\n')[0]);
+}
+
 // ---- The real interface: real clicks and real mouse capture, no shortcuts
 // Everything above drove the game through its debug tools. This part
 // presses the actual buttons on a fresh page, the way a visitor does: the
@@ -3220,7 +3858,14 @@ try {
   await phonePage.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
   const note = await phonePage.locator('.screen.touch').isVisible();
   const startButton = await phonePage.locator('.screen.title').isVisible();
-  check('touch devices get the "use a computer" screen', note && !startButton);
+  const noteText = await phonePage.locator('.screen.touch').innerText();
+  const address = await phonePage.locator('.touch-url').innerText();
+  const playing = await phonePage.evaluate(() => window.__HO.run().state);
+  check(
+    'touch devices get the title scene and a friendly "play this on a computer with a mouse and keyboard" message with the page\'s address, not a broken game',
+    note && !startButton && /computer with a mouse and keyboard/i.test(noteText) && address.includes('games/human-override') && playing === 'title',
+    `"${noteText.split('\n').find((line) => /computer/i.test(line)) ?? ''}" · ${address}`,
+  );
   await phone.close();
 } catch (error) {
   check('touch devices get the "use a computer" screen', false, String(error.message ?? error).split('\n')[0]);

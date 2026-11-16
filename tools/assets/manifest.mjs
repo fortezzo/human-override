@@ -245,7 +245,9 @@ export const SKETCHFAB = [
     zip: 'sci-fi-super-shotgun.zip',
   },
   {
-    key: 'prototype',
+    key: 'turncoat',
+    shipped: true,
+    changes: 'Changes: only the shape of the model is used, and none of the images that came with it; simplified from about 330,000 triangles to 28,000; re-centred and scaled; painted in the game from the surfaces credited on this page.',
     title: 'arma sci-fi/sci-fi weapon',
     author: 'LoonaUwU (semoi0055)',
     license: 'CC-BY 4.0',

@@ -38,6 +38,11 @@ export const CREDITS: CreditGroup[] = [
         "title": "Sci-fi Super Shotgun",
         "author": "tnnv",
         "license": "CC-BY 4.0"
+      },
+      {
+        "title": "arma sci-fi/sci-fi weapon",
+        "author": "LoonaUwU (semoi0055)",
+        "license": "CC-BY 4.0"
       }
     ]
   },

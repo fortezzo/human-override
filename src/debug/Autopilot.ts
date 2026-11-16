@@ -33,14 +33,17 @@
 // reports how long they take and how they end.)
 
 import * as THREE from 'three';
-import { MELEE, MISSION, SPECIALS, WEAPONS, type WeaponId } from '../config';
+import { BENCH, BOOSTS, MELEE, MISSION, SPECIALS, WEAPONS, type WeaponId } from '../config';
 import type { Action } from '../core/input';
 import { angleDelta, clamp } from '../core/math';
 import type { Robot } from '../entities/robot/Robot';
 import type { Game } from '../game/Game';
+import { benchPrice } from '../sim/bench';
+import { boostPrice, type BoostId } from '../sim/boosts';
 import { rackOffer } from '../sim/economy';
+import { powerOn } from '../sim/mission';
 import { floodFrom, nextWaypoint, type NavGrid } from '../sim/navGrid';
-import { CORE, DOCK_PASSAGE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, ROOM_RECTS, UPLINK, type DoorPlan } from '../world/plan';
+import { CORE, DOCK_PASSAGE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, ROOM_RECTS, STATION_PLANS, UPLINK, type DoorPlan, type StationPlan } from '../world/plan';
 
 export interface PilotProfile {
   /** Seconds before it reacts to a robot it has just noticed. */
@@ -127,6 +130,8 @@ interface Goal {
   label: string;
   /** For a gun that would take the place of one it carries: which one to give up. */
   giveUp?: WeaponId;
+  /** The gun that has to be in hand when F is pressed (the Overclock Bench works on whatever is held). */
+  inHand?: WeaponId;
   /** What to turn to on arrival (otherwise the spot itself). */
   face?: { x: number; z: number };
   /** How near counts as there, metres. */
@@ -162,6 +167,16 @@ const SPARE_SCRAP = 2500;
 /** Which gun is worth more than which: it never trades down. */
 // (The Turncoat is not a gun it can fight a round with: it never takes one from the crate.)
 const WORTH: Record<WeaponId, number> = { turncoat: -1, pistol: 0, shotgun: 1, carbine: 2 };
+/** The boosts in the order someone who knows the game buys them: more health, then a second life, then faster hands. */
+const BOOST_ORDER: BoostId[] = ['carapace', 'failsafe', 'autoloader', 'hairTrigger'];
+/** Where to stand to use a station, and what to face. */
+const stationGoal = (station: StationPlan, label: string): Goal => ({
+  x: station.at[0] + station.normal[0] * (station.depth + 0.85),
+  z: station.at[1] + station.normal[1] * (station.depth + 0.85),
+  face: { x: station.at[0] + station.normal[0] * station.depth, z: station.at[1] + station.normal[1] * station.depth },
+  label,
+  reach: 0.7,
+});
 /** The wall racks, the best gun's first: that is the one it buys, and tops up, before the others. */
 const RACKS_BEST_FIRST = [...RACK_PLANS].sort((a, b) => WORTH[b.weapon] - WORTH[a.weapon]);
 
@@ -206,6 +221,7 @@ export class Autopilot {
   private readonly wobble = new THREE.Vector3();
   private wobbleTimer = 0;
   private sinceShot = 99;
+  private sinceGrenade = 99;
   private fleeTimer = 0;
   /** Seconds since it last changed guns of its own accord (it does not change back and forth for every other target). */
   private sinceSwap = 99;
@@ -305,6 +321,7 @@ export class Autopilot {
     }
     if (this.resting) return;
     this.sinceShot += dt;
+    this.sinceGrenade += dt;
     this.sinceSwap += dt;
 
     // The nearest robot it has a clear line to.
@@ -467,6 +484,17 @@ export class Autopilot {
       } else if (this.fireHeld && (!def.automatic || !lined)) {
         this.releaseTrigger();
       }
+      // A grenade is for a pack: someone who has played before throws one
+      // at a knot of robots that is still a room's length off. (A beginner
+      // forgets they are carrying any.)
+      if (profile.practised && lined && this.sinceGrenade > 5 && nearest > 6.5 && nearest < 13 && game.economy.grenades.count > 0) {
+        let pack = 0;
+        for (const other of game.robots) if (other.alive && other !== seen && Math.hypot(other.position.x - seen.position.x, other.position.z - seen.position.z) < 3.5) pack += 1;
+        if (pack >= 3) {
+          this.tap('grenade');
+          this.sinceGrenade = 0;
+        }
+      }
       // A strike is for a robot it will finish (in the first rounds that
       // is any robot; later, one that is already damaged), or for when
       // there is nothing left to shoot with. Otherwise the gun does more,
@@ -533,7 +561,7 @@ export class Autopilot {
       const index = weapons.loadout.slots.findIndex((slot, i) => slot && i !== weapons.loadout.current);
       const other = index >= 0 ? weapons.loadout.slots[index]! : null;
       if (other) {
-        const needsLoading = other.state.ammo < WEAPONS[other.id].magazine && other.state.reserve > 0;
+        const needsLoading = other.state.ammo < weapons.defOf(other).magazine && other.state.reserve > 0;
         const better = WORTH[other.id] > WORTH[def.id] && (other.state.ammo > 0 || other.state.reserve > 0);
         if (needsLoading || better) this.tap(index === 0 ? 'weapon1' : 'weapon2');
       }
@@ -569,8 +597,9 @@ export class Autopilot {
       // in hand, so make sure that is the one worth less.
       const face = goal.face ?? goal;
       this.turnToward(_aim.set(face.x, 1.4, face.z), dt, Math.max(profile.turnRate, 4));
-      if (goal.giveUp && def.id !== goal.giveUp) {
-        if (!weapons.busy) this.tap(weapons.loadout.slots.findIndex((slot) => slot?.id === goal.giveUp) === 0 ? 'weapon1' : 'weapon2');
+      const wanted = goal.giveUp ?? goal.inHand;
+      if (wanted && def.id !== wanted) {
+        if (!weapons.busy) this.tap(weapons.loadout.slots.findIndex((slot) => slot?.id === wanted) === 0 ? 'weapon1' : 'weapon2');
       } else if (game.interactions.prompt?.usable && !weapons.busy) {
         this.tap('interact');
       }
@@ -622,7 +651,7 @@ export class Autopilot {
     const startsFight = (target === 'uplink' && state.uplink === 'idle') || (target === 'killSwitch' && state.phase === 'core');
     if (startsFight && this.profile.prepares) {
       const slot = weapons.loadout.slots[weapons.loadout.current];
-      const loaded = !slot || slot.state.ammo >= WEAPONS[slot.id].magazine * 0.6 || slot.state.reserve === 0;
+      const loaded = !slot || slot.state.ammo >= weapons.defOf(slot).magazine * 0.6 || slot.state.reserve === 0;
       // (The patient player does not start one with the room still full of the last round.)
       const best = RACKS_BEST_FIRST[0]!;
       // (Only the patient player holds out for the good gun before the
@@ -864,6 +893,11 @@ export class Autopilot {
    */
   private nextPurchase(quiet = false): Goal | null {
     const { wallet, weapons, world } = this.game;
+    // A pickup lying near by is worth a few steps to anyone: walk into it.
+    for (const item of this.game.pickups.list) {
+      const { x, z } = this.game.player.position;
+      if (Math.hypot(item.x - x, item.z - z) < (this.profile.practised ? 14 : 8) && item.left > 2) return { x: item.x, z: item.z, label: 'a pickup', reach: 0.5, rest: true, urgent: true, quick: true };
+    }
     // Ammunition is worth the walk when a gun is running low; in a quiet
     // moment the practised player tops up well before that, and with the
     // final stand ahead, sooner still.
@@ -881,7 +915,8 @@ export class Autopilot {
       if (!reachable.has(rack.area)) continue;
       // (Two racks sell the same gun now: it walks to the nearer one it can get to.)
       if (RACKS_BEST_FIRST.some((other) => other !== rack && other.weapon === rack.weapon && reachable.has(other.area) && away(other) < away(rack))) continue;
-      const offer = rackOffer(wallet, weapons.loadout, rack.weapon, WEAPONS[rack.weapon]);
+      const stock = weapons.defFor(rack.weapon);
+      const offer = rackOffer(wallet, weapons.loadout, rack.weapon, stock);
       if (offer.kind === 'weapon' && full) {
         // Both hands full: only a better gun than its worst is worth having.
         if (WORTH[rack.weapon] <= WORTH[least] || !offer.affordable) continue;
@@ -891,8 +926,8 @@ export class Autopilot {
       if (offer.kind === 'ammo') {
         // Ammunition is worth the walk only when the weapon is running low.
         const slot = weapons.loadout.slots.find((s) => s?.id === rack.weapon);
-        if (!slot || slot.state.reserve > WEAPONS[rack.weapon].reserveMax * lowAt) continue;
-        urgent = slot.state.reserve <= WEAPONS[rack.weapon].reserveMax * 0.12;
+        if (!slot || slot.state.reserve > stock.reserveMax * lowAt) continue;
+        urgent = slot.state.reserve <= stock.reserveMax * 0.12;
       }
       if (offer.kind !== 'full' && offer.affordable) {
         return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack`, urgent };
@@ -903,6 +938,30 @@ export class Autopilot {
     // it buys one only with scrap to spare, as a person does once the gun
     // they want is paid for (more doors open is more room to run a horde).
     const needed = this.mission ? this.doorToObjective() : null;
+    // The stations. Scrap for the door the mission needs next is kept back
+    // first. Someone who has played before makes the trip to a boost as
+    // soon as they can pay for it; a beginner buys the one they are
+    // standing in the same room as. Only the practised use the bench, on
+    // their best gun, once the boosts they can reach are bought.
+    const keep = needed ? (DOOR_PLANS.find((plan) => plan.id === needed)?.cost ?? 0) : 0;
+    const { economy } = this.game;
+    if (powerOn(this.game.mission.state)) {
+      for (const id of BOOST_ORDER) {
+        const station = STATION_PLANS.find((plan) => plan.id === id)!;
+        if (economy.boosts.owned[id] || !reachable.has(station.area)) continue;
+        if (!this.profile.practised && station.area !== world.playerArea) continue;
+        if (wallet.scrap >= boostPrice(economy.boosts, id, BOOSTS) + keep) return stationGoal(station, `the ${BOOSTS[id].name} station`);
+        // (Saving for the next one in the order, not skipping to a cheaper one further down it.)
+        if (this.profile.practised) break;
+      }
+      const bench = STATION_PLANS.find((plan) => plan.id === 'bench')!;
+      if (this.profile.practised && reachable.has(bench.area)) {
+        const best = weapons.loadout.slots.filter((slot) => slot !== null).reduce((a, b) => (WORTH[a!.id] >= WORTH[b!.id] ? a : b))!;
+        const cost = benchPrice(BENCH, best.level);
+        const boostsLeft = BOOST_ORDER.some((id) => !economy.boosts.owned[id] && reachable.has(STATION_PLANS.find((plan) => plan.id === id)!.area));
+        if (cost !== null && !boostsLeft && wallet.scrap >= cost + keep + 600) return { ...stationGoal(bench, 'the Overclock Bench'), inHand: best.id };
+      }
+    }
     for (const plan of DOOR_PLANS) {
       const door = world.door(plan.id);
       if (door.open || plan.cost === null || wallet.scrap < plan.cost) continue;

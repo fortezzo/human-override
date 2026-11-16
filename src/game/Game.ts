@@ -970,7 +970,7 @@ export class Game {
     this.blastAt.set(player.position.x, 1.4, player.position.z);
     const up = this.tmpA.set(0, 1, 0);
     for (const robot of [...this.robots]) {
-      if (!robot.alive || robot.hold) continue;
+      if (!robot.alive) continue;
       const damage = robot.role ? robot.spec.health * PICKUPS.empElite : robot.mind.health + 1;
       const result = robot.damage(damage, up);
       this.effects.empStruck(robot.chest(this.tmpB));
@@ -1235,7 +1235,7 @@ export class Game {
     let best: Robot | null = null;
     let nearest = TURNCOAT.seek;
     for (const other of this.robots) {
-      if (other === robot || !other.alive || other.turned > 0 || other.hold || !other.grounded) continue;
+      if (other === robot || !other.alive || other.turned > 0 || !other.grounded) continue;
       const distance = Math.hypot(other.position.x - robot.position.x, other.position.z - robot.position.z);
       if (distance < nearest) {
         nearest = distance;
@@ -1295,7 +1295,7 @@ export class Game {
 
     const ordinary = this.director.rounds.plan.health;
     for (const robot of this.robots) {
-      if (!robot.alive || robot === blast.source || robot.hold) continue;
+      if (!robot.alive || robot === blast.source) continue;
       const share = reach(robot.position.x, robot.position.z);
       if (share <= 0) continue;
       const direction = this.tmpA.set(robot.position.x - centre.x, 0.4, robot.position.z - centre.z).normalize();

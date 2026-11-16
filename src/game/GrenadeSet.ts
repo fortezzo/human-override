@@ -73,8 +73,16 @@ export class GrenadeSet {
         if (v.y < -1.2) this.onBounce(p, -v.y);
         v.y = Math.abs(v.y) * GRENADE.bounce;
         if (v.y < 0.9) v.y = 0;
-        v.x *= 0.72;
-        v.z *= 0.72;
+        // It loses half its pace every time it strikes the floor, and once it
+        // is rolling it soon stops: one that ran on for another room's length
+        // after landing could not be placed anywhere.
+        v.x *= 0.5;
+        v.z *= 0.5;
+        if (v.y === 0) {
+          const drag = Math.exp(-5 * dt);
+          v.x *= drag;
+          v.z *= drag;
+        }
       }
       // Walls and anything else solid: pushed out, and sent back the way it was pushed.
       const body = this.body;
