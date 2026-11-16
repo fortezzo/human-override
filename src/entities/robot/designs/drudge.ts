@@ -24,7 +24,7 @@ const OUT = vec(1, 0, 0);
 const tilt = (x: number, y = 0, z = 0) => new THREE.Euler(x, y, z);
 
 /** The head is modelled at a convenient size and then enlarged by this much about the neck joint. */
-const HEAD_SIZE = 1.14;
+export const HEAD_SIZE = 1.14;
 
 /** A point given relative to a joint. */
 type From = (x: number, y: number, z: number) => Vec;
@@ -34,7 +34,7 @@ const from =
     origin.clone().add(vec(x, y, z));
 
 /** A hydraulic strut between two bones: a sleeve with a thinner rod sliding out of it. */
-function piston(b: RobotBuilder, start: Vec, end: Vec, boneStart: string, boneEnd: string, radius: number, mirror = true): void {
+export function piston(b: RobotBuilder, start: Vec, end: Vec, boneStart: string, boneEnd: string, radius: number, mirror = true): void {
   const mid = start.clone().lerp(end, 0.56);
   const anchors = [
     { bone: boneStart, at: start },
@@ -47,7 +47,7 @@ function piston(b: RobotBuilder, start: Vec, end: Vec, boneStart: string, boneEn
 }
 
 /** A hex bolt head on each end of a hinge. */
-function hingeCaps(b: RobotBuilder, a: Vec, c: Vec, bone: string, radius: number): void {
+export function hingeCaps(b: RobotBuilder, a: Vec, c: Vec, bone: string, radius: number): void {
   const axis = c.clone().sub(a).normalize();
   for (const [end, sign] of [
     [a, -1],
@@ -57,7 +57,7 @@ function hingeCaps(b: RobotBuilder, a: Vec, c: Vec, bone: string, radius: number
   }
 }
 
-function torso(rig: Rig, b: RobotBuilder): void {
+export function torso(rig: Rig, b: RobotBuilder): void {
   const c = from(rig.at('Spine2'));
   const p = from(rig.at('Hips'));
   const h = from(rig.at('Head'));
@@ -182,7 +182,7 @@ function torso(rig: Rig, b: RobotBuilder): void {
   b.add(box(p(0.168, -0.04, 0), vec(0.028, 0.14, 0.135), 0.01, tilt(0, 0, 0.1)), { bone: 'Hips', paint: PAINT.armor, mirror: true });
 }
 
-function head(rig: Rig, b: RobotBuilder): void {
+export function head(rig: Rig, b: RobotBuilder): void {
   const c = from(rig.at('Spine2'));
   const joint = rig.at('Head');
   const h = from(joint);
@@ -255,7 +255,7 @@ function head(rig: Rig, b: RobotBuilder): void {
   part(tube(h(0.07, 0.15, -0.07), h(0.084, 0.3, -0.1), 0.0055, 0.003, 6), { bone: 'Head', paint: PAINT.rod });
 }
 
-function leftArm(rig: Rig, b: RobotBuilder): void {
+export function leftArm(rig: Rig, b: RobotBuilder): void {
   const a = from(rig.at('LeftArm'));
   const e = from(rig.at('LeftForeArm'));
   const w = from(rig.at('LeftHand'));
@@ -393,7 +393,7 @@ function markings(rig: Rig, b: RobotBuilder): void {
   );
 }
 
-function leftLeg(rig: Rig, b: RobotBuilder): void {
+export function leftLeg(rig: Rig, b: RobotBuilder): void {
   const hip = from(rig.at('LeftUpLeg'));
   const knee = from(rig.at('LeftLeg'));
   const ankleAt = rig.at('LeftFoot');

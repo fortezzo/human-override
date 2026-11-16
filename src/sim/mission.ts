@@ -5,8 +5,10 @@
 //   1. Restore power at the main breaker.
 //   2. Recover three override keys, in any order:
 //        - one in the key cage in the power room (its lock needs power)
-//        - one carried by the Custodian, an elite robot that arrives once
-//          the power is on and the rounds have reached a set number
+//        - one carried by the Custodian, an elite robot that comes for
+//          the last key: with the first round to start once the other
+//          two are in hand (and never before a set round), so that the
+//          mission is as long as the player makes it
 //        - one issued by the uplink in the server hall, to whoever holds
 //          the ground around it for a minute
 //   3. Unseal the core with the keys, arm the kill switch, and hold the
@@ -36,7 +38,7 @@ export type MissionPhase =
   | 'saved';
 
 export interface MissionRules {
-  /** The Custodian arrives with the first round numbered this or higher that starts with the power on. */
+  /** The earliest round the Custodian may arrive with. (It comes with the first round to start once the other two keys are held.) */
   custodianFromRound: number;
   /** Seconds the ground round the uplink has to be held. */
   uplinkSeconds: number;
@@ -126,9 +128,20 @@ function takeKey(state: MissionState, id: KeyId): void {
   if (state.phase === 'keys' && keysHeld(state) === KEY_IDS.length) state.phase = 'core';
 }
 
-/** Should the Custodian join the round that is starting? */
+/**
+ * Should the Custodian join the round that is starting? It carries the
+ * last key: it comes with the first round to start once the player holds
+ * the other two, and never before round `custodianFromRound`. (It used to
+ * come with a set round whatever the player had done, and a fast player
+ * spent three rounds with nothing to do but wait for it.)
+ */
 export function custodianDue(state: MissionState, rules: MissionRules, round: number): boolean {
-  return powerOn(state) && state.custodian === 'waiting' && round >= rules.custodianFromRound;
+  return powerOn(state) && state.custodian === 'waiting' && state.keys.cage && state.keys.uplink && round >= rules.custodianFromRound;
+}
+
+/** The round the Custodian will arrive with, if the player holds the other two keys during round `round` (or the pause after it). */
+export function custodianArrives(rules: MissionRules, round: number): number {
+  return Math.max(round + 1, rules.custodianFromRound);
 }
 
 /** The Custodian has been sent onto the map. */
@@ -254,9 +267,11 @@ const clock = (seconds: number): string => {
  * What the player should be doing now. With several keys still to find,
  * the one named is the nearest to hand: a key lying on the floor first,
  * then the cage, then an uplink already being held, then the Custodian if
- * it is on the map, then the uplink.
+ * it is on the map, then the uplink. `round` is the round being played (or
+ * just finished): with two keys in hand and the Custodian still to come,
+ * the tracker says which round it comes with.
  */
-export function objective(state: MissionState, rules: MissionRules, holdingUplink: boolean, holdingCore: boolean): Objective {
+export function objective(state: MissionState, rules: MissionRules, holdingUplink: boolean, holdingCore: boolean, round = 0): Objective {
   const keys = `OVERRIDE KEYS ${keysHeld(state)} / ${KEY_IDS.length}`;
   switch (state.phase) {
     case 'power':
@@ -270,7 +285,7 @@ export function objective(state: MissionState, rules: MissionRules, holdingUplin
       if (!state.keys.cage) return { title: 'TAKE THE KEY FROM THE CAGE', detail: `POWER ROOM · ${keys}`, target: 'cage' };
       if (state.custodian === 'active') return { title: 'DESTROY THE CUSTODIAN', detail: `IT CARRIES A KEY · ${keys}`, target: 'custodian' };
       if (!state.keys.uplink) return { title: 'DEFEND THE UPLINK', detail: `SERVER HALL · ${keys}`, target: 'uplink' };
-      return { title: 'A CUSTODIAN CARRIES THE LAST KEY', detail: `IT ARRIVES FROM ROUND ${rules.custodianFromRound} · ${keys}`, target: null };
+      return { title: 'A CUSTODIAN CARRIES THE LAST KEY', detail: `IT ARRIVES WITH ROUND ${custodianArrives(rules, round)} · ${keys}`, target: null };
     }
     case 'core':
       return state.coreOpen ? { title: 'ARM THE KILL SWITCH', detail: 'THE CORE', target: 'killSwitch' } : { title: 'UNSEAL THE CORE', detail: `${keys} · SERVER HALL, FAR END`, target: 'coreDoor' };

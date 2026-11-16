@@ -5,11 +5,16 @@
 // Used by tools/dev/view-robot.mjs.
 //
 //   /tools/dev/viewer/robot.html?az=30&el=8&anim=walk&t=1.2&zoom=1
+//   &design=heavy (drudge, heavy, bomber, custodian, proxy)   &beside=drudge (a second one, to its right, for comparison)
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { Assets } from '../../../src/core/assets';
+import { BOMBER } from '../../../src/entities/robot/designs/bomber';
+import { CUSTODIAN } from '../../../src/entities/robot/designs/custodian';
 import { DRUDGE } from '../../../src/entities/robot/designs/drudge';
+import { HEAVY } from '../../../src/entities/robot/designs/heavy';
+import { PROXY } from '../../../src/entities/robot/designs/proxy';
 import { RobotModel, type ClipName } from '../../../src/entities/robot/RobotModel';
 
 const q = new URLSearchParams(location.search);
@@ -50,9 +55,18 @@ async function main() {
   const assets = new Assets();
   await assets.load((data) => audio.decodeAudioData(data), () => {});
 
-  const model = new RobotModel(assets, DRUDGE);
+  const DESIGNS = { drudge: DRUDGE, heavy: HEAVY, bomber: BOMBER, custodian: CUSTODIAN, proxy: PROXY };
+  const model = new RobotModel(assets, DESIGNS[(q.get('design') ?? 'drudge') as keyof typeof DESIGNS] ?? DRUDGE);
   const robot = model.instantiate();
   scene.add(robot);
+  const beside = q.get('beside') as keyof typeof DESIGNS | null;
+  if (beside && DESIGNS[beside]) {
+    const other = new RobotModel(assets, DESIGNS[beside]).instantiate();
+    other.position.x = -1.25;
+    robot.position.x = 0.5;
+    scene.add(other);
+    other.updateMatrixWorld(true);
+  }
 
   const anim = q.get('anim') as ClipName | null;
   if (anim && model.clips.has(anim)) {

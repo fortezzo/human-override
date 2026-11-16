@@ -113,6 +113,8 @@ export class Mission {
   private proxy: Robot | null = null;
   /** Each is due but has not yet found somewhere to come in unseen. */
   private custodianPending = false;
+  /** The round being played (or just finished), for telling the player which round the Custodian comes with. */
+  private round = 0;
   private proxyPending = false;
   /** Seconds until the next robot of the uplink's wave, and of the final stand's. */
   private waveClock = 0;
@@ -141,6 +143,7 @@ export class Mission {
     this.proxy = null;
     this.custodianPending = false;
     this.proxyPending = false;
+    this.round = 0;
     this.waveClock = 0;
     this.standClock = 0;
     this.ending = -1;
@@ -243,11 +246,12 @@ export class Mission {
 
   /** A round is starting: is the Custodian due? */
   roundStarted(round: number): void {
+    this.round = round;
     if (custodianDue(this.state, MISSION, round)) this.custodianPending = true;
   }
 
   private sendCustodian(): void {
-    const robot = this.director.sendExtra(['lobby', 'hall', 'power'], elite('custodian'));
+    const robot = this.director.sendExtra(['lobby', 'hall', 'power', 'dock', 'lab'], elite('custodian'));
     if (!robot) return;
     this.custodianPending = false;
     this.custodian = robot;
@@ -258,7 +262,7 @@ export class Mission {
   }
 
   private sendProxy(): void {
-    const robot = this.director.sendExtra(['hall'], elite('proxy'), MISSION.proxyEntries);
+    const robot = this.director.sendExtra(['dock'], elite('proxy'), MISSION.proxyEntries);
     if (!robot) return;
     this.proxyPending = false;
     this.proxy = robot;
@@ -451,7 +455,7 @@ export class Mission {
   // ------------------------------------------------- what to tell the player
 
   get objective(): Objective {
-    return objective(this.state, MISSION, this.holdingUplink, this.holdingCore);
+    return objective(this.state, MISSION, this.holdingUplink, this.holdingCore, this.round);
   }
 
   /** Where the HUD's marker should point right now (false if nowhere). */

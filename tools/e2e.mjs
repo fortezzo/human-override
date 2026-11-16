@@ -699,11 +699,25 @@ try {
   // ------------------------------------------------- every way in, every area
   await ev(() => {
     const ho = window.__HO;
-    ho.openDoor('hallCore');
+    for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
     ho.god(false);
     ho.step(1 / 60, 130);
   });
-  const SPOTS = { yard: [0, 2, 0], lobbyVent: [-3, 3, 90], dock: [-1, 16.5, 90], hallVent: [4.5, 23.5, 0], eastBreach: [14, 6, -90], powerVent: [16, 8, 90], coreVentWest: [-1, 30, 90], coreVentEast: [-1, 34, -90] };
+  const SPOTS = {
+    yard: [0, 2, 0],
+    lobbyVent: [-3, 3, 90],
+    hallVent: [4.5, 23.5, 0],
+    hallVentWest: [-5.5, 14.5, 90],
+    eastBreach: [14, 6, -90],
+    powerVent: [16, 8, 90],
+    coreVentWest: [-1, 30, 90],
+    coreVentEast: [-1, 34, -90],
+    dockBayNorth: [-24, 9, 90],
+    dockBaySouth: [-24, 17.5, 90],
+    dockVent: [-18, 17.5, -90],
+    labLine: [19.6, 25.6, -90],
+    labVent: [11.4, 25.6, 180],
+  };
   for (const [entry, [x, z, yaw]] of Object.entries(SPOTS)) {
     await ev(
       ([entry, x, z, yaw]) => {
@@ -1286,7 +1300,7 @@ try {
   const cut = Object.entries(routes).filter(([, rooms]) => rooms.length > 0);
   check(
     'every way in is joined to every room on the map robots steer by',
-    Object.keys(routes).length === 8 && cut.length === 0,
+    Object.keys(routes).length === 13 && cut.length === 0,
     cut.length ? cut.map(([entry, rooms]) => `${entry} cannot be reached from the ${rooms.join(', ')}`).join('; ') : `${Object.keys(routes).join(', ')}`,
   );
 
@@ -1297,7 +1311,7 @@ try {
   const exposed = Object.entries(sightlines).filter(([, count]) => count > 0);
   check(
     'the places robots walk in from cannot be seen from anywhere indoors',
-    Object.keys(sightlines).length === 3 && exposed.length === 0,
+    Object.keys(sightlines).length === 5 && exposed.length === 0,
     exposed.length ? exposed.map(([entry, count]) => `${entry}: ${count} clear lines of sight`).join(', ') : `${Object.keys(sightlines).join(', ')}: looked for from every half metre of floor, every door open`,
   );
 
@@ -1607,6 +1621,14 @@ try {
   await step(120);
   r = await run();
   check('the three keys unseal the core', corePrompt?.text === 'Unseal the core' && corePrompt.usable && r.doors.hallCore && (await mission()).objective.target === 'killSwitch');
+  // (The loading dock is a room of its own now, behind a door: open the
+  // shutter between it and the server hall, as a player who had bought it
+  // would have, so that the Proxy can come the way it is meant to.)
+  await ev(() => {
+    const ho = window.__HO;
+    ho.openDoor('hallDock');
+    ho.step(1 / 60, 120);
+  });
   await standAt('killSwitch');
   const armPrompt = (await run()).prompt;
   await tap('interact');
@@ -1633,7 +1655,7 @@ try {
   m = await mission();
   check(
     'arming the kill switch starts the final stand: the rounds stand aside and ARGUS sends a horde and its Proxy, which comes in on foot through the loading dock (it is too big for the ducts)',
-    armPrompt?.text === 'Arm the kill switch' && early?.usable === false && stand.phases.join() === 'arming' && stand.suspended && stand.extras >= 6 && stand.bossAt > 9 && stand.bossAt < 13 && stand.bossEntry === 'dock' && stand.bossHigh < 0.3 && m.boss?.name === 'ARGUS PROXY' && (await page.locator('.hud-boss').isVisible()),
+    armPrompt?.text === 'Arm the kill switch' && early?.usable === false && stand.phases.join() === 'arming' && stand.suspended && stand.extras >= 6 && stand.bossAt > 9 && stand.bossAt < 13 && ['dockBayNorth', 'dockBaySouth'].includes(stand.bossEntry) && stand.bossHigh < 0.3 && m.boss?.name === 'ARGUS PROXY' && (await page.locator('.hud-boss').isVisible()),
     `${stand.extras} robots on the map 14 s in; the Proxy arrived ${stand.bossAt.toFixed(1)} s in, at the ${stand.bossEntry}`,
   );
   // The switch only arms while the core is held: step out through the door
@@ -1887,8 +1909,66 @@ try {
     ho.step(1 / 60, 20);
     return { i, drawn: Boolean(ho.game.robots[i].root.getObjectByName('shield')?.visible), against: ho.run().robots[i].shield };
   });
+  await ev(() => window.__HO.sounds());
   const resisted = await shootAt(shielded.i, 'chest');
   const resistedNote = await hitNote();
+  // What the player is shown and hears when the plating turns the shot.
+  const deflection = await ev((i) => {
+    const ho = window.__HO;
+    const note = document.querySelector('.hit-note');
+    const style = getComputedStyle(note);
+    const box = note.getBoundingClientRect();
+    return {
+      sounds: ho.sounds(),
+      size: parseFloat(style.fontSize),
+      weight: Number(style.fontWeight),
+      below: box.top - innerHeight / 2,
+      off: Math.abs((box.left + box.right) / 2 - innerWidth / 2),
+      tint: note.style.getPropertyValue('--tint'),
+      flash: ho.game.robots[i].shieldFlash,
+    };
+  }, shielded.i);
+  // The sparks: a resisted shot throws many more than an ordinary one into the same robot.
+  const sparks = await ev((i) => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const count = (shield) => {
+      ho.clearRobots();
+      ho.step(1 / 60, 90);
+      const j = ho.spawnKind(0, 4.5, 180, { shield, hold: true, health: 5000 });
+      ho.step(1 / 60, 20);
+      const v = new game.camera.position.constructor();
+      game.robots[j].chest(v);
+      const eye = game.camera.position;
+      ho.place(0, 0.5, (Math.atan2(-(v.x - eye.x), -(v.z - eye.z)) * 180) / Math.PI, (Math.atan2(v.y - eye.y, Math.hypot(v.x - eye.x, v.z - eye.z)) * 180) / Math.PI);
+      ho.step(1 / 60, 30);
+      const before = ho.stats().particles;
+      ho.tap('fire');
+      ho.step(1 / 60, 3);
+      return ho.stats().particles - before;
+    };
+    const plain = count(undefined);
+    const turned = count('pistol');
+    ho.clearRobots();
+    const k = ho.spawnKind(0, 4.5, 180, { shield: 'pistol', hold: true, health: 5000 });
+    ho.step(1 / 60, 20);
+    return { plain, turned, i: k };
+  }, shielded.i);
+  shielded.i = sparks.i;
+  check(
+    'a resisted hit is obvious: a large word under the crosshair in the colour of the plating, a spray of sparks and the round glancing off, a flare on the plate, and a sound of its own',
+    resistedNote === 'RESISTED' &&
+      deflection.size >= 22 &&
+      deflection.weight >= 700 &&
+      deflection.below > 20 &&
+      deflection.below < 70 &&
+      deflection.off < 6 &&
+      deflection.tint === '#6dff9a' &&
+      deflection.flash > 0.05 &&
+      deflection.sounds.includes('deflect') &&
+      sparks.turned >= sparks.plain + 12,
+    `"${resistedNote}" at ${deflection.size} px, weight ${deflection.weight}, ${deflection.below.toFixed(0)} px below the crosshair, in ${deflection.tint}; ${sparks.turned} sparks and streaks to an ordinary hit's ${sparks.plain}; the plate still flaring (${deflection.flash.toFixed(2)}) a quarter of a second on; sounds: ${deflection.sounds.join(', ')}`,
+  );
   const struck = await ev((i) => {
     const ho = window.__HO;
     const robot = ho.game.robots[i];
@@ -2048,6 +2128,225 @@ try {
     `${bomberShots} sidearm shots set it off; ${r.kills - chain.kills} robots destroyed for ${r.scrap - chain.scrap} scrap, and the player, ${(5.1).toFixed(1)} m back, untouched`,
   );
 
+  // ---- The Custodian keeps to the player's pace: it comes for the last
+  // key, with the round after the other two are in hand, however late that
+  // is. (Taken early, it waits for round 8: that is checked in the mission
+  // walk-through above.)
+  const pace = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    ho.missionJump('keys');
+    const from = ho.mission().rules.custodianFromRound;
+    // On to round ten with the power on and no key taken.
+    for (let guard = 0; guard < 200 && ho.run().round < from + 2; guard++) {
+      ho.clearRobots();
+      ho.skipRound();
+      ho.step(1 / 60, 2);
+    }
+    const late = { round: ho.run().round, custodian: ho.mission().custodian, elites: ho.mission().elites.length };
+    // Now the other two keys, as if the player had just taken the second of them.
+    const state = game.mission.state;
+    state.keys.cage = true;
+    state.keys.uplink = true;
+    state.uplink = 'done';
+    ho.step(1 / 60, 30);
+    const told = ho.mission().objective;
+    const sameRound = { custodian: ho.mission().custodian, round: ho.run().round };
+    // The round ends; the next one begins by itself.
+    ho.clearRobots();
+    ho.skipRound();
+    for (let i = 0; i < 60 * 30 && ho.mission().custodian !== 'active'; i++) ho.step(1 / 60, 1);
+    const arrived = { round: ho.run().round, custodian: ho.mission().custodian, elites: ho.mission().elites.map((e) => e.role) };
+    ho.clearRobots();
+    return { from, late, told, sameRound, arrived };
+  });
+  check(
+    'the Custodian comes for the last key: not before the other two are held, however late the round; and then with the very next round',
+    pace.late.round === pace.from + 2 &&
+      pace.late.custodian === 'waiting' &&
+      pace.late.elites === 0 &&
+      pace.sameRound.custodian === 'waiting' &&
+      pace.told.title === 'A CUSTODIAN CARRIES THE LAST KEY' &&
+      pace.told.detail.includes(`ROUND ${pace.late.round + 1}`) &&
+      pace.arrived.round === pace.late.round + 1 &&
+      pace.arrived.custodian === 'active' &&
+      pace.arrived.elites.join() === 'custodian',
+    `round ${pace.late.round} with no keys: ${pace.late.custodian}; both keys taken in round ${pace.sameRound.round}: "${pace.told.title}" (${pace.told.detail}); it arrived with round ${pace.arrived.round}`,
+  );
+  const fallback = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.place(0, 0.5, 0, 0);
+    ho.step(1 / 60, 20);
+    const robot = game.director.sendExtra(['dock'], { role: 'proxy' }, ho.mission().rules.proxyEntries);
+    const entry = robot?.entry ?? null;
+    const dockOpen = game.world.reachable.has('dock');
+    ho.clearRobots();
+    return { entry, dockOpen };
+  });
+  check("with the loading dock still shut, ARGUS's Proxy comes in through the front yard instead", fallback.entry === 'yard' && fallback.dockOpen === false, `came in at the ${fallback.entry}`);
+
+  // ---- Nowhere to hide. A real player found a corner behind some barrels
+  // where nothing could hit them, and stood in it to finish the mission. The
+  // floor-plan check further up never saw it, because it was not on the
+  // floor plan: a jump got them there. So this asks the same question by
+  // standing everywhere the game's rules of movement allow, on the floor and
+  // on top of whatever can be stood on; and then sends real robots.
+  const hiding = await ev(() => {
+    const ho = window.__HO;
+    return { now: ho.outOfReach(), jumping: ho.outOfReach(1.15) };
+  });
+  check(
+    'standing everywhere the player can get to (a place every 20 cm, across the whole map), a robot can always get within striking distance',
+    hiding.now.patches.length === 0 && hiding.now.stoodOn > 30000,
+    hiding.now.patches.length ? hiding.now.patches.map((p) => `${p.squares} places around (${p.x.toFixed(1)}, ${p.z.toFixed(1)}), ${p.deepest.toFixed(2)} m out of reach`).join('; ') : `stood in ${hiding.now.stoodOn} places; none out of reach`,
+  );
+  const corner = hiding.jumping.patches.find((p) => Math.hypot(p.x + 8, p.z + 6.3) < 1.2);
+  check(
+    'and that check would have caught the corner behind the lobby barrels: told the player can still jump onto things, it finds it',
+    corner !== undefined && hiding.jumping.patches.length > hiding.now.patches.length,
+    corner ? `${hiding.jumping.patches.length} places out of reach with jumping allowed; the barrel corner at (${corner.x.toFixed(1)}, ${corner.z.toFixed(1)}) is ${corner.deepest.toFixed(2)} m from the nearest robot` : `found ${hiding.jumping.patches.map((p) => `(${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(' ')}`,
+  );
+  const mounts = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.autopilot(false);
+    ho.restart();
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.god(true);
+    const target = [-7.9, -6.4];
+    const out = { runs: 0, jumped: 0, stoodHigh: 0, worstGap: 0 };
+    // Run at the corner from five sides, jumping all the way, at two tempos.
+    for (let k = 0; k < 5; k++) {
+      const angle = ((-10 + k * 28) * Math.PI) / 180;
+      const from = [target[0] + Math.cos(angle) * 3.2, target[1] + Math.sin(angle) * 3.2];
+      for (const every of [18, 31]) {
+        ho.place(from[0], from[1], (Math.atan2(-(target[0] - from[0]), -(target[1] - from[1])) * 180) / Math.PI, 0);
+        ho.step(1 / 60, 3);
+        ho.press('forward', true);
+        ho.press('sprint', true);
+        for (let frame = 0; frame < 60 * 4; frame++) {
+          if (frame % every === 0) ho.tap('jump');
+          ho.step(1 / 60, 1);
+          const p = game.player.position;
+          out.jumped = Math.max(out.jumped, p.y);
+          if (game.player.onGround) {
+            out.stoodHigh = Math.max(out.stoodHigh, p.y);
+            out.worstGap = Math.max(out.worstGap, ho.strikeGap(p.x, p.z));
+          }
+        }
+        ho.press('forward', false);
+        ho.press('sprint', false);
+        ho.step(1 / 60, 20);
+        out.runs += 1;
+      }
+    }
+    return out;
+  });
+  check(
+    'running and jumping at the barrels in the lobby corner from every side never puts the player on top of them, or behind them',
+    mounts.runs === 10 && mounts.jumped > 0.6 && mounts.stoodHigh < 0.33 && mounts.worstGap < 1.3,
+    `${mounts.runs} runs: the jumps reached ${mounts.jumped.toFixed(2)} m, the player never stood higher than ${mounts.stoodHigh.toFixed(2)} m, and was never more than ${mounts.worstGap.toFixed(2)} m from where a robot can stand (a robot strikes from 1.45)`,
+  );
+  const blows = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    for (const door of game.world.doors) ho.openDoor(door.plan.id);
+    ho.step(1 / 60, 90);
+    const out = [];
+    for (const spot of ho.outOfReach().hardest) {
+      ho.clearRobots();
+      ho.god(false);
+      game.player.health = 100;
+      ho.place(spot.x, spot.z, 0, 0);
+      ho.step(1 / 60, 6);
+      ho.spawnKind(spot.from[0], spot.from[1], 0, {});
+      let seconds = -1;
+      for (let frame = 0; frame < 60 * 15; frame++) {
+        ho.step(1 / 60, 1);
+        if (game.player.health < 100) {
+          seconds = frame / 60;
+          break;
+        }
+      }
+      out.push({ x: spot.x, z: spot.z, gap: spot.gap, seconds });
+    }
+    ho.god(true);
+    ho.clearRobots();
+    return out;
+  });
+  const missed = blows.filter((b) => b.seconds < 0);
+  check(
+    'a robot sent from five metres off to each of the sixteen most awkward places to stand on the map lands a blow there',
+    blows.length === 16 && missed.length === 0,
+    missed.length ? `never struck at ${missed.map((b) => `(${b.x.toFixed(1)}, ${b.z.toFixed(1)})`).join(' ')}` : `${blows.length} places, up to ${Math.max(...blows.map((b) => b.gap)).toFixed(2)} m from the nearest floor a robot fits on; struck within ${Math.max(...blows.map((b) => b.seconds)).toFixed(1)} s at every one`,
+  );
+  // A bomber's blast is stopped by a wall, and by nothing lower than a person.
+  const cover = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const trial = (player, bomber) => {
+      ho.clearRobots();
+      ho.step(1 / 60, 30);
+      ho.god(false);
+      game.player.health = 100;
+      ho.place(player[0], player[1], (Math.atan2(-(bomber[0] - player[0]), -(bomber[1] - player[1])) * 180) / Math.PI, 0);
+      ho.step(1 / 60, 4);
+      // (Not held: a held robot does not prime. One that barely moves stays put for the second its fuse takes.)
+      const i = ho.spawnKind(bomber[0], bomber[1], 0, { kind: 'bomber', speed: 0.05 });
+      const robot = game.robots[i];
+      ho.step(1 / 60, 2);
+      const lineToFeet = game.sight.clearLineTo(robot.position);
+      const apart = Math.hypot(robot.position.x - game.player.position.x, robot.position.z - game.player.position.z);
+      let blast = false;
+      for (let frame = 0; frame < 60 * 4 && !blast; frame++) {
+        ho.step(1 / 60, 1);
+        blast = robot.removed;
+      }
+      const health = game.player.health;
+      ho.god(true);
+      return { lineToFeet, apart, blast, health };
+    };
+    // Either side of one of the lobby's low barriers: the first with clear floor on both sides.
+    let barrier = null;
+    for (const c of game.world.openColliders) {
+      if (c.y0 > 0.1 || c.y1 < 0.7 || c.y1 > 1.0 || c.hz > 0.4 || c.hx < 0.6 || c.z > 7) continue;
+      const a = [c.x - c.sin * (c.hz + 0.75), c.z + c.cos * (c.hz + 0.75)];
+      const b = [c.x + c.sin * (c.hz + 0.75), c.z - c.cos * (c.hz + 0.75)];
+      if (ho.strikeGap(a[0], a[1]) < 0.25 && ho.strikeGap(b[0], b[1]) < 0.25) {
+        barrier = { top: c.y1, ...trial(a, b) };
+        break;
+      }
+    }
+    // Either side of the wall between the lobby and the server hall, well away from its door.
+    let wall = null;
+    const door = game.world.door('lobbyHall').centre;
+    for (let x = -8; x <= 8 && !wall; x += 0.5) {
+      if (Math.abs(x - door.x) < 3) continue;
+      if (ho.strikeGap(x, 6.2) < 0.2 && ho.strikeGap(x, 8.3) < 0.2) wall = trial([x, 6.2], [x, 8.3]);
+    }
+    ho.clearRobots();
+    return { barrier, wall };
+  });
+  check(
+    'a bomber going off on the far side of a low barrier still hurts the player (cover has to be taller than they are to count)',
+    cover.barrier !== null && cover.barrier.blast && cover.barrier.lineToFeet === false && cover.barrier.health < 85,
+    cover.barrier ? `a barrier ${cover.barrier.top.toFixed(2)} m high between them, ${cover.barrier.apart.toFixed(1)} m apart, no clear line to the bomber's feet: health ${cover.barrier.health.toFixed(0)}` : 'found no low barrier with floor on both sides',
+  );
+  check(
+    'and one going off on the far side of a wall does not',
+    cover.wall !== null && cover.wall.blast && cover.wall.health === 100,
+    cover.wall ? `${cover.wall.apart.toFixed(1)} m apart through the wall between the lobby and the server hall: health ${cover.wall.health.toFixed(0)}` : 'found nowhere to try it',
+  );
+
   // ---- What the rounds are made of, and where ARGUS sends things.
   const makeup = await ev(() => {
     const ho = window.__HO;
@@ -2162,14 +2461,19 @@ try {
   );
 
   // ---- A real analysis: play a round one way, read the banner, see the counter arrive; play another way, see it withdrawn.
+  // (The analysis is on screen twice over: large at the top centre as it
+  // arrives, then small in ARGUS's corner. This reads whichever is up.)
   const banner = () =>
     ev(() => {
-      const panel = document.querySelector('.argus-analysis');
+      const stage = window.__HO.analysisBanner.showing();
+      const prefix = stage === 'moment' ? 'moment' : 'argus';
+      const panel = document.querySelector(stage === 'moment' ? '.argus-moment' : '.argus-analysis');
       return {
-        showing: panel.classList.contains('show'),
-        title: panel.querySelector('.argus-title').textContent,
-        round: panel.querySelector('.argus-round').textContent,
-        lines: [...panel.querySelectorAll('.argus-line')].map((row) => [...row.children].map((part) => `${part.firstElementChild.textContent}: ${part.lastElementChild.textContent}`)),
+        stage,
+        showing: stage === 'moment' || stage === 'corner',
+        title: panel.querySelector(`.${prefix}-title`).textContent,
+        round: panel.querySelector(`.${prefix}-round`).textContent,
+        lines: [...panel.querySelectorAll(`.${prefix}-line`)].map((row) => [...row.children].map((part) => `${part.firstElementChild.textContent}: ${part.lastElementChild.textContent}`)),
       };
     });
   const remarkShown = () =>
@@ -2184,10 +2488,19 @@ try {
       const next = `ROUND ${ho.game.stats.round + 1}`;
       ho.clearRobots();
       ho.holdRounds(false);
+      ho.sounds();
       ho.skipRound();
-      const up = () => document.querySelector('.argus-analysis').classList.contains('show') && document.querySelector('.argus-round').textContent === next;
+      // (It waits for "ROUND N CLEARED" to leave the top of the view, and
+      // that runs on the real clock, which this loop does not let pass:
+      // holding it at its first stage brings it up at once, and keeps it
+      // there to be read.)
+      const up = () => {
+        if (ho.analysisBanner.showing() === 'waiting') ho.analysisBanner.hold('moment');
+        return ho.analysisBanner.showing() === 'moment' && document.querySelector('.moment-round').textContent === next;
+      };
       for (let i = 0; i < 60 * 8 && !up(); i++) ho.step(1 / 60, 1);
-      return { time: ho.game.stats.time, state: ho.run().state };
+      ho.analysisBanner.hold('moment');
+      return { time: ho.game.stats.time, state: ho.run().state, sounds: ho.sounds() };
     });
   await ev(() => {
     const ho = window.__HO;
@@ -2221,11 +2534,68 @@ try {
   const notesAfter = await ev(() => window.__HO.argus().notes);
   const lull = await endRoundAndWait();
   const firstBanner = await banner();
+  // The two stages of it, measured on the screen.
+  const stages = await ev(async () => {
+    const ho = window.__HO;
+    const box = (el) => {
+      const r = el.getBoundingClientRect();
+      return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width };
+    };
+    const size = (el) => parseFloat(getComputedStyle(el).fontSize);
+    const moment = document.querySelector('.argus-moment');
+    const corner = document.querySelector('.argus-analysis');
+    const eye = moment.querySelector('svg.moment-eye');
+    await new Promise((done) => setTimeout(done, 700));
+    const large = {
+      stage: ho.analysisBanner.showing(),
+      box: box(moment),
+      opacity: Number(getComputedStyle(moment).opacity),
+      eye: Boolean(eye?.querySelector('.ring') && eye.querySelector('.lid') && eye.querySelector('.iris')),
+      eyeSize: eye ? eye.getBoundingClientRect().width : 0,
+      adapting: size(moment.querySelector('.moment-adapting')),
+      observed: size(moment.querySelector('.moment-observed')),
+      cornerUp: corner.classList.contains('show'),
+    };
+    return { large, view: [innerWidth, innerHeight] };
+  });
+  // (The checks run in a small window. On a full-size screen, which is what a video of the game is recorded on, it is larger still.)
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.waitForTimeout(250);
+  stages.fullSize = await ev(() => {
+    const moment = document.querySelector('.argus-moment');
+    const r = moment.getBoundingClientRect();
+    return {
+      adapting: parseFloat(getComputedStyle(moment.querySelector('.moment-adapting')).fontSize),
+      title: parseFloat(getComputedStyle(moment.querySelector('.moment-title')).fontSize),
+      bottom: r.bottom / innerHeight,
+      off: Math.abs((r.left + r.right) / 2 - innerWidth / 2),
+    };
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(250);
+  stages.small = await ev(async () => {
+    const ho = window.__HO;
+    const moment = document.querySelector('.argus-moment');
+    const corner = document.querySelector('.argus-analysis');
+    ho.analysisBanner.hold('corner');
+    await new Promise((done) => setTimeout(done, 900));
+    const r = corner.getBoundingClientRect();
+    const small = {
+      stage: ho.analysisBanner.showing(),
+      box: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width },
+      opacity: Number(getComputedStyle(corner).opacity),
+      largeOpacity: Number(getComputedStyle(moment).opacity),
+      adapting: parseFloat(getComputedStyle(corner.querySelector('.argus-adapting')).fontSize),
+    };
+    // Let it go on from here by itself: it should stay where it is until the next round begins.
+    ho.analysisBanner.hold(null);
+    return small;
+  });
   const whileShowing = await ev(() => {
     const ho = window.__HO;
     const before = ho.game.stats.time;
     ho.step(1 / 60, 30);
-    return { moved: ho.game.stats.time - before, state: ho.run().state, counters: ho.argus().active, used: ho.argus().report.adaptations.length };
+    return { moved: ho.game.stats.time - before, state: ho.run().state, counters: ho.argus().active, used: ho.argus().report.adaptations.length, banner: ho.analysisBanner.showing() };
   });
   check('ARGUS passes a remark on what the player does, and does not speak again straight away', firstRemark === 'One unit lost. I have others.' && spokeTooSoon === false, `after the first kill: "${firstRemark}"`);
   check(
@@ -2243,6 +2613,34 @@ try {
     `"${firstBanner.lines.map((line) => line.join(' ')).join(' / ')}"`,
   );
   check('the banner does not pause the game', lull.state === 'playing' && whileShowing.state === 'playing' && near(whileShowing.moved, 0.5), `${whileShowing.moved.toFixed(2)} s of play passed in half a second with the banner up`);
+  {
+    const [vw, vh] = stages.view;
+    const { large, small } = stages;
+    check(
+      "the analysis arrives as a moment: large, near the top centre of the view, under ARGUS's eye mark and with its own sound, and it ends well above the crosshair",
+      large.stage === 'moment' &&
+        large.opacity > 0.95 &&
+        Math.abs((large.box.left + large.box.right) / 2 - vw / 2) < vw * 0.02 &&
+        large.box.top < vh * 0.12 &&
+        large.box.bottom < vh * 0.42 &&
+        large.eye &&
+        large.eyeSize >= 34 &&
+        large.adapting >= 1.25 * small.adapting &&
+        large.adapting >= vh * 0.028 &&
+        stages.fullSize.adapting >= 2 * small.adapting &&
+        stages.fullSize.title >= 34 &&
+        stages.fullSize.bottom < 0.42 &&
+        stages.fullSize.off < 1920 * 0.02 &&
+        !large.cornerUp &&
+        lull.sounds.includes('argusAnalysis'),
+      `from ${Math.round((large.box.top / vh) * 100)}% to ${Math.round((large.box.bottom / vh) * 100)}% of the way down the view (the crosshair is at 50%), centred ${Math.abs((large.box.left + large.box.right) / 2 - vw / 2).toFixed(0)} px off the middle; its lettering ${large.observed.toFixed(0)} and ${large.adapting.toFixed(0)} px in this 1280 x 720 window and ${stages.fullSize.adapting.toFixed(0)} px on a 1920 x 1080 screen (the corner banner's is ${small.adapting.toFixed(0)}), the eye mark ${large.eyeSize.toFixed(0)} px across; sounds: ${lull.sounds.filter((s) => s.startsWith('argus')).join(', ')}`,
+    );
+    check(
+      "then it shrinks into ARGUS's corner of the screen: the small banner takes its place, top right, and the large one is gone",
+      small.stage === 'corner' && small.opacity > 0.95 && small.largeOpacity < 0.05 && small.box.left > vw * 0.6 && small.box.bottom < vh * 0.4 && small.adapting < large.adapting,
+      `the corner banner is ${Math.round(small.box.width)} px wide, from ${Math.round((small.box.left / vw) * 100)}% across; its lettering ${small.adapting.toFixed(0)} px to the large one's ${large.adapting.toFixed(0)}`,
+    );
+  }
   // Round 3 arrives with the counter on it.
   const countered = await ev(() => {
     const ho = window.__HO;
@@ -2256,6 +2654,8 @@ try {
     }
     return { round: game.stats.round, made, carrying, used: ho.argus().report.adaptations };
   });
+  const afterLull = await ev(() => window.__HO.analysisBanner.showing());
+  check('it stays in the corner for the rest of the lull, and goes when the next round begins', whileShowing.banner === 'corner' && afterLull === null, `half a second later: ${whileShowing.banner}; once round 3 had begun: ${afterLull ?? 'gone'}`);
   check('and the next round comes with that counter on it: robots shielded against the weapon the player leaned on', countered.round === 3 && countered.made.shielded >= 3 && countered.carrying >= 1, `round 3: ${countered.made.shielded} of ${countered.made.total} robots shielded against the sidearm`);
   check(
     "a counter goes on ARGUS's profile of the player when its round begins, not when it is chosen: a run that ends first does not list a counter that was never sent",
@@ -2284,6 +2684,7 @@ try {
   const mixed = await ev(() => window.__HO.argus().notes.damage);
   await endRoundAndWait();
   const secondBanner = await banner();
+  await ev(() => window.__HO.analysisBanner.hold(null));
   const afterChange = await ev(() => {
     const ho = window.__HO;
     const game = ho.game;

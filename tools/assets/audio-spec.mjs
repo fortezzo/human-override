@@ -245,18 +245,44 @@ export const AUDIO_SPEC = [
     fadeOut: 0.45,
     layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/engineCircular_00${n}.ogg`, { pitch: 1.7, filter: 'highpass=f=250,afade=t=in:st=0:d=0.2' })],
   })),
-  // Shielding turning a shot: a force field, cut short and pitched up.
-  { name: 'shield_hit', peak: 0.7, duration: 0.7, fadeOut: 0.2, layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_000.ogg`, { pitch: 1.6 })] },
+  // Plating turning a shot: the round rings off it. A bell struck hard
+  // and pitched up (the ring), a light plate struck (the smack), and under
+  // them a breath of the force field the plating is made of. Three of
+  // them, so that a burst into the same plate does not sound like a loop.
+  ...[
+    [0, 1, 1.9],
+    [2, 2, 2.15],
+    [4, 3, 1.7],
+  ].map(([bell, plate, pitch], i) => ({
+    name: `deflect_${i}`,
+    peak: 0.9,
+    duration: 0.55,
+    fadeOut: 0.18,
+    layers: [
+      whole('impact-sounds', `${KENNEY_IMPACT}/impactBell_heavy_00${bell}.ogg`, { pitch, gain: 1.0, filter: 'highpass=f=700' }),
+      whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_light_00${plate}.ogg`, { pitch: 1.35, gain: 0.8 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_000.ogg`, { pitch: 1.6, gain: 0.3 }),
+    ],
+  })),
   // The plate over a weak point coming off: a heavy plate struck, and steel ringing under it.
   { name: 'plate_break', peak: 0.95, duration: 1.1, fadeOut: 0.5, layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_heavy_002.ogg`), whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_heavy_001.ogg`, { gain: 0.6, pitch: 0.8 })] },
-  // ARGUS has finished its analysis: a stutter of machine noise, low.
+  // ARGUS has finished its analysis, and says so across the top of the
+  // view: a sharp burst and a low thump as it lands (the banner snaps in,
+  // so the sound must too), a stutter of machine noise as it reads out
+  // what it saw, and two low notes under that, its voice.
   {
     name: 'argus_analysis',
     stereo: true,
-    peak: 0.6,
-    duration: 1.3,
-    fadeOut: 0.6,
-    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/computerNoise_001.ogg`, { pitch: 0.7, filter: 'lowpass=f=2400' }), whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { gain: 0.6, pitch: 0.4 })],
+    bitrate: '112k',
+    peak: 0.8,
+    duration: 1.9,
+    fadeOut: 0.9,
+    layers: [
+      { pack: 'sci-fi-sounds', file: `${KENNEY_SCIFI}/computerNoise_003.ogg`, at: 2.45, gain: 1.5, filter: 'highpass=f=500,afade=t=out:st=0.08:d=0.14,atrim=duration=0.25' },
+      { pack: 'sci-fi-sounds', file: `${KENNEY_SCIFI}/lowFrequency_explosion_000.ogg`, at: 0.07, gain: 0.7, pitch: 0.6, filter: 'lowpass=f=240' },
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/computerNoise_001.ogg`, { pitch: 0.7, gain: 0.6, filter: 'lowpass=f=2400' }),
+      whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { gain: 0.7, pitch: 0.4 }),
+    ],
   },
   // ARGUS passes a remark: two low notes.
   { name: 'argus_remark', stereo: true, peak: 0.45, layers: [whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { pitch: 0.55 })] },

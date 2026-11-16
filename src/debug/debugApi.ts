@@ -17,12 +17,41 @@ import type { SurfaceKind } from '../render/materials';
 import type { Adaptation, Notes, RemarkCue } from '../sim/argus';
 import type { RobotKind } from '../sim/horde';
 import { remaining } from '../sim/rounds';
-import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
-import { cellAt, createNavGrid, floodFrom } from '../sim/navGrid';
+import { findSafeSpots, findStandableOutOfReach, groupSafeSpots } from '../sim/safeSpots';
+import { cellAt, cellCentre, createNavGrid, floodFrom, nearestReachableCell, type NavGrid } from '../sim/navGrid';
 import { BREACH, VESTIBULE } from '../world/lobby/plan';
 import { AREA_IDS, DOCK, DOCK_BAYS, DOCK_PASSAGE, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LAB, LAB_LINE, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
+
+/** Somewhere a robot can stand that is about `metres` of walking from the nearest such place to (x, z). */
+function walkAway(grid: NavGrid, x: number, z: number, metres: number): [number, number] {
+  const start = nearestReachableCell(grid, x, z, 12);
+  if (start < 0) return [x, z];
+  const steps = Math.round(metres / grid.cell);
+  const depth = new Map<number, number>([[start, 0]]);
+  const queue = [start];
+  let last = start;
+  for (let head = 0; head < queue.length; head++) {
+    const index = queue[head]!;
+    const d = depth.get(index)!;
+    last = index;
+    if (d >= steps) break;
+    const col = index % grid.cols;
+    const row = (index - col) / grid.cols;
+    for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      const c = col + dc;
+      const r = row + dr;
+      if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows) continue;
+      const next = r * grid.cols + c;
+      if (!grid.reach[next] || depth.has(next)) continue;
+      depth.set(next, d + 1);
+      queue.push(next);
+    }
+  }
+  const at = cellCentre(grid, last);
+  return [at.x, at.z];
+}
 
 export interface DebugState {
   state: string;
@@ -60,6 +89,18 @@ export interface DebugApi {
     freezeAt(seconds: number | null): void;
     status(): { showing: 'none' | 'start' | 'clear' | 'notice'; seconds: number; counter: string };
   } | null;
+  /**
+   * ARGUS's analysis on the HUD (connected by main.ts): which stage it is
+   * at (large at the top centre, or shrunk into the corner; 'waiting' while
+   * an announcement is in its way), and a way to hold it at either stage,
+   * since its own clock is real time and the checks do not run in real time.
+   */
+  analysisBanner: {
+    hold(stage: 'moment' | 'corner' | null): void;
+    showing(): 'moment' | 'corner' | 'waiting' | null;
+  } | null;
+  /** The sounds the game has asked for since this was last called, in order (whether or not the browser was playing sound). */
+  sounds(): string[];
   game: Game;
   /** Start playing without capturing the mouse. */
   play(): void;
@@ -142,6 +183,25 @@ export interface DebugApi {
    * reach the deepest point is). There should be none.
    */
   safeSpots(): Array<{ x: number; z: number; squares: number; deepest: number }>;
+  /**
+   * The same thing found by standing everywhere: every place the player
+   * can come to stand by the game's rules of movement (sampled every 20 cm
+   * across the whole map, on the floor and on top of whatever can be stood
+   * on) from which no robot could strike them. `climb` is how far above
+   * their footing the player can get onto something: one step, in the
+   * game; give the height of a jump to see what jumping onto things would
+   * bring back. Returns how many places were stood on, and the patches out
+   * of reach (there should be none); and the most awkward places that are
+   * still in reach, each with somewhere about five metres' walk away for a
+   * robot to set out from, so that a check can watch one arrive and strike.
+   */
+  outOfReach(climb?: number): {
+    stoodOn: number;
+    patches: Array<{ x: number; z: number; squares: number; deepest: number }>;
+    hardest: Array<{ x: number; z: number; y: number; gap: number; from: [number, number] }>;
+  };
+  /** How far a point is from the nearest place a robot can stand, with every door open. */
+  strikeGap(x: number, z: number): number;
   /**
    * Holes in the rooms. Each area is drawn only while it can be seen, so
    * it has to be closed off by its own walls: if a stretch of its wall is
@@ -284,6 +344,11 @@ export function installDebugApi(game: Game): DebugTools {
   /** True while the pilot is only running an errand for a test, not playing. */
   let onErrand = false;
   let poison: THREE.Mesh | null = null;
+  // Where robots can stand with every door open: the game's own map, made
+  // afresh (once) so that the state of the doors does not matter.
+  let openFloor: NavGrid | null = null;
+  const robotFloor = (): NavGrid =>
+    (openFloor ??= createNavGrid(NAV_BOUNDS, game.world.nav.cell, game.world.openColliders, ROBOT.radius + 0.06, 0.3, 1.8, WALKABLE, ENTRY_PLANS.map((entry) => entry.at)));
 
   /** Put the mission at the start of a step, with the map cleared of whatever the old step had on it. */
   const jumpMission = (step: MissionStep): void => {
@@ -347,6 +412,8 @@ export function installDebugApi(game: Game): DebugTools {
   window.__HO = {
     ready: false,
     announcement: null,
+    analysisBanner: null,
+    sounds: () => game.audio.asked.splice(0),
     game,
     play() {
       game.input.locked = true;
@@ -715,6 +782,31 @@ export function installDebugApi(game: Game): DebugTools {
         ROBOT.attackRange - 0.15,
       );
       return groupSafeSpots(spots, cell);
+    },
+    outOfReach(climb = PLAYER.stepHeight) {
+      const step = 0.2;
+      const robots = robotFloor();
+      const found = findStandableOutOfReach(
+        NAV_BOUNDS,
+        step,
+        game.world.openColliders,
+        robots,
+        { radius: PLAYER.radius, stepHeight: PLAYER.stepHeight, height: PLAYER.height, climb },
+        [PLAYER_START.x, PLAYER_START.z],
+        ROBOT.attackRange - 0.15,
+      );
+      return {
+        stoodOn: found.stoodOn,
+        patches: groupSafeSpots(found.spots, step),
+        hardest: found.hardest.map((spot) => ({ ...spot, from: walkAway(robots, spot.x, spot.z, 5) })),
+      };
+    },
+    strikeGap(x, z) {
+      const robots = robotFloor();
+      const nearest = nearestReachableCell(robots, x, z, 30);
+      if (nearest < 0) return Infinity;
+      const at = cellCentre(robots, nearest);
+      return Math.hypot(at.x - x, at.z - z);
     },
     poison(x, y, z) {
       if (poison) {

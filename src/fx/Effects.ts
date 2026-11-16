@@ -17,6 +17,8 @@ const ARC = { r: 3.5, g: 6.5, b: 11 };
 const _tangent = new THREE.Vector3();
 const _bitangent = new THREE.Vector3();
 const _dir = new THREE.Vector3();
+const _side = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
 
 /** A random direction in the half of space around `normal`. `spread` 0 = straight out, 1 = anywhere in the hemisphere. */
 function scatter(normal: THREE.Vector3, spread: number, out: THREE.Vector3): THREE.Vector3 {
@@ -217,14 +219,31 @@ export class Effects {
     this.decals.add('scorch', new THREE.Vector3(centre.x, 0, centre.z), up, radius * rand(0.75, 0.9));
   }
 
-  /** A robot's shielding turning part of a shot: a splash of light in the shielding's own colour. */
-  shieldHit(point: THREE.Vector3, shotDirection: THREE.Vector3, color: THREE.Color): void {
+  /**
+   * A robot's plating turning a shot. It has to be plain at a glance that
+   * the round did not go in: a hard white flash where it struck, a spray
+   * of long sparks thrown back off the plate in the plating's own colour,
+   * and the round itself skidding away to one side as a bright streak.
+   * `calm` (the "reduce flashing" setting) keeps the sparks and the streak
+   * and takes most of the flash away.
+   */
+  deflect(point: THREE.Vector3, shotDirection: THREE.Vector3, color: THREE.Color, calm = false): void {
     const p = this.particles;
-    const tint = { r: color.r * 6, g: color.g * 6, b: color.b * 6 };
+    const tint = { r: color.r * 7, g: color.g * 7, b: color.b * 7 };
     _dir.copy(shotDirection).negate();
-    this.sparks(point, _dir, p.scaled(10), 1.2, 1.5, 5, tint);
-    // (Small and brief, like the glint of any other hit: it must not hide the robot being shot at.)
-    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.07, size: 0.2, sizeEnd: 0.34, ...tint, alpha: 0.4 });
+    this.sparks(point, _dir, p.scaled(14), 1.25, 2.5, 7.5, tint, 1.15);
+    this.sparks(point, _dir, p.scaled(6), 0.9, 3, 8.5, SPARK_HOT, 1.1);
+    // The flash: white at the middle, the plating's colour round it. (Brief: it must not hide the robot being shot at.)
+    const flash = calm ? 0.35 : 1;
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.08, size: 0.3, sizeEnd: 0.5, r: 9, g: 9.5, b: 10, alpha: 0.7 * flash });
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.14, size: 0.34, sizeEnd: 0.6, ...tint, alpha: 0.24 * flash });
+    // The round, glancing off: back toward the shooter, well to one side or the other, and upward.
+    _side.crossVectors(shotDirection, _up).normalize().multiplyScalar((Math.random() < 0.5 ? -1 : 1) * rand(0.7, 1.2));
+    _dir.multiplyScalar(rand(0.35, 0.6)).add(_side);
+    _dir.y += rand(0.35, 0.9);
+    _dir.normalize();
+    const speed = 34;
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: _dir.x * speed, vy: _dir.y * speed, vz: _dir.z * speed, life: 0.16, size: 0.02, r: 10, g: 9, b: 7, alpha: 0.95, streak: 0.022 });
   }
 
   /** The plate over a weak point coming off: a clang's worth of sparks, and the plate's fragments. */

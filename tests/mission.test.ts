@@ -8,6 +8,7 @@ import {
   coreReady,
   createMission,
   custodianDestroyed,
+  custodianArrives,
   custodianDue,
   custodianSent,
   keyAvailable,
@@ -96,16 +97,46 @@ describe('the mission: three keys, in any order', () => {
     expect(keysHeld(m)).toBe(1);
   });
 
-  it('sends the Custodian in with the first round numbered high enough, once the power is on', () => {
+  it('sends the Custodian in with the first round to start once the other two keys are held, and never before its earliest round', () => {
     const m = createMission();
-    expect(custodianDue(m, rules, rules.custodianFromRound + 3)).toBe(false);
+    const from = rules.custodianFromRound;
+    expect(custodianDue(m, rules, from + 3)).toBe(false);
     restorePower(m);
-    expect(custodianDue(m, rules, rules.custodianFromRound - 1)).toBe(false);
-    expect(custodianDue(m, rules, rules.custodianFromRound)).toBe(true);
-    // Power restored late: it comes with the very next round.
-    expect(custodianDue(m, rules, rules.custodianFromRound + 4)).toBe(true);
+    // Power alone does not bring it, however late the round: it comes for the last key.
+    expect(custodianDue(m, rules, from)).toBe(false);
+    expect(custodianDue(m, rules, from + 9)).toBe(false);
+    collectKey(m, 'cage');
+    expect(custodianDue(m, rules, from + 9)).toBe(false);
+    startUplink(m);
+    run(m, rules.uplinkSeconds + 0.5);
+    collectKey(m, 'uplink');
+    expect(keysHeld(m)).toBe(2);
+    // Both keys early: it waits for its earliest round.
+    expect(custodianDue(m, rules, from - 1)).toBe(false);
+    expect(custodianDue(m, rules, from)).toBe(true);
+    // Both keys late: it comes with the very next round to start.
+    expect(custodianDue(m, rules, from + 4)).toBe(true);
     custodianSent(m);
-    expect(custodianDue(m, rules, rules.custodianFromRound + 5)).toBe(false);
+    expect(custodianDue(m, rules, from + 5)).toBe(false);
+  });
+
+  it('says which round the Custodian will come with: the next one, or its earliest', () => {
+    const from = rules.custodianFromRound;
+    expect(custodianArrives(rules, 1)).toBe(from);
+    expect(custodianArrives(rules, from - 1)).toBe(from);
+    expect(custodianArrives(rules, from)).toBe(from + 1);
+    expect(custodianArrives(rules, from + 6)).toBe(from + 7);
+  });
+
+  it('does not matter which of the other two keys is taken first', () => {
+    const m = createMission();
+    restorePower(m);
+    startUplink(m);
+    run(m, rules.uplinkSeconds + 0.5);
+    collectKey(m, 'uplink');
+    expect(custodianDue(m, rules, rules.custodianFromRound + 2)).toBe(false);
+    collectKey(m, 'cage');
+    expect(custodianDue(m, rules, rules.custodianFromRound + 2)).toBe(true);
   });
 
   it("gives up the Custodian's key only when it is destroyed, and then only once", () => {
@@ -195,12 +226,15 @@ describe('the mission: three keys, in any order', () => {
     expect(objective(m, rules, false, false).target).toBe('uplink');
     startUplink(m);
     run(m, rules.uplinkSeconds + 0.5);
-    // Two keys, the Custodian not here yet: nowhere to go, but it says why.
-    const waiting = objective(m, rules, false, false);
-    expect(waiting.target).toBeNull();
-    expect(waiting.title).toContain('CUSTODIAN');
-    expect(waiting.detail).toContain(String(rules.custodianFromRound));
-    expect(waiting.detail).toContain('2 / 3');
+    collectKey(m, 'uplink');
+    // Two keys, the Custodian not here yet: nowhere to go, but it says why, and when.
+    const early = objective(m, rules, false, false, 2);
+    expect(early.target).toBeNull();
+    expect(early.title).toContain('CUSTODIAN');
+    expect(early.detail).toContain(`ROUND ${rules.custodianFromRound}`);
+    expect(early.detail).toContain('2 / 3');
+    const late = objective(m, rules, false, false, rules.custodianFromRound + 3);
+    expect(late.detail).toContain(`ROUND ${rules.custodianFromRound + 4}`);
   });
 });
 
@@ -303,7 +337,8 @@ describe('the mission: the numbers in the config', () => {
   it('asks for a full minute at the uplink, and sends the boss in before the switch is armed', () => {
     expect(MISSION.uplinkSeconds).toBe(60);
     expect(MISSION.bossAfter).toBeLessThan(MISSION.armSeconds);
-    expect(MISSION.custodianFromRound).toBeGreaterThan(3);
+    // (The Custodian: never before round 8, the player asked.)
+    expect(MISSION.custodianFromRound).toBe(8);
   });
 });
 

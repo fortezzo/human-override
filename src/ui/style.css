@@ -1264,8 +1264,54 @@ kbd {
   opacity: 1;
   transition: none;
 }
+/* A shot turned by plating that resists the weapon: the player has to know
+   at once, so the word is large, in the plating's own colour, and snaps in. */
 .hit-note.resisted {
-  color: #9fc4ff;
+  top: calc(50% + 34px);
+  /* (The spacing after the last letter would otherwise push the word off centre.) */
+  padding-left: 0.22em;
+  font-family: inherit;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  color: color-mix(in srgb, var(--tint, #9fc4ff) 38%, #fff);
+  text-shadow:
+    0 0 12px var(--tint, #9fc4ff),
+    0 0 3px rgba(0, 0, 0, 0.9),
+    0 2px 3px rgba(0, 0, 0, 0.8);
+}
+/* A deflection mark either side of it: two short bars, glancing off. */
+.hit-note.resisted::before,
+.hit-note.resisted::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  width: 22px;
+  height: 3px;
+  background: var(--tint, #9fc4ff);
+  box-shadow: 0 0 8px var(--tint, #9fc4ff);
+}
+.hit-note.resisted::before {
+  right: calc(100% + 8px);
+  transform: rotate(-24deg);
+}
+.hit-note.resisted::after {
+  left: calc(100% + 8px);
+  transform: rotate(24deg);
+}
+.hit-note.resisted.pop:not(.calm) {
+  animation: note-pop 0.16s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+}
+@keyframes note-pop {
+  from {
+    transform: translateX(-50%) scale(1.5);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
 }
 .hit-note.guardBroke {
   color: var(--amber);
@@ -1394,6 +1440,228 @@ kbd {
 .argus-analysis.show:not(.calm) .argus-line {
   animation: argus-line 0.5s ease-out both;
   animation-delay: calc(0.25s + var(--i) * 0.55s);
+}
+/* Shrunk into the corner from the large version, its lines have been read already: they are simply there. */
+.argus-analysis.docked {
+  transition:
+    opacity 0.3s ease 0.2s,
+    transform 0.3s ease 0.2s;
+}
+.argus-analysis.show.docked .argus-line {
+  animation: none;
+}
+.argus-analysis.show.docked .argus-eye {
+  animation: none;
+}
+
+/* The analysis as it arrives: large, near the top centre, for about two
+   seconds. Lettering on a dark band that ends well above the crosshair.
+   (Everything is sized from --u, a hundredth of the view's height, or of
+   what its height would be if it were 16:9 and that is less: the band
+   takes the same share of the view in a small window as on a big screen.) */
+.argus-moment {
+  /* The room there is for it, between the objective on the left and ARGUS's corner on the right. */
+  --room: calc(100vw - 860px);
+  --u: max(6.2px, min(1vh, 0.5625vw, var(--room) / 62));
+  /* Its ends fade out over the width of its own margins: the lettering is always on the solid part. */
+  --pad: clamp(calc(3.2 * var(--u)), calc((100vw - 1100px) / 8), calc(7 * var(--u)));
+  position: absolute;
+  top: calc(5 * var(--u));
+  left: 50%;
+  width: max-content;
+  max-width: max(430px, min(64vw, var(--room)));
+  opacity: 0;
+  transform: translateX(-50%);
+}
+.moment-band {
+  position: relative;
+  padding: calc(1.7 * var(--u)) var(--pad) calc(2 * var(--u));
+  text-align: center;
+  background: linear-gradient(90deg, rgba(9, 5, 5, 0) 0, rgba(9, 5, 5, 0.86) var(--pad), rgba(9, 5, 5, 0.86) calc(100% - var(--pad)), rgba(9, 5, 5, 0) 100%);
+}
+/* A red rule along its top edge, and a fainter one along the bottom. */
+.moment-band::before,
+.moment-band::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(255, 67, 38, 0) 0, var(--red) var(--pad), var(--red) calc(100% - var(--pad)), rgba(255, 67, 38, 0) 100%);
+}
+.moment-band::before {
+  top: 0;
+}
+.moment-band::after {
+  bottom: 0;
+  height: 1px;
+  opacity: 0.45;
+}
+.argus-moment.show {
+  opacity: 1;
+}
+.argus-moment.show.calm {
+  transition: opacity 0.3s ease;
+}
+.argus-moment.show:not(.calm) .moment-band {
+  animation: moment-in 0.24s ease-out both;
+}
+@keyframes moment-in {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+/* Then it goes to ARGUS's corner, shrinking as it fades. (The small one there fades in as it lands.) */
+.argus-moment.leave {
+  opacity: 0;
+  transform: translateX(-50%) translate(var(--dx, 0), var(--dy, 0)) scale(var(--s, 0.5));
+  transition:
+    transform 0.5s cubic-bezier(0.5, 0, 0.2, 1),
+    opacity 0.4s ease 0.1s;
+}
+.argus-moment.leave.calm {
+  transform: translateX(-50%);
+  transition: opacity 0.4s ease;
+}
+.moment-head {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: calc(1.5 * var(--u));
+  white-space: nowrap;
+}
+/* ARGUS's mark, as on the walls: an almond eye in a broken ring. */
+.moment-eye {
+  flex: none;
+  width: calc(5.6 * var(--u));
+  height: calc(5.6 * var(--u));
+  overflow: visible;
+  filter: drop-shadow(0 0 calc(0.7 * var(--u)) rgba(255, 67, 38, 0.8));
+}
+.moment-eye .ring {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 6.5;
+}
+.moment-eye .lid {
+  fill: none;
+  stroke: var(--red);
+  stroke-width: 4.5;
+  stroke-linejoin: round;
+}
+.moment-eye .iris {
+  fill: #ffd9cf;
+}
+/* The eye opens on the player: the ring turns into place and the iris widens. (Movement, not flashing; and not at all with flashing reduced.) */
+.argus-moment.show:not(.calm) .moment-eye .ring {
+  animation: moment-ring 1.5s cubic-bezier(0.16, 0.8, 0.24, 1) both;
+}
+@keyframes moment-ring {
+  from {
+    transform: rotate(-260.83deg);
+  }
+  to {
+    transform: rotate(-80.83deg);
+  }
+}
+.argus-moment.show:not(.calm) .moment-eye .iris {
+  animation: moment-iris 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.3) 0.08s both;
+}
+@keyframes moment-iris {
+  from {
+    transform: scale(0.15);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+.moment-title {
+  font-size: calc(3.5 * var(--u));
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  /* (The last letter's spacing would otherwise push the title off centre.) */
+  margin-right: -0.26em;
+  line-height: 1;
+  color: var(--red);
+  text-shadow: 0 0 calc(1.6 * var(--u)) rgba(255, 67, 38, 0.45);
+}
+.moment-round {
+  align-self: flex-end;
+  margin-left: calc(1.2 * var(--u));
+  padding-bottom: calc(0.3 * var(--u));
+  font-family: var(--mono);
+  font-size: calc(1.55 * var(--u));
+  letter-spacing: 0.16em;
+  color: var(--ink-dim);
+}
+.moment-lines {
+  margin-top: calc(1.5 * var(--u));
+  display: flex;
+  flex-direction: column;
+  gap: calc(1.3 * var(--u));
+}
+.moment-line b {
+  display: inline-block;
+  margin-right: calc(1.2 * var(--u));
+  font-family: var(--mono);
+  font-size: calc(1.3 * var(--u));
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  color: var(--ink-dim);
+  vertical-align: 0.22em;
+}
+.moment-observed {
+  font-size: calc(2.45 * var(--u));
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  color: var(--ink);
+}
+.moment-adapting {
+  font-size: calc(3.3 * var(--u));
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  line-height: 1.18;
+  color: var(--red);
+  text-transform: uppercase;
+}
+.moment-adapting b {
+  color: var(--red);
+}
+/* A counter being taken away is good news: it is not shown in ARGUS's red. */
+.moment-adapting.withdrawing,
+.moment-adapting.withdrawing b {
+  color: var(--ink-dim);
+}
+/* Three things to say: a little smaller, so that it still ends well above the crosshair. */
+.argus-moment.many .moment-observed {
+  font-size: calc(2.1 * var(--u));
+}
+.argus-moment.many .moment-adapting {
+  font-size: calc(2.75 * var(--u));
+}
+.argus-moment.many .moment-lines {
+  gap: calc(0.95 * var(--u));
+}
+/* Each pair of lines comes in a beat after the one above it. */
+.argus-moment.show:not(.calm) .moment-line {
+  animation: moment-line 0.3s ease-out both;
+  animation-delay: calc(0.18s + var(--i) * 0.16s);
+}
+@keyframes moment-line {
+  from {
+    opacity: 0;
+    transform: translateY(calc(0.9 * var(--u)));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 @keyframes argus-line {
   from {

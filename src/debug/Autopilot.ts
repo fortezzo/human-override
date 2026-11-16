@@ -32,7 +32,7 @@ import type { Robot } from '../entities/robot/Robot';
 import type { Game } from '../game/Game';
 import { rackOffer } from '../sim/economy';
 import { floodFrom, nextWaypoint, type NavGrid } from '../sim/navGrid';
-import { CORE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, UPLINK } from '../world/plan';
+import { CORE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, UPLINK, type DoorPlan } from '../world/plan';
 
 export interface PilotProfile {
   /** Seconds before it reacts to a robot it has just noticed. */
@@ -594,6 +594,41 @@ export class Autopilot {
     return { ...at, label: PLACE_NAMES[target] };
   }
 
+  /**
+   * The shut door to buy next on the way to the mission's objective: the
+   * first one on the cheapest chain of doors from where the player can
+   * already walk to the room the objective is in. Null if the way is open,
+   * or if there is nowhere in particular to go.
+   */
+  private doorToObjective(): DoorPlan['id'] | null {
+    const { mission, world } = this.game;
+    const target = mission.objective.target;
+    if (!target || target === 'custodian' || target === 'custodianKey') return null;
+    const goal = MISSION_PLACES[target].area;
+    const reachable = world.reachable;
+    if (reachable.has(goal)) return null;
+    // Cheapest first: [cost so far, area, the first door bought on the way].
+    const best = new Map<string, number>();
+    const queue: Array<[number, string, DoorPlan['id'] | null]> = [...reachable].map((area) => [0, area, null]);
+    while (queue.length) {
+      queue.sort((p, q) => p[0] - q[0]);
+      const [cost, area, first] = queue.shift()!;
+      if (area === goal) return first;
+      if ((best.get(area) ?? Infinity) < cost) continue;
+      for (const plan of DOOR_PLANS) {
+        const other = plan.a === area ? plan.b : plan.b === area ? plan.a : null;
+        if (other === null) continue;
+        const shut = !world.door(plan.id).open;
+        if (shut && plan.cost === null) continue;
+        const next = cost + (shut ? plan.cost! : 0);
+        if (next >= (best.get(other) ?? Infinity)) continue;
+        best.set(other, next);
+        queue.push([next, other, first ?? (shut ? plan.id : null)]);
+      }
+    }
+    return null;
+  }
+
   /** The nearest robot still standing, as somewhere to walk to. */
   private nearestRobot(): { x: number; z: number; label: string } | null {
     const { player, robots } = this.game;
@@ -810,11 +845,14 @@ export class Autopilot {
         return { x: rack.at[0] + rack.normal[0] * 0.9, z: rack.at[2] + rack.normal[2] * 0.9, label: `${WEAPONS[rack.weapon].name} rack`, urgent };
       }
     }
+    // On the mission it buys the door that stands between it and the next
+    // objective, by the cheapest way there, and saves its scrap otherwise:
+    // every other door is a luxury.
+    const needed = this.mission ? this.doorToObjective() : null;
     for (const plan of DOOR_PLANS) {
       const door = world.door(plan.id);
       if (door.open || plan.cost === null || wallet.scrap < plan.cost) continue;
-      // (The mission needs the server hall and the power room; the door between them is a luxury.)
-      if (this.mission && plan.id === 'hallPower') continue;
+      if (this.mission && plan.id !== needed) continue;
       const near = reachable.has(plan.a) ? plan.a : reachable.has(plan.b) ? plan.b : null;
       if (!near) continue;
       // Stand a little way back from the door, on the side it can be reached from.

@@ -4,6 +4,7 @@
 
 import * as THREE from 'three';
 import { MELEE, SCRAP, type WeaponDef, type WeaponId } from '../config';
+import { settings } from '../core/settings';
 import { SHIELD_COLOR } from '../entities/robot/attachments';
 import type { WeaponKey } from '../sim/argus';
 import { resolveHit } from '../sim/armour';
@@ -194,8 +195,8 @@ export class Combat {
   private armourFeedback(robot: Robot, hit: { resisted: boolean; guardBroke: boolean; point: THREE.Vector3 }, direction: THREE.Vector3): void {
     if (hit.resisted) {
       robot.flashShield();
-      this.effects.shieldHit(hit.point, direction, _tint.setHex(SHIELD_COLOR[robot.shieldedAgainst ?? ''] ?? 0xffffff));
-      this.audio.play('shieldHit', { position: hit.point });
+      this.effects.deflect(hit.point, direction, _tint.setHex(SHIELD_COLOR[robot.shieldedAgainst ?? ''] ?? 0xffffff), settings.value.reducedMotion);
+      this.audio.play('deflect', { position: hit.point });
     }
     if (hit.guardBroke) {
       const at = robot.dropGuard(_end);

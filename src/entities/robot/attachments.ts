@@ -8,7 +8,11 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { addsLightOnly } from '../../render/glow';
+import { settings } from '../../core/settings';
 import type { WeaponKey } from '../../sim/argus';
+
+/** What the plates flare toward when they turn a shot. */
+const WHITE_HOT = new THREE.Color(7, 7.5, 8);
 
 /** Each weapon's shielding has its own colour, so the player can tell at a glance which gun a robot is proof against. */
 export const SHIELD_COLOR: Record<string, number> = {
@@ -75,8 +79,12 @@ function shieldPattern(): THREE.Texture {
 
 export interface Shield {
   object: THREE.Group;
-  /** Brightness, 1 at rest; raise it when the shielding turns a shot and let it fall back. */
-  setLevel(level: number): void;
+  /**
+   * Brightness, 1 at rest; and `flash`, 1 at the instant the shielding
+   * turns a shot, falling back to 0: the plates flare toward white and
+   * swell a little, so the hit shows on the robot as well as on the HUD.
+   */
+  setLevel(level: number, flash?: number): void;
   dispose(): void;
 }
 
@@ -98,8 +106,13 @@ export function createShield(weapon: WeaponKey, chest: THREE.Vector3): Shield {
   mesh.renderOrder = 8;
   addsLightOnly(mesh);
   object.add(mesh);
-  const setLevel = (level: number): void => {
-    material.color.copy(color).multiplyScalar(1.5 * level);
+  const calm = settings.value.reducedMotion;
+  const setLevel = (level: number, flash = 0): void => {
+    // (With flashing reduced the plates brighten less, and keep their colour.)
+    const flare = calm ? flash * 0.35 : flash;
+    material.color.copy(color).multiplyScalar(1.5 * level * (1 + flare * 4.5));
+    if (!calm) material.color.lerp(WHITE_HOT, flash * 0.55);
+    mesh.scale.setScalar(1 + flare * 0.1);
   };
   setLevel(1);
   return { object, setLevel, dispose: () => material.dispose() };

@@ -24,6 +24,15 @@ export class Player {
   pitch = 0;
   health = PLAYER.maxHealth;
   onGround = true;
+  /**
+   * The height of the ground the player last stood on. Solid things are
+   * tested against this, not against where a jump has lifted the feet to,
+   * so nothing taller than a step can be jumped onto or over. (It could
+   * be, once: a jump put the player on top of any barrel, crate or desk,
+   * and a cluster of barrels in a corner is wider than a robot's reach.
+   * Someone standing in the middle of one could not be hit by anything.)
+   */
+  private footing = 0;
 
   /** 0 = hip, 1 = fully aimed down sights. */
   aim = 0;
@@ -161,6 +170,7 @@ export class Player {
 
     const v = this.velocity;
     if (this.onGround) {
+      this.footing = this.position.y;
       // Friction, then a push toward the wished velocity.
       groundStep(v, wishX, wishZ, maxSpeed, { friction: PLAYER.groundFriction, accel: PLAYER.groundAccel }, dt);
       if (input.wasPressed('jump')) {
@@ -198,7 +208,8 @@ export class Player {
     const body = this.body;
     body.x = p.x;
     body.z = p.z;
-    body.feet = p.y;
+    // (See `footing`: a jump does not lift the player clear of anything.)
+    body.feet = Math.min(p.y, this.footing);
     body.head = p.y + PLAYER.height;
     resolveCircle(body, colliders, PLAYER.stepHeight);
     // Remove the part of the velocity that was pushing into the obstacle.
@@ -217,7 +228,7 @@ export class Player {
     p.x = body.x;
     p.z = body.z;
 
-    // Ground: the floor, or the top of a crate or barrier.
+    // Ground: the floor, or the top of something no taller than a step above where the player was standing.
     const ground = groundHeight(body, colliders, PLAYER.stepHeight);
     const wasAirborne = !this.onGround;
     if (p.y <= ground + 0.001 && v.y <= 0) {
@@ -229,6 +240,7 @@ export class Player {
       p.y = ground;
       v.y = 0;
       this.onGround = true;
+      this.footing = ground;
     } else if (p.y > ground + 0.02) {
       // Walked off an edge.
       this.onGround = false;

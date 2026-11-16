@@ -109,7 +109,7 @@ export const AREA_BOXES: Record<AreaId, { x0: number; x1: number; z0: number; z1
 
 export interface DoorPlan {
   id: 'lobbyHall' | 'lobbyPower' | 'hallPower' | 'hallCore' | 'lobbyDock' | 'hallDock' | 'hallLab' | 'powerLab';
-  /** The two areas it joins. */
+  /** The two areas it joins: first the one on its north or west side. */
   a: AreaId;
   b: AreaId;
   /** Scrap to open it, or null if it cannot be bought (the core is opened by the mission). */
@@ -136,9 +136,9 @@ export const DOOR_PLANS: DoorPlan[] = [
   { id: 'hallPower', a: 'hall', b: 'power', cost: DOORS.hallPower, along: 'z', at: HALL.x1 + WALL / 2, ...SERVICE_DOOR, label: 'Service Door' },
   { id: 'hallCore', a: 'hall', b: 'core', cost: null, along: 'x', at: HALL.z1 + WALL / 2, from: -2.7, to: 0.7, top: 3.4, label: 'Core' },
   // The goods door in the lobby's west wall, at the head of the passage to the dock.
-  { id: 'lobbyDock', a: 'lobby', b: 'dock', cost: DOORS.lobbyDock, along: 'z', at: LOBBY.x0 - WALL / 2, from: DOCK_PASSAGE.z0, to: DOCK_PASSAGE.z1, top: DOCK_PASSAGE.top, label: 'Loading Dock' },
+  { id: 'lobbyDock', a: 'dock', b: 'lobby', cost: DOORS.lobbyDock, along: 'z', at: LOBBY.x0 - WALL / 2, from: DOCK_PASSAGE.z0, to: DOCK_PASSAGE.z1, top: DOCK_PASSAGE.top, label: 'Loading Dock' },
   // The shutter between the server hall and the dock, where the hall's own dock opening used to be.
-  { id: 'hallDock', a: 'hall', b: 'dock', cost: DOORS.hallDock, along: 'z', at: HALL.x0 - WALL / 2, from: 15, to: 18, top: 3.0, label: 'Loading Dock' },
+  { id: 'hallDock', a: 'dock', b: 'hall', cost: DOORS.hallDock, along: 'z', at: HALL.x0 - WALL / 2, from: 15, to: 18, top: 3.0, label: 'Loading Dock' },
   // The lab's two doors: from the south end of the hall's east aisles, and from the corner of the power room.
   { id: 'hallLab', a: 'hall', b: 'lab', cost: DOORS.hallLab, along: 'z', at: HALL.x1 + WALL / 2, from: 17.9, to: 20.1, top: 2.6, label: 'Robotics Lab' },
   { id: 'powerLab', a: 'power', b: 'lab', cost: DOORS.powerLab, along: 'x', at: POWER.z1 + WALL / 2, from: 19.5, to: 21.7, top: 2.6, label: 'Robotics Lab', slides: -1 },

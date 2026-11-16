@@ -5,6 +5,7 @@ import './ui/style.css';
 import { PLAYER, QUALITY, WEAPONS } from './config';
 import { settings } from './core/settings';
 import { installDebugApi, type DebugTools } from './debug/debugApi';
+import { SHIELD_COLOR } from './entities/robot/attachments';
 import { Game } from './game/Game';
 import { accuracy, readBest, type RunStats } from './game/RunStats';
 import { KEY_IDS } from './sim/mission';
@@ -37,6 +38,7 @@ async function boot(): Promise<void> {
         hud.announcer.dismiss();
         hud.dismissArgus();
       }, freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
+    window.__HO!.analysisBanner = { hold: (stage) => hud.holdAnalysis(stage), showing: () => hud.argusShowing.analysis };
   }
 
   // Phones and tablets get the scene and a friendly note instead of a game
@@ -59,7 +61,12 @@ async function boot(): Promise<void> {
     if (automatic) hud.showToast(`Graphics lowered to ${QUALITY[level].label} to keep the game smooth`);
   };
   game.onHit = (hit) => {
-    hud.hit(hit.weakPoint, hit.killed, hit.guardBroke ? 'guardBroke' : hit.resisted ? 'resisted' : hit.guarded ? 'guarded' : hit.plated ? 'plated' : null);
+    hud.hit(
+      hit.weakPoint,
+      hit.killed,
+      hit.guardBroke ? 'guardBroke' : hit.resisted ? 'resisted' : hit.guarded ? 'guarded' : hit.plated ? 'plated' : null,
+      hit.resisted ? (SHIELD_COLOR[hit.robot.shieldedAgainst ?? ''] ?? null) : null,
+    );
     hud.scrapChange(hit.scrap);
   };
   game.onAnalysis = (analysis) => hud.analysis(analysis);

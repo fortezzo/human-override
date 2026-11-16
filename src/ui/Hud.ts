@@ -78,6 +78,18 @@ export interface HudAnalysis {
 export type HitNote = 'resisted' | 'plated' | 'guarded' | 'guardBroke';
 const HIT_NOTES: Record<HitNote, string> = { resisted: 'RESISTED', plated: 'ARMOUR', guarded: 'PLATE', guardBroke: 'PLATE OFF' };
 
+/**
+ * ARGUS's mark, as it is painted on the facility's walls: an almond eye in
+ * a ring broken into three arcs. (The same drawing as drawArgusEye in
+ * world/build/SignAtlas.ts, as a vector so that it is sharp at any size.)
+ */
+const EYE_MARK =
+  '<svg class="moment-eye" viewBox="-50 -50 100 100" aria-hidden="true">' +
+  '<circle class="ring" r="46" stroke-dasharray="81.63 14.72" transform="rotate(-80.83)"/>' +
+  '<path class="lid" d="M-33 0Q0-31 33 0Q0 31-33 0Z"/>' +
+  '<circle class="iris" r="10"/>' +
+  '</svg>';
+
 const MAX_MARKERS = 3;
 
 export class Hud {
@@ -128,6 +140,18 @@ export class Hud {
   // clock can be stopped or stepped by the debug tools; what is on screen
   // for a person to read should not be).
   private analysisUntil = 0;
+  /** The analysis as it arrives: large, near the top centre. */
+  private readonly momentPanel: HTMLElement;
+  private readonly momentRound: HTMLElement;
+  private readonly momentLines: HTMLElement;
+  /** When the large analysis is due to shrink into the corner (0 = it is not up). */
+  private momentUntil = 0;
+  /** An analysis that arrived while a round or mission announcement was on screen: shown when that has gone. */
+  private waitingAnalysis: HudAnalysis | null = null;
+  /** Mission notices that arrived while the large analysis was up: shown when it has shrunk. */
+  private readonly heldNotices: Array<[string, string]> = [];
+  /** A stage of the analysis held on screen (for screenshots), or null when it runs to its own clock. */
+  private heldStage: 'moment' | 'corner' | null = null;
   private remarkUntil = 0;
   private hitNoteUntil = 0;
 
@@ -236,6 +260,22 @@ export class Hud {
     this.remarkLine = el('div', 'argus-remark', argus);
     el('span', 'argus-remark-name', this.remarkLine, 'ARGUS');
     this.remarkText = el('span', 'argus-remark-text', this.remarkLine);
+
+    // The analysis is the one idea the game is built around, so it arrives
+    // as a moment: large, near the top centre, under ARGUS's mark, for
+    // about two seconds. Then it shrinks into the corner above, where it
+    // stays for the rest of the lull. It is lettering on a dark band: it
+    // never stops the game, and it ends well above the crosshair.
+    // (Two boxes: the outer one is moved and faded when the moment ends,
+    // the inner one is what arrives. An element cannot do both: a browser
+    // will not start a transition on something an animation has just had.)
+    this.momentPanel = el('div', 'argus-moment', this.root);
+    const band = el('div', 'moment-band', this.momentPanel);
+    const momentHead = el('div', 'moment-head', band);
+    momentHead.insertAdjacentHTML('beforeend', EYE_MARK);
+    el('span', 'moment-title', momentHead, 'ARGUS ANALYSIS');
+    this.momentRound = el('span', 'moment-round', momentHead);
+    this.momentLines = el('div', 'moment-lines', band);
   }
 
   setVisible(visible: boolean): void {
@@ -256,6 +296,11 @@ export class Hud {
     this.hitNote.classList.remove('show');
     this.analysisUntil = 0;
     this.analysisPanel.classList.remove('show');
+    this.momentUntil = 0;
+    this.momentPanel.className = 'argus-moment';
+    this.waitingAnalysis = null;
+    this.heldNotices.length = 0;
+    this.heldStage = null;
     this.remarkUntil = 0;
     this.remarkLine.classList.remove('show');
   }
@@ -264,41 +309,115 @@ export class Hud {
    * A shot landed. `weak` = weak-point hit, `kill` = it destroyed the
    * robot. `note` says why it did less than it might have, if it did: the
    * robot's shielding, a heavy's plating, or the plate over a weak point.
+   * `tint` is the colour of the shielding that turned it, if any did.
    */
-  hit(weak: boolean, kill: boolean, note: HitNote | null = null): void {
+  hit(weak: boolean, kill: boolean, note: HitNote | null = null, tint: number | null = null): void {
     this.hitTimer = kill ? 0.32 : 0.16;
     this.hitMarker.className = `hitmarker show${weak ? ' weak' : ''}${kill ? ' kill' : ''}${note && !kill ? ' dull' : ''}`;
     // Restart the pop animation.
     void this.hitMarker.offsetWidth;
     this.hitMarker.classList.add('pop');
     if (note) {
+      // The word snaps in the first time. While it is still up (a burst of
+      // automatic fire into the same plating) it simply stays: a word that
+      // jumped with every round would strobe.
+      const now = performance.now();
+      const again = this.hitNoteUntil > now && this.hitNote.textContent === HIT_NOTES[note];
       this.hitNote.textContent = HIT_NOTES[note];
-      this.hitNote.className = `hit-note show ${note}`;
-      this.hitNoteUntil = performance.now() + (note === 'guardBroke' ? 1100 : 550);
+      // (RESISTED is written in the colour of the plating that did it.)
+      this.hitNote.style.setProperty('--tint', tint === null ? '#9fc4ff' : `#${tint.toString(16).padStart(6, '0')}`);
+      this.hitNote.className = `hit-note show ${note}${settings.value.reducedMotion ? ' calm' : ''}`;
+      if (!again) void this.hitNote.offsetWidth;
+      this.hitNote.classList.add('pop');
+      this.hitNoteUntil = now + (note === 'guardBroke' ? 1100 : note === 'resisted' ? 850 : 550);
     }
   }
 
-  /** ARGUS has finished its analysis of the round: show its banner. The game carries on behind it. */
+  /**
+   * ARGUS has finished its analysis of the round. It is shown large, near
+   * the top centre, for a couple of seconds; then it shrinks into ARGUS's
+   * corner and stays there until the next round begins. The game carries
+   * on behind it throughout.
+   */
   analysis(analysis: HudAnalysis): void {
-    this.analysisRound.textContent = `ROUND ${analysis.round}`;
-    this.analysisLines.textContent = '';
-    analysis.lines.forEach((line, i) => {
-      const row = el('div', 'argus-line', this.analysisLines);
-      row.style.setProperty('--i', String(i));
-      const seen = el('div', 'argus-observed', row);
-      el('b', '', seen, 'OBSERVED');
-      el('span', '', seen, line.observed);
-      // "Adapting: rifle-resistant plating." becomes a label and what follows it.
-      const colon = line.adapting.indexOf(':');
-      const doing = el('div', `argus-adapting ${line.adapting.slice(0, colon).toLowerCase()}`, row);
-      el('b', '', doing, line.adapting.slice(0, colon).toUpperCase());
-      el('span', '', doing, line.adapting.slice(colon + 1).trim());
-    });
-    this.analysisPanel.classList.toggle('calm', settings.value.reducedMotion);
+    // (One thing at a time at the top of the view: it waits for a round or mission announcement to finish.)
+    if (this.announcer.status.showing !== 'none') {
+      this.waitingAnalysis = analysis;
+      return;
+    }
+    this.waitingAnalysis = null;
+    // The same words twice over: large for the moment, small for the corner.
+    for (const [prefix, round, lines] of [
+      ['argus', this.analysisRound, this.analysisLines],
+      ['moment', this.momentRound, this.momentLines],
+    ] as const) {
+      round.textContent = `ROUND ${analysis.round}`;
+      lines.textContent = '';
+      analysis.lines.forEach((line, i) => {
+        const row = el('div', `${prefix}-line`, lines);
+        row.style.setProperty('--i', String(i));
+        const seen = el('div', `${prefix}-observed`, row);
+        el('b', '', seen, 'OBSERVED');
+        el('span', '', seen, line.observed);
+        // "Adapting: rifle-resistant plating." becomes a label and what follows it.
+        const colon = line.adapting.indexOf(':');
+        const doing = el('div', `${prefix}-adapting ${line.adapting.slice(0, colon).toLowerCase()}`, row);
+        el('b', '', doing, line.adapting.slice(0, colon).toUpperCase());
+        el('span', '', doing, line.adapting.slice(colon + 1).trim());
+      });
+    }
+    const calm = settings.value.reducedMotion;
+    const now = performance.now();
+    this.analysisPanel.classList.remove('show', 'docked');
+    this.momentPanel.className = `argus-moment${calm ? ' calm' : ''}${analysis.lines.length > 2 ? ' many' : ''}`;
+    void this.momentPanel.offsetWidth;
+    this.momentPanel.classList.add('show');
+    this.momentUntil = now + ARGUS.momentSeconds * 1000;
+    this.analysisUntil = now + ARGUS.bannerSeconds * 1000;
+  }
+
+  /** The moment is over: the large analysis flies to ARGUS's corner as it fades, and the small one there takes its place. */
+  private dockAnalysis(): void {
+    this.momentUntil = 0;
+    const calm = settings.value.reducedMotion;
+    const from = this.momentPanel.getBoundingClientRect();
+    const to = this.analysisPanel.getBoundingClientRect();
+    const style = this.momentPanel.style;
+    style.setProperty('--dx', `${(to.left + to.width / 2 - (from.left + from.width / 2)).toFixed(1)}px`);
+    style.setProperty('--dy', `${(to.top + to.height / 2 - (from.top + from.height / 2)).toFixed(1)}px`);
+    style.setProperty('--s', (from.width > 0 ? Math.min(1, to.width / from.width) : 0.5).toFixed(3));
+    this.momentPanel.classList.remove('show');
+    this.momentPanel.classList.add('leave');
+    this.analysisPanel.classList.toggle('calm', calm);
     this.analysisPanel.classList.remove('show');
     void this.analysisPanel.offsetWidth;
-    this.analysisPanel.classList.add('show');
-    this.analysisUntil = performance.now() + ARGUS.bannerSeconds * 1000;
+    this.analysisPanel.classList.add('show', 'docked');
+    for (const [title, detail] of this.heldNotices.splice(0)) this.announcer.notice(title, detail);
+  }
+
+  /** Take the analysis off the screen, whichever stage it is at. */
+  private clearAnalysis(): void {
+    this.analysisUntil = 0;
+    this.momentUntil = 0;
+    this.waitingAnalysis = null;
+    this.momentPanel.classList.remove('show', 'leave');
+    this.analysisPanel.classList.remove('show');
+    for (const [title, detail] of this.heldNotices.splice(0)) this.announcer.notice(title, detail);
+  }
+
+  /**
+   * Hold the analysis at one of its two stages, or let it go (for staged
+   * screenshots and the checks: its own clock is real time, and they run
+   * the game faster or slower than that).
+   */
+  holdAnalysis(stage: 'moment' | 'corner' | null): void {
+    this.heldStage = stage;
+    if (stage === null) return;
+    if (this.waitingAnalysis) {
+      this.announcer.dismiss();
+      this.analysis(this.waitingAnalysis);
+    }
+    if (stage === 'corner' && this.momentUntil) this.dockAnalysis();
   }
 
   /** ARGUS passes a remark. */
@@ -314,15 +433,16 @@ export class Hud {
 
   /** Take down ARGUS's banner and remark at once (for staged screenshots). */
   dismissArgus(): void {
-    this.analysisUntil = 0;
+    this.heldStage = null;
+    this.clearAnalysis();
     this.remarkUntil = 0;
-    this.analysisPanel.classList.remove('show');
     this.remarkLine.classList.remove('show');
   }
 
-  /** What ARGUS has on screen right now (for the checks). */
-  get argusShowing(): { analysis: boolean; remark: string | null } {
-    return { analysis: this.analysisUntil > 0, remark: this.remarkUntil > 0 ? this.remarkText.textContent : null };
+  /** What ARGUS has on screen right now (for the checks): the analysis large ('moment'), in its corner, or not at all; and its remark. */
+  get argusShowing(): { analysis: 'moment' | 'corner' | 'waiting' | null; remark: string | null } {
+    const analysis = this.waitingAnalysis ? 'waiting' : this.momentUntil > 0 ? 'moment' : this.analysisUntil > 0 ? 'corner' : null;
+    return { analysis, remark: this.remarkUntil > 0 ? this.remarkText.textContent : null };
   }
 
   /** Scrap was earned (positive) or spent (negative): a number floats up beside the crosshair. */
@@ -345,6 +465,8 @@ export class Hud {
 
   /** A round has begun, with this many robots on their way. */
   roundStarted(round: number, robots: number): void {
+    // The lull is over, and ARGUS's analysis with it. (What it decided is on the robots now.)
+    if (this.heldStage === null) this.clearAnalysis();
     this.announcer.begin(round, robots);
   }
 
@@ -355,7 +477,9 @@ export class Hud {
 
   /** Something in the mission has happened: a line across the top of the view. */
   notice(title: string, detail: string): void {
-    this.announcer.notice(title, detail);
+    // (One thing at a time at the top of the view: it waits for the large analysis to shrink.)
+    if (this.momentUntil) this.heldNotices.push([title, detail]);
+    else this.announcer.notice(title, detail);
   }
 
   showToast(text: string, seconds = 4): void {
@@ -559,9 +683,10 @@ export class Hud {
       this.hitNoteUntil = 0;
       this.hitNote.classList.remove('show');
     }
-    if (this.analysisUntil && now >= this.analysisUntil) {
-      this.analysisUntil = 0;
-      this.analysisPanel.classList.remove('show');
+    if (this.waitingAnalysis && this.announcer.status.showing === 'none') this.analysis(this.waitingAnalysis);
+    if (this.heldStage === null) {
+      if (this.momentUntil && now >= this.momentUntil) this.dockAnalysis();
+      if (this.analysisUntil && now >= this.analysisUntil) this.clearAnalysis();
     }
     if (this.remarkUntil && now >= this.remarkUntil) {
       this.remarkUntil = 0;

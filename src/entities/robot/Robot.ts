@@ -330,8 +330,8 @@ export class Robot {
     const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false, primed: false };
     const flies = this.model.flies;
     if (this.shield) {
-      this.shieldFlash = damp(this.shieldFlash, 0, 7, dt);
-      this.shield.setLevel(this.alive ? 1 + this.shieldFlash * 2.2 + 0.12 * Math.sin(this.time * 5) : 0);
+      this.shieldFlash = damp(this.shieldFlash, 0, 5.5, dt);
+      this.shield.setLevel(this.alive ? 1 + 0.12 * Math.sin(this.time * 5) : 0, this.alive ? this.shieldFlash : 0);
     }
     const p = this.root.position;
     const dx = target.x - p.x;

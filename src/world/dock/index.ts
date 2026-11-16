@@ -330,7 +330,11 @@ export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild
   // fits through and a robot does not: against a wall means touching it.)
   container(b, atlas, 'containerRust', [-26.2, 0, z0], 'x', 6.06, 'ARGU 482913 0');
   container(b, atlas, 'containerBlue', [-25.6, BOX.height, z0 + 0.02], 'x', 6.06, 'SITU 204417 6', 'near');
-  container(b, atlas, 'containerGreen', [-30.9, 0, z1 - BOX.width], 'x', 6.06, 'OVRD 771302 4', 'far');
+  // (This one's west end meets the barrels in the corner. It once stopped
+  // 80 cm short of them, which made a slot between the two that the player
+  // fitted into and a robot did not: the check that stands the player
+  // everywhere on the map found it.)
+  container(b, atlas, 'containerGreen', [x0 + 1.8, 0, z1 - BOX.width], 'x', 6.06, 'OVRD 771302 4', 'far');
   container(b, atlas, 'containerOchre', [-16.6, 0, 7.4], 'z', 6.06, 'ARGU 105586 2', 'near');
   container(b, atlas, 'containerBlue', [-24.2, 0, 19.9], 'x', 6.06, 'SITU 330951 8', 'near');
   container(b, atlas, 'containerRust', [-23.7, BOX.height, 19.92], 'x', 6.06, 'KEYS 000004 1', 'far');
@@ -348,6 +352,7 @@ export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild
   b.prop('Barrel_01', { at: [x0 + 0.5, 0, z1 - 0.5], rotY: 0.6 });
   b.prop('barrel_03', { at: [x0 + 1.3, 0, z1 - 0.48], rotY: 1.9 });
   b.prop('Barrel_01', { at: [x0 + 0.52, 0, z1 - 1.3], rotY: 2.4 });
+  // (The corner they stand in is solid as far as the container's end.)
   b.blocker([x0, 0, z1 - 1.8], [x0 + 1.8, 1.1, z1]);
   b.prop('metal_tool_chest', { at: [x0 + 0.38, 0, 11.0], rotY: HALF_PI });
   b.prop('utility_box_01', { at: [-20.4, 0, z1 - 0.26], rotY: Math.PI });

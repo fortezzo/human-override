@@ -134,8 +134,13 @@ export class AudioEngine {
     }
   }
 
+  /** The sounds asked for lately, oldest first (kept short; the checks read it to see that a thing was heard as well as seen). */
+  readonly asked: SoundId[] = [];
+
   /** Play a one-shot sound. */
   play(id: SoundId, options: PlayOptions = {}): void {
+    this.asked.push(id);
+    if (this.asked.length > 200) this.asked.splice(0, 100);
     if (!this.assets || this.context.state !== 'running') return;
     const def = SOUNDS[id] as (typeof SOUNDS)[SoundId] & { pitchJitter?: number; reverb?: number; maxVoices?: number };
     const active = this.voices.get(id) ?? 0;

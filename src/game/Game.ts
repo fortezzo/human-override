@@ -1031,8 +1031,11 @@ export class Game {
     const reach = (x: number, z: number): number => 1 - Math.hypot(x - centre.x, z - centre.z) / rule.radius;
     const near = reach(player.position.x, player.position.z);
     player.addShake(Math.max(0, 0.35 + near * 0.9));
-    // (Not through a wall: the blast needs a clear line to the player.)
-    if (near > 0 && this.sight.clearLineTo(centre)) this.hurtPlayer(rule.damage * near, source);
+    // (Not through a wall: the blast needs a clear line to the player. But
+    // it is not stopped by a barrel or a crate: a line from above head
+    // height over where it went off counts as well, so low cover is none.)
+    const above = this.blastAt.clone().setY(Math.max(centre.y, 1.7));
+    if (near > 0 && (this.sight.clearLineTo(centre) || this.sight.clearLineTo(above))) this.hurtPlayer(rule.damage * near, source);
 
     const byPlayer = !source.selfDestructed;
     const ordinary = this.director.rounds.plan.health;

@@ -304,12 +304,13 @@ export const SCRAP = {
  */
 export const MISSION = {
   /**
-   * The Custodian arrives with the first round numbered this or higher
-   * that starts with the power on. (Round 8: late enough that a focused
-   * player, who has the other two keys by then, reaches the final stand
-   * around round 10.)
+   * The Custodian comes for the last key: with the first round to start
+   * once the player holds the other two, and never before this round. (So
+   * the mission's length follows the player. A fast one meets it in round
+   * 8 and can be at the final stand before round 10; a slower one meets it
+   * the round after their second key, whenever that is.)
    */
-  custodianFromRound: 11,
+  custodianFromRound: 8,
   /** Seconds the ground round the uplink has to be held, and how far from it that ground reaches (metres). */
   uplinkSeconds: 60,
   uplinkRadius: 8.5,
@@ -474,8 +475,15 @@ export const ARGUS = {
   /** Seconds between its remarks, at the least, and how long one stays on screen. */
   remarkGap: 18,
   remarkSeconds: 5,
-  /** Seconds the analysis banner stays up. */
-  bannerSeconds: 8,
+  /**
+   * The analysis arrives as a moment: large, near the top centre of the
+   * view, for this many seconds (a beat for it to arrive, then about two
+   * seconds held). Then it shrinks into ARGUS's corner of the screen, and
+   * stays there until the next round begins; `bannerSeconds` is only the
+   * longest it may stay if no round does.
+   */
+  momentSeconds: 2.6,
+  bannerSeconds: 20,
 
   /** Shielding: this share of the round's ordinary robots carry it, and the weapon it answers does this share of its damage to them. */
   shielding: { share: 0.4, factor: 0.5 },
