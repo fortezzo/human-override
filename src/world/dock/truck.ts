@@ -89,7 +89,7 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
     const offset = inner ? half - 0.5 : half - 0.17;
     const at: Vec3 = [x, TYRE, z + side * offset];
     // (They cast no shadow of their own: they stand in the shadow of the truck, and ten tyres drawn again for
-    // every lamp that casts one were a sixth of everything the dock drew.)
+    // every lamp that casts one were 36,000 triangles more in every frame of the dock, for nothing that showed.)
     b.prop('old_tyre', { at, scale: [TYRE / 0.3, TYRE / 0.3, 1.85], collide: false, cast: false, kind: 'soft' });
     // The rim: a dished steel disc with its hub and a ring of nuts, on the side that shows.
     drum(b, 'steelPlate', at, 0.31, 0.24, 'z', 18, false);
