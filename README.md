@@ -4,22 +4,24 @@
 
 A first-person survival shooter that runs in the browser. One human holds a facility against endless rounds of AI-controlled robots while fighting through to the only manual kill switch for ARGUS, a rogue AI that has taken over the world's networks. ARGUS studies how you play, changes its tactics between rounds, and tells you what it noticed. Inspired by classic round-based survival modes; every name, place and design in it is original.
 
-> **Status: Stage 4 of 5, the full economy.** Everything in the design is now in the game: a map of six areas in three loops, rounds that grow, the mission from first breaker to kill switch with endless rounds after it, ARGUS studying how you play, and now everything scrap can buy. There is a station in every area (four boosts, a crate of prototype weapons, a bench that overclocks the gun in your hands), shutters to repair, timed pickups, grenades, a swarm of drones every fifth round, and a weapon that turns ARGUS's robots against each other. What is left is polish. [PROGRESS.md](PROGRESS.md) tracks exactly what exists, what was decided and what is still rough.
+> **Status: complete (Stage 5 of 5, polish).** Everything in the design is in the game: a map of six areas in three loops, rounds that grow, the mission from first breaker to kill switch with endless rounds after it, ARGUS studying how you play, and everything scrap can buy. The last stage polished it: a first minute that teaches itself, a jump that clears anything waist-high without opening anywhere the robots cannot follow, a fail-safe you cannot miss, and the things a public link needs. [PROGRESS.md](PROGRESS.md) records what exists, what was decided and what is still rough.
 
-![Round eight: a full horde comes through the breach](media/stage-4/05-horde.jpg)
+![Round eight: a full horde comes through the breach](media/stage-5/05-horde.jpg)
 
 | | |
 | --- | --- |
-| ![A Boost Station: more health, beside the breaker that powers it](media/stage-4/48-boost-station-carapace.jpg) | ![The Prototype Crate, holding out the one weapon found nowhere else](media/stage-4/54-prototype-crate.jpg) |
-| ![The Turncoat's beam turns a robot to your side](media/stage-4/55-turncoat-beam.jpg) | ![Timed pickups on the floor; boosts and pickup timers on the HUD](media/stage-4/57-pickups-and-timers.jpg) |
-| ![The entrance shutter holding, with a robot beating on the other side of it](media/stage-4/58-shutter-under-attack.jpg) | ![Every fifth round is a swarm of drones](media/stage-4/61-swarm-round.jpg) |
-| ![ARGUS's analysis between rounds: what it saw, and what it is changing](media/stage-4/31-argus-analysis.jpg) | ![A shot turned by plating that resists the carbine](media/stage-4/32b-resisted-hit.jpg) |
-| ![The loading dock: containers, a truck in its bay, sodium lamps](media/stage-4/38-loading-dock.jpg) | ![The robotics lab: an assembly cell, torsos on the line, the key cage](media/stage-4/42-robotics-lab.jpg) |
-| ![The special robots: a bomber running ahead of a heavy, drones overhead](media/stage-4/33-special-robots.jpg) | ![The heavy beside one of the horde: the same machine in armour made for it, its reactor burning in its chest](media/stage-4/35b-heavy-beside-a-drudge.jpg) |
-| ![A bomber shot while it is still among its own](media/stage-4/34-bomber-blast.jpg) | ![ARGUS's profile of you, at the end of a run](media/stage-4/37-argus-profile.jpg) |
-| ![The final stand: ARGUS's Proxy comes into the core](media/stage-4/26-mission-final-stand.jpg) | ![The Custodian, carrying an override key](media/stage-4/25-mission-custodian.jpg) |
-| ![The kill switch, armed](media/stage-4/27-mission-kill-switch.jpg) | ![ARGUS goes dark and every robot powers down](media/stage-4/28-mission-powered-down.jpg) |
-| ![A new round is announced](media/stage-4/19-round-announcement.jpg) | ![Humanity saved](media/stage-4/29-humanity-saved.jpg) |
+| ![A Boost Station: more health, beside the breaker that powers it](media/stage-5/48-boost-station-carapace.jpg) | ![The Prototype Crate, holding out the one weapon found nowhere else](media/stage-5/54-prototype-crate.jpg) |
+| ![The Turncoat's beam turns a robot to your side](media/stage-5/55-turncoat-beam.jpg) | ![Timed pickups on the floor; boosts and pickup timers on the HUD](media/stage-5/57-pickups-and-timers.jpg) |
+| ![The entrance shutter holding, with a robot beating on the other side of it](media/stage-5/58-shutter-under-attack.jpg) | ![Every fifth round is a swarm of drones](media/stage-5/61-swarm-round.jpg) |
+| ![ARGUS's analysis between rounds: what it saw, and what it is changing](media/stage-5/31-argus-analysis.jpg) | ![A shot turned by plating that resists the carbine](media/stage-5/32b-resisted-hit.jpg) |
+| ![The loading dock: containers, a truck in its bay, sodium lamps](media/stage-5/38-loading-dock.jpg) | ![The robotics lab: an assembly cell, torsos on the line, the key cage](media/stage-5/42-robotics-lab.jpg) |
+| ![The special robots: a bomber running ahead of a heavy, drones overhead](media/stage-5/33-special-robots.jpg) | ![The heavy beside one of the horde: the same machine in armour made for it, its reactor burning in its chest](media/stage-5/35b-heavy-beside-a-drudge.jpg) |
+| ![A bomber shot while it is still among its own](media/stage-5/34-bomber-blast.jpg) | ![ARGUS's profile of you, at the end of a run](media/stage-5/37-argus-profile.jpg) |
+| ![The final stand: ARGUS's Proxy comes into the core](media/stage-5/26-mission-final-stand.jpg) | ![The Custodian, carrying an override key](media/stage-5/25-mission-custodian.jpg) |
+| ![The kill switch, armed](media/stage-5/27-mission-kill-switch.jpg) | ![ARGUS goes dark and every robot powers down](media/stage-5/28-mission-powered-down.jpg) |
+| ![A new round is announced](media/stage-5/19-round-announcement.jpg) | ![Humanity saved](media/stage-5/29-humanity-saved.jpg) |
+| ![A new player's first hint](media/stage-5/65-first-hint.jpg) | ![The fail-safe: down, the world slowed, a flat line](media/stage-5/67-failsafe-down.jpg) |
+| ![The fail-safe fires](media/stage-5/68-failsafe-engaged.jpg) | ![Over the fence: inside the lab's assembly cell, the robots coming in by its gateway](media/stage-5/69-inside-the-fence.jpg) |
 
 ## Play it
 
@@ -30,7 +32,9 @@ npm install
 npm run dev
 ```
 
-Your browser opens the game. Click **PLAY**, or **HOW TO PLAY** first if this kind of game is new to you. It needs a mouse and keyboard; on a phone it shows the title scene and a friendly note instead.
+Your browser opens the game. Click **PLAY**: the first rounds teach the basics with short hints that go away as you do what they say. **HOW TO PLAY** has five lines to start with and the rest for when you want it. It needs a mouse and keyboard; on a phone it shows the title scene and a friendly note instead.
+
+To put it on the web, run `npm run build` and publish the `dist` folder as it is: a static site with relative paths, which works from any address. Before that build, put the address it will have on a line in [`site-address.txt`](site-address.txt), so that the picture shown when the link is shared can be found (LinkedIn and the rest want its full address).
 
 ## Controls
 
@@ -46,15 +50,16 @@ Your browser opens the game. Click **PLAY**, or **HOW TO PLAY** first if this ki
 | F | Use what the prompt offers: buy, open, take, repair, start, pull |
 | 1, 2 or the mouse wheel | Switch weapon |
 | Shift | Sprint (uses stamina) |
-| Space | Jump |
+| Space | Jump, onto or over anything up to waist height |
 | Esc | Pause, settings, how to play and credits |
 | M | Mute |
 
-Graphics quality is chosen automatically and steps down by itself if the frame rate drops. Settings (from the start screen or the pause menu) let you pick a level yourself and set mouse sensitivity, brightness, volume, and reduced screen shake and flashing. They are remembered in your browser.
+Graphics quality is chosen automatically and steps down by itself if the frame rate drops. Settings (from the start screen or the pause menu) let you pick a level yourself and set mouse sensitivity, brightness, volume, reduced screen shake and flashing, whether a frame-rate counter is shown (it is not, unless you ask) and whether the hints for new players are. They are remembered in your browser.
 
 ## How a run goes
 
-- You start in the security lobby with a sidearm, two grenades and no scrap. A few seconds later round 1 is beating on the entrance shutter, and then it is through.
+- You start in the security lobby with a sidearm, two grenades and no scrap. A few seconds later round 1 is at the entrance shutter, which has taken a beating already: one blow and it is forced, and the first robot is indoors about eight seconds in.
+- **The first minute teaches itself.** One short hint at a time (move, fire, aim, jump, follow the marker, and, once you have the scrap, how to buy), each gone the moment you have done it and never shown for something you had already done.
 - **Scrap** is the currency: 10 for a hit, 60 for a kill, 100 for a kill through the head, 130 for a melee kill.
 - Spend it at **wall racks** (a shotgun in the lobby and another in the robotics lab for 750, a carbine in the server hall and another in the loading dock for 1500, ammunition for either, sidearm ammunition for 100) and on **doors** (750 to 1250) that open up the server hall, the power room, the loading dock and the robotics lab. You carry two weapons.
 - Every round sends more robots, tougher and faster. From round 5 some of them run, and by round 14 the runners nearly match your sprint. Sprinting drains a **stamina** bar, so running buys time, not safety. Open more of the map and they find more ways in: the loading dock's truck bays, the lab's assembly line, a breach in the power room wall, ceiling vents. You will never see one appear: they come from behind cover outside, or drop from vents you are not watching.
@@ -64,8 +69,8 @@ Graphics quality is chosen automatically and steps down by itself if the frame r
 - **Timed pickups.** A destroyed robot sometimes leaves one: Full Resupply, Overload (one-hit kills for 20 seconds), EMP Blast (every robot on the map destroyed), Double Scrap (30 seconds) or Lockdown (every shutter repaired). Walk into it.
 - **Grenades.** G throws one; you are handed another each round and can carry four.
 - **Every fifth round is a swarm**: fast drones and nothing else, ending with a Full Resupply.
-- A robot's blow takes a fifth of your health, and a crowd cannot land blows faster than one every six tenths of a second, so there is time to break out of it. Health comes back if you stay out of reach for three seconds. When it runs out, the run is over and the game shows how far you got.
-- Nowhere is safe. Space jumps, but not onto or over anything taller than a step: every place you can stand is a place a robot can reach.
+- A robot's blow takes a fifth of your health, and a crowd cannot land blows faster than one every six tenths of a second, so there is time to break out of it. Health comes back if you stay out of reach for three seconds. When it runs out and you are carrying the **fail-safe**, you go down, the world slows and drains of colour for a second, and it brings you back; without one, the run is over and the game shows how far you got.
+- **Space jumps** onto or over anything up to waist height: the concrete barriers, drums, crates, desks, the fence round the lab's assembly cell. Anything taller (racks, containers, the truck) stays unclimbable. Robots do not jump, and nowhere is safe all the same: every place you can stand, on top of something or fenced in, is a place a robot can reach and a bomber's blast can find.
 
 ## The mission: save humanity
 
@@ -102,20 +107,15 @@ ARGUS also passes remarks while you play, and when the run ends it offers **its 
 - **Six areas** joined in three loops: the security lobby, a server hall of blinking racks, a power room running on emergency lamps, a loading dock under sodium lamps (shipping containers, a truck backed into its bay; the biggest open space on the map), a robotics lab where ARGUS builds its machines (assembly arms over a half-built unit, torsos hanging on the line), and the core where ARGUS's eye watches over the kill switch.
 - **Robots**: a hunched, armor-plated machine with a glowing visor, built in code on a motion-captured skeleton, with two elites (the Custodian and the Proxy) and three specials (a flying drone, a bomber and a heavy in armour made for it, with a reactor burning in its chest) built on the same frame. They find their way around obstacles and each other, hurry in from outside, drop from vents, attack, flinch and stagger when hit, take extra damage at their weak point, and break apart into scrap and sparks. Up to 24 at once.
 - **The economy**: six stations, one to an area (four boosts, the Overclock Bench, the Prototype Crate); five roller shutters that robots batter down and you can run back up; five timed pickups; grenades; swarm rounds. Nothing in it is a menu: every purchase is a thing in the world you walk up to.
-- **Weapons**: a sidearm, a shotgun that fires nine pellets a shell, an automatic carbine with a reflex sight whose reticle stays on the point of aim, the Turncoat (a beam that turns a robot to your side), grenades, and a melee jab. Any gun can be overclocked four times at the bench. Recoil, spread, tracers, muzzle flashes that light the room, ejected casings, bullet holes and sparks on whatever is hit.
+- **Weapons**: a sidearm, a shotgun that fires nine pellets a shell, an automatic carbine with a reflex sight whose reticle stays on the point of aim, the Turncoat (a lab prototype, all frame and wiring, whose beam turns a robot to your side), grenades, and a melee jab. Any gun can be overclocked four times at the bench. Recoil, spread, tracers, muzzle flashes that light the room, ejected casings, bullet holes and sparks on whatever is hit.
 - **The mission**: a breaker, a key cage, an uplink to defend, two elite robots, a final stand, an ending, and endless play after it.
 - **ARGUS**: tracking of four habits, four visible counters, the analysis banner, remarks, and the end-of-run profile card.
 - **A round announcement** timed to its sound: the number snaps in behind a scan line, holds, and flies to the round counter. It respects the reduced-flashing setting.
 - **Lighting and atmosphere**: warm pools from old pendant lamps against a hard cold floodlight from the yard, red emergency lamps, fog, light shafts, drifting dust, real-time shadows, reflections baked from each room, ambient occlusion, bloom, a filmic grade and film grain.
-- **Sound**: 114 layered recorded sounds placed in 3D, a room reverb, and a low ambient and music bed.
+- **Sound**: 114 layered recorded sounds placed in 3D, a room reverb, and a low ambient and music bed that builds through each round.
 - **Four quality levels** from integrated graphics to a gaming GPU, equally bright at every level, with the same robots and rules at every level.
-- **Screens**: a title over the live map, how to play (written for someone new to this kind of game), settings, pause, credits, game over, HUMANITY SAVED, and ARGUS's profile of you.
-
-## What is coming
-
-Built stage by stage, each one played and approved before the next begins:
-
-5. **Polish**: no new features. Feel, menus and HUD, balance, performance, loading time, a link preview, and final docs.
+- **Screens**: a title over the live map, how to play (written for someone new to this kind of game, with a five-line quick start), settings, pause, credits, game over, HUMANITY SAVED, and ARGUS's profile of you.
+- **A public link's needs**: a page title and description, the tags other sites read when the link is shared, a preview picture taken from the game itself, and icons.
 
 ## How it is put together
 
@@ -132,7 +132,7 @@ Built stage by stage, each one played and approved before the next begins:
 | `src/ui/` | HUD, the round announcement, ARGUS's banner and profile card, and menus |
 | `src/debug/` | Debug mode, and the autopilot with its three models of a player |
 | `tools/assets/` | The asset pipeline: downloads free source assets and converts them into small game files |
-| `tools/` | Automated checks: end-to-end test, screenshots, performance report, balance and mission runs, credits check |
+| `tools/` | Automated checks: end-to-end test, screenshots, performance report, balance, mission and barrier-hopping runs, credits check; and the tool that makes the link preview picture |
 | `tests/` | Unit tests |
 
 Built with [three.js](https://threejs.org/), TypeScript (strict) and Vite. No backend, accounts, analytics or API keys: `npm run build` produces a plain static site with relative paths that works from any folder address. The only thing stored is your settings, best round and fastest mission time, in your own browser. What ARGUS notes about your play lasts for the run and is never stored or sent anywhere.
@@ -145,11 +145,13 @@ The code was written by an AI agent that cannot pick up a mouse, so the project 
 
 ```
 npm run build          type-check and production build
-npm test               229 unit tests for the rule modules
-npm run e2e            197 checks that drive the built game in a headless browser
+npm test               258 unit tests for the rule modules
+npm run e2e            216 checks that drive the built game in a headless browser
 npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
 npm run mission        the whole mission with no god mode, played by a model of a player (skilled, regular or first-timer)
-npm run shots          re-takes this stage's screenshots in media/stage-4
+npm run hop            a player who does nothing but hop a barrier: do the robots still get them?
+npm run shots          re-takes the screenshots in media/stage-5
+npm run social         re-takes the link preview picture and the icons
 npm run perf           frame rate, smoothness, start-up time and download size
 npm run check:credits  every shipped asset traces to a credited source; nothing raw is in git
 ```
@@ -162,19 +164,19 @@ It also checks things about the building that were first found by eye: that ever
 
 It checks **the economy** the way a player meets it: a station in every area; each boost bought with F for its price and doing what its sign says; the bench used twice on the same gun; the crate opened, its offer taken, and its offer left; the fail-safe bringing the player back once and not twice; a robot counted through the five blows it takes to force a shutter, and held again when the shutter is repaired; every pickup taken and its effect measured; a grenade thrown into a pack; a swarm round played to its resupply; and a robot turned by the Turncoat watched until it has destroyed its neighbour and burnt out.
 
-And it checks that **there is nowhere to hide**. The first person to finish the mission did it from a corner no robot could reach. So the test now stands the player in every place the rules of movement allow, about 147,000 of them, a sample every 10 cm across the whole map, and fails if a robot cannot get within striking distance of any one; then it sends a real robot to each of the sixteen most awkward and waits for the blow to land. That check found three more such corners, one of them only after a test player had wandered into it by itself.
+And it checks that **there is nowhere to hide**. The first person to finish the mission did it from a corner no robot could reach, got to by a jump. For a while the answer was that nothing could be jumped, which left the player stopped dead by a knee-high barrier. Now anything up to waist height can be jumped, and the answer is the check: it stands the player in every place the rules of movement allow (152,874 of them, a sample every 10 cm across the whole map: the floor, the top of every low thing, the floor inside the lab's fence) and fails if a robot cannot get within striking distance of any one; then it sends a real robot to each of the sixteen most awkward and waits for the blow to land, and sets a bomber off beside a player standing on a desk and inside the fence. That check found three more such corners along the way, one of them only after a test player had wandered into it by itself. And a player who does nothing but hop back and forth over a barrier is played against a full horde, to see that hopping buys a little time and never safety.
 
-Then it does it the way a visitor would: real clicks on the real buttons, the browser really capturing the mouse, and every key on the controls list really pressed. That last part is not decoration. It found that sprinting had never made the player any faster, which the scripted checks had walked straight past.
+Then it does it the way a visitor would: real clicks on the real buttons, the browser really capturing the mouse, and every key on the controls list really pressed. That last part is not decoration. It found that sprinting had never made the player any faster, which the scripted checks had walked straight past. And last of all it loads the page as a visitor gets it, with no debug flag: no test tools on the page, no counter or debug word on the screen, the share tags and the preview picture in place, and a new player's first hint waiting.
 
 The performance report earns its place the same way. Adding this stage's heaviest scene to it showed that each of ARGUS's plates was being drawn as six pieces and each shield as four. Asking where one slow frame in a thousand came from led to fourteen small panes of lamp glass that had been drawn twice a frame, with their shader chosen afresh each time, since the first stage: fixing that made the heaviest scene about a fifth faster at every quality level but the highest, where the graphics card is the limit. The story is in [PROGRESS.md](PROGRESS.md).
 
-![Debug mode: the autopilot fighting through round three](media/stage-4/17-debug-autopilot.jpg)
+![Debug mode: the autopilot fighting through round three](media/stage-5/17-debug-autopilot.jpg)
 
 **Debug mode**: add `?debug=1` to the address for an overlay and five keys: **6** next mission step, **7** god mode, **8** free scrap, **9** skip to the next round, **0** autopilot.
 
-Measured on an NVIDIA GeForce RTX 4070 SUPER at 1920 x 1080 with the most robots the game allows (24) on screen and every door on the map open, so that all six areas are being drawn: 198 / 165 / 167 / 145 frames a second on Low / Medium / High / Ultra with a horde of ordinary robots, and 202 / 133 / 151 / 111 with the horde as ARGUS sends it (specials, shielding and plates). The whole game is a 17.8 MB download and reaches its title screen in 5.7 seconds on a 50 Mbps connection.
+Measured on an NVIDIA GeForce RTX 4070 SUPER at 1920 x 1080 with the most robots the game allows (24) on screen and every door on the map open, so that all six areas are being drawn: 228 / 181 / 191 / 200 frames a second on Low / Medium / High / Ultra with a horde of ordinary robots, and 237 / 178 / 190 / 185 with the horde as ARGUS sends it (specials, shielding and plates). Those are the medians of three runs of a fight that is never the same twice, on a desktop that was doing other things; single readings lay far apart (the ordinary horde on Medium read 99, 181 and 195), and [PROGRESS.md](PROGRESS.md) has the steadier comparison between builds. The whole game is a 18.4 MB download and reaches its title screen in 5.7 seconds on a 50 Mbps connection.
 
-Three models of a player were run through the game with no god mode. The first real person to play the whole mission said the skilled model was stronger than a real player, so the game was re-tuned for someone closer to a beginner: a robot's blow takes a fifth of your health where it took three tenths, a crowd cannot land blows as fast, and the mission's own fights are sized for someone holding ground. Then the economy went in and the last key was allowed to come sooner, and nothing was made harder to pay for either. Now a model of a skilled player finishes the mission 28 times in 32, in a median of 9:18; a model of a regular player (nearly a beginner's hands, a few attempts in) 40 times in 60; and a model of a first-time player 31 times in 60, where at first it never did. Fighting the ordinary rounds only, the first-timer goes down in round 9 (the median of 16 runs; the target is round 9, between 7 and 10). Those are models, not people, and they use only part of the economy. The full tables, and what the models can and cannot tell you, are in [PROGRESS.md](PROGRESS.md).
+Three models of a player were run through the game with no god mode. The first real person to play the whole mission said the skilled model was stronger than a real player, so the game was re-tuned for someone closer to a beginner: a robot's blow takes a fifth of your health where it took three tenths, a crowd cannot land blows as fast, and the mission's own fights are sized for someone holding ground. Then the economy went in and the last key was allowed to come sooner, and nothing was made harder to pay for either. Then the jump came back and the robots learned to go round what a player has jumped, and it was measured again with nothing tuned afterwards. Now a model of a skilled player finishes the mission 29 times in 32, in a median of 8:44; a model of a regular player (nearly a beginner's hands, a few attempts in) 44 times in 60; and a model of a first-time player 39 times in 60, where at first it never did. Fighting the ordinary rounds only, the first-timer goes down in round 9 (the median of 16 runs; the target is round 9, between 7 and 10). Those are models, not people, and they use only part of the economy. The full tables, and what the models can and cannot tell you, are in [PROGRESS.md](PROGRESS.md).
 
 ## Credits
 

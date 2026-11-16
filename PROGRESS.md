@@ -10,10 +10,352 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | 1 | Core loop: whole map, rounds, scrap, weapons, HUD, restart, debug mode | **Played; nine items of feedback, all done** (recorded below) |
 | 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Played; four items of feedback, all done** (recorded below) |
 | 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Played; eight items of feedback, all done, and approved from the screenshots** (recorded below). The map is six areas. |
-| 4 | Full economy: stations, shutters, pickups, grenades, swarm rounds, the special weapon, settings and how-to-play screens, the phone message | **Built. Waiting for you to play it.** |
-| 5 | Polish | Not started |
+| 4 | Full economy: stations, shutters, pickups, grenades, swarm rounds, the special weapon, settings and how-to-play screens, the phone message | **Approved from the screenshots; three answers and one fix (jumping), all done** (recorded below) |
+| 5 | Polish: no new features. Feel, hints, the fail-safe, the Turncoat, the truck and the wall, speed, a public link's needs, the final documents | **Built. Waiting for you to play it.** |
 
-The approved look lives in `media/look-target/` and is never overwritten. Stage 4's pictures are in `media/stage-4/` (67 of them: every earlier view re-taken on this build as 01 to 46, and the economy as 47 to 64) and are re-made with `npm run build` then `npm run shots`. Stage 3's are kept in `media/stage-3/` as they were when you approved them. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+The approved look lives in `media/look-target/` and is never overwritten. Stage 5's pictures are in `media/stage-5/` (76 of them: every earlier view re-taken on this build as 01 to 64, and this stage's as 65 to 73) and are re-made with `npm run build` then `npm run shots`. Stage 4's and Stage 3's are kept in `media/stage-4/` and `media/stage-3/` as they were when you approved them. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+
+## Before Stage 5: your answers to the Stage 4 feedback
+
+You approved Stage 4 from the screenshots (the four Boost Stations, the Overclock Bench, the Prototype Crate, the pickups and timers, the shutters, swarm rounds, grenades, the settings and how-to-play screens, the phone message) and the design calls listed for it. Your three answers, and what was done about each:
+
+- **The final stand: "leave it as it is. I'd rather people reach the ending than lose nine minutes in at the last step."** Left alone.
+- **The first robot: "shorten it in round 1 only. Start the entrance shutter already damaged in round 1 so the first robot is indoors about 8 seconds in. Leave every later round alone."** Done: the main entrance's shutter starts a run one blow from giving (`SHUTTERS.entranceStart`). Measured over four starts, it is forced at 7.2 to 7.4 seconds and the first robot is inside the lobby at 8.4 to 8.7. The other four shutters start sound, and this one is sound again once it has been repaired.
+- **The Custodian: "leave it as it is."** Left alone.
+
+Then the one fix before the polish (jumping), and Stage 5 with your list on top of the spec's. All of it is below. `SPEC.md` carries the three changes as marked notes, like the earlier ones.
+
+## The jumping fix
+
+**What you asked for:** to jump over low objects (the concrete barriers, low crates, toolboxes, the rails around the lab's assembly cell, and anything similar up to about waist height), clearing them and landing on the far side; tall things to stay unclimbable; robots not to need to jump; and the safe spots not to come back: wherever you can land or stand, robots must still reach and hit you, and a bomber's blast must reach you too.
+
+**The rule now.** Anything whose top is no more than **one metre** above the floor can be jumped onto or over. Anything taller is solid however high your feet are, even from the top of something low, so nothing can be climbed in stages. It is one number, `PLAYER.climb` in `src/config.ts`.
+
+### What can be jumped, and what cannot
+
+**Can be jumped onto or over** (heights are the tops, from the floor):
+
+- **The concrete barriers** (0.82 m): the two in the lobby, and the ones out in the yard.
+- **A drum standing by itself** (0.87 or 0.93 m, by the kind of drum), and **a drum lying on its side** (about 0.6 m).
+- **Wooden crates** (0.46 m), and **a crate stacked on a crate** (0.92 m).
+- **Cardboard boxes** (0.34 m).
+- **Desks** (0.79 m): the security desk in the lobby and the two in the lab.
+- **Tool chests** (0.65 m): your "toolboxes".
+- **The small things**: stools (0.45 m), fire extinguishers standing on the floor (0.66 m), the tipped-over chair by the security desk (0.59 m), the bin (0.91 m).
+- **The Prototype Crate** (0.60 m).
+- **The fence round the lab's assembly cell** (1.00 m), on every side, and **the trolley** inside it (0.56 m).
+
+**Cannot** (taller than a metre, and solid at any height):
+
+- **Drums stacked two high** (1.86 m): the back of the two corner heaps.
+- **The wall cabinets** (1.12 m), **the hand trucks** (1.40 m), **the storage cart** (1.38 m), **the standing floodlight** (1.80 m).
+- **The control post of the lab's cell** (1.25 m), and the jig and the three arms inside the fence.
+- **Server racks and shelving.**
+- **The containers and the truck.**
+- **Generators and transformers.**
+- **The uplink console, the core's console, the key cage.**
+- **The four Boost Stations and the Overclock Bench.** (The Prototype Crate, the sixth station, is on the first list.)
+- **The window sills in the lobby** (1.15 m).
+
+Two of those are low but carry something tall, so they are on the second list on purpose: the uplink console (a desk with a bank of screens standing on it) and the Overclock Bench (a bench with its arm working over it). Standing "in" either would have put you inside what is on top of it.
+
+**How it feels.** The jump is the height it always was (about 83 cm; a step's worth of tucking the feet up does the rest). Walking or sprinting at a barrier and jumping takes you over it. Jumping from a standstill while pressed against it works too: you keep pushing at it and go over the moment your feet are high enough, where before you would have risen and dropped back where you stood. A press of Space a moment before landing, or a moment after walking off an edge, still counts. And the view eases up onto something instead of snapping.
+
+### Why there are still no safe spots
+
+Giving the jump back the simple way would have given the barrel corner back with it. So the map changed, and the check that guards it now covers everywhere a jump can put you.
+
+- **No invisible blocks over heaps of low things.** There were six, and each was exactly the knee-high barrier you could not get over. Every low thing is now solid by itself.
+- **The back of a heap is tall.** A robot strikes from 1.45 metres, so nothing low may be deeper than that from the open floor. In the two corners where drums stood in a heap (the lobby's, which is the corner you hid in, and the dock's), the drums at the back are now stacked two high and the ones in front can be climbed. The lobby's other corner drum was moved tight into its corner, and the drum lying in the entry corridor moved clear of the nook it made.
+- **The lab's assembly cell has a real fence, with a gateway on two sides.** It was one solid block. Now you can hop its waist-high rails, and the robots walk round to a gateway (the middle third of its west side and of its east side) and in after you. What stands inside (the jig, the three arms) is solid; the trolley in the corner is low enough to stand on. The arms were moved a little toward the corners so that a robot can get right round the jig.
+- **Robots go round what you have jumped.** Close in, a robot used to walk straight at you, which was right while nothing could stand between you. Now it only does that if the way is clear; otherwise it keeps to its map and comes round. If you are within its reach across a barrier or a rail, it hits you across it.
+- **Nobody jumps over a robot.** Robots are solid to you at any height. (They were only solid below 1.2 metres, which never mattered until a crate could be a springboard.)
+
+**The check.** "Standing everywhere" now stands the player on the floor, on top of every low thing, and on the floor inside the fence: **152,874 places**, a sample every 10 cm across the whole map, for a body a little slimmer than yours. None is further from where a robot can stand than a robot reaches. Then real robots and bombers are sent:
+
+- to each of the sixteen most awkward places it found (most are up on something: the trolley in the cell, the stacked crates, a desk, a drum), from five metres off: all sixteen land a blow;
+- from each of the four sides of the fence to four places inside it: sixteen out of sixteen;
+- a bomber beside a player standing on the lobby's desk, on a drum in the dock corner, inside the fence, and on the trolley inside the fence: it hurts them every time.
+
+And the jump itself is tried in the game: eleven jumps at the lobby's barrier (all end on the far side; without the jump it stops you), three at a drum (all end standing on it), nine at the fence (all end inside) and one back out; then four tries each at eight tall things (a server rack, a wall cabinet, the control post, a container, the truck, the uplink console, the Overclock Bench, the stacked drums) and at the cart from the top of the crates beside it. In all of them the player never stood higher than a metre. The yard's barriers were sprinted at and jumped at from nine places: there is no way out of the yard over them. And the lobby's drum corner, the one you hid in, was run and jumped at ten times from every side: the player got onto the front drums and no further, and was never out of a robot's reach.
+
+To be sure the check would notice, it is also asked what would be out of reach if you could climb things 2.2 metres high. It reports the tops of the power room's generators.
+
+### Hopping back and forth
+
+You asked for the test players to show that hopping over a barrier does not dodge the horde for ever. The mission's test players do not jump, so this has a tool of its own, `npm run hop`. It plays a **hopper**: someone who never fires a shot and does nothing but stand beside something low until the robots are nearly on them, jump it, and wait on the far side to do it again. Seconds until the hopper went down, five tries each (80 tries in all), beside someone who just stands still:
+
+| Seconds until down (hopping; standing still) | Round 3 | Round 6 | Round 8 | Round 10 |
+| --- | --- | --- | --- | --- |
+| The concrete barrier in the lobby | 13 to 29; 10 to 12 | 11 to 22; 9 to 11 | 11 to 14; 8 to 11 | 8 to 13; 9 to 11 |
+| The fence round the lab's assembly cell | 43 to 131; 11 to 15 | 35 to 51; 7 to 13 | 23 to 56; 8 to 11 | 13 to 27; 8 to 10 |
+| A desk in the lab (onto it and off again) | 10 to 16; 10 to 16 | 7 to 11; 8 to 13 | 7 to 9; 7 to 10 | 7 to 10; 8 to 11 |
+| The drums in the dock corner (onto them and off) | 9 to 15; 10 to 15 | 8 to 16; 8 to 12 | 9 to 15; 8 to 14 | 7 to 11; 10 to 12 |
+
+**No try outlasted the horde.** The longest any hopper lasted was 131 seconds (the fence round the lab's assembly cell, round 3), and by round 10 the best of them lasted 27. The fence is the best place to try it, because the robots have the furthest to walk round to a gateway. In round 3, when there are fourteen of them and they walk, the hopper kept it up for between three quarters of a minute and a little over two minutes before they came at it from both sides; by round 6 for about forty seconds, by round 10 for about twenty. The concrete barrier buys a few seconds over standing still (up to twenty in round 3, none to speak of by round 10). Climbing onto a desk or the drums buys nothing: a robot strikes someone up there exactly as it does on the floor. In every one of the tries the hopper went down. One caution: this is a model that hops in one place. A person can hop the fence, run, and hop back in somewhere else, and that I could not play.
+
+### Difficulty, measured again
+
+The jump could not make the game harder, but the change to how robots close in could have, and you asked for nothing to be made harder. So the test players were run again, twice: once on the build as it stood when the jumping fix went in, and again on the finished build. Nothing was tuned after either. The table is the finished build.
+
+| | Skilled (32 missions) | First-timer (60 missions, 16 runs of ordinary rounds) | Regular (60 missions, 16 runs of ordinary rounds) |
+| --- | --- | --- | --- |
+| Finished the mission | **29 of 32**; was 28 | **39 of 60**; was 31 | **44 of 60**; was 40 |
+| Mission time (median) | 8:44; was 9:18 | 9:03; was 8:57 | 8:51; was 9:06 |
+| Won the final stand | 29 of 29; was 28 of 28 | 39 of 41; was 31 of 37 | 44 of 45; was 40 of 43 |
+| Ordinary rounds: went down in | not run | round 9 (median); 9 of 16 in rounds 7 to 10; earliest 6, latest 12; was round 9 | round 11 (median); 5 of 16 in rounds 7 to 10; earliest 4, latest 14; was round 9 |
+
+The first batch, on the build with the jumping fix alone, gave: skilled 29 of 32; first-timer 37 of 60 missions, and round 10 in ordinary rounds; regular 37 of 60, and round 8.5. Taking the two batches together, the first-timer finished 76 missions in 120 where it finished 31 in 60 at the end of Stage 4, and the regular 81 in 120 where it finished 40 in 60.
+
+Read with care: batches of this size wander a good deal (at the end of Stage 3, three batches of one model on identical rules gave 75%, 33% and 47%). What they say is that the game is **no harder**. If anything the first-timer does a little better, and the likely reason is the fail-safe: on the finished build it brought the first-timer back in 16 of its 60 missions and the regular in 6, and getting up now throws the robots back a pace, which is the gap it was always meant to give. Most lost runs still end in round 6 with two keys, waiting for the Custodian, which you chose to leave. The test players do not jump, so none of this measures the jump itself; that is what the hopper above is for.
+
+## Stage 5: what was polished
+
+Polish only: apart from the jumping fix, nothing here is a new feature, and nothing was made harder.
+
+**The Turncoat (your pictures 54 to 56).** It kept its model and lost everything that made it a toy. The shell is dark worn steel; the brass rings are blackened steel. Bolted onto it are a steel frame along both flanks, a finned shroud round the barrel, a control box with a circuit board for a lid and a label (XM-0 PROTOTYPE, SITE 04 LAB, UNIT 04, over a strip of hazard tape), two capacitors, a cage over the cell, a guard round the trigger, and wiring: two cables forward to the muzzle, a red and a yellow wire down from the cell, a blue one back to the grip. The only things that glow are the cell, a row of lamps and a charge gauge on the box, and a ring in the muzzle, all the cold blue of the beam. The cartoon star at the muzzle is gone: what shows there now is a discharge, a ring with forked arcs off it and a thin lance of light down the line of the shot. **In a full horde:** fired into twenty-four robots of round 8 in six places (the lobby, two places in the server hall, beside the lab's fence, among the dock's containers, between the generators), the robot it turned spent its ten seconds fighting every time: six or seven blows, each destroying a robot, and then it burnt out, so seven or eight robots a shot. It never wandered off into the furniture: in a crowd there is always a robot in arm's reach. (With a choice, it now prefers a robot it can walk straight at to a nearer one behind a rack.)
+
+**The first minute without reading.** One short hint at a time during the first rounds, above the middle of the bottom of the screen, in the HUD's own lettering: `W A S D  MOVE`, `LEFT CLICK  FIRE`, `HOLD RIGHT CLICK  AIM`, `SPACE  JUMP OVER LOW THINGS`, `FOLLOW THE MARKER TO YOUR OBJECTIVE`, and `F  BUY: WALK UP TO A WEAPON ON THE WALL`. Each turns green with a tick and goes the moment you have done it. Something you do before its hint comes up is never asked for. The last one waits until you have the scrap for the gun on the wall in front of you (750), so it never tells you to buy what you cannot afford. What you have done is remembered in your browser, so a second run does not teach you again; Settings has a switch that turns the hints off, or starts them again from the first. How to Play now opens with a five-line **Quick start**.
+
+**The frame-rate counter is hidden** unless you ask for it in Settings. Your own browser had remembered the old "on", so the setting has a new name inside and the old memory is ignored: it will be off for you too. (In debug mode it always shows; it is one of the debug tools.)
+
+**The fail-safe is a moment.** I had not looked at it, and when I did there was nothing to see: a flash and a notice, in the same instant as the blow. Now, when the blow lands, you go **down**: the view falls to the floor and keels over, the colour drains out of the picture and the dark closes in from its edges, every sound goes dull, a red line runs flat across the view under the word DOWN, and for a little over a second the world runs at a third of its speed while nothing you press does anything (and nothing can hurt you). Then it fires: the flat line beats, the picture floods violet, **FAILSAFE ENGAGED, BACK ON YOUR FEET**, the view comes up, and every robot within five metres is rocked and thrown back a pace. The violet stays round the edge of the view for the three seconds in which nothing can hurt you. Pictures 67 and 68.
+
+**Speed.** The six stations were 114 separate things to draw. The part of each that never moves is now built into the room it stands in, by the room's own builder, and what lights up (a sign and a card, the lamps) is two shapes a station where it was seven: **33 shapes** between the six.
+
+That was the job you set. Then I counted what a frame actually draws, and found that the rest of this stage's work had been adding pieces while that took them away: the truck I rebuilt had eleven lamp lenses drawn one at a time, four layers of stains of its own, and ten tyres that were drawn again for every lamp that casts a shadow; and the lettering and little lamps on the server hall's new wall each used a setting nothing else in the hall uses, which makes each one a layer of its own. All of that is merged too now (the lenses are five shapes, the stains two layers, the tyres are drawn once, the wall borrows the settings of the hall's other lettering), and none of it changes a picture: I compared the truck and the wall before and after, side by side.
+
+**What that bought, and what it did not.** A frame of the server hall with a full horde standing in it now draws 686 separate things on High. At the end of Stage 4 it drew 728, and before Stage 4 637. So a little under half of what Stage 4 added is gone; the rest is what Stage 4 put into the game and the game still has (six stations with their lit signs and lamps, five shutters that move), plus this stage's cooling units and wall lamps. **I cannot show you the frame rate coming back, and I am not going to claim it.** Measured as fairly as I know how (a scene that stands still, the three builds in turn, 6 rounds, a different one first each time), the build you approved at the end of Stage 4 came out 7% slower than the build from before it, and this build 6% slower. One build's own readings of the same thing lay 22% apart from round to round, so the gap between those two figures means nothing. Three things I can say. The 12% I reported last time was too high: it came from one pair of runs of a fight that is never the same twice, and I should have measured it this way then. The game does less work in a frame than it did when you approved Stage 4. And it is not slow here: in its heaviest moment it runs at about 191 frames a second on High on this computer, which has a fast desktop graphics card. (The spec's target is a smooth 60 on a laptop with a dedicated card. I have no such laptop to try it on, which is where a few per cent would matter most.) The tables are under the checks, with a profile of where a frame's time goes.
+
+**Two stutters, found and removed.** I added the fail-safe's moment and a first-minute hint to the list of things whose first appearance is timed, and the first row was bad: the picture stopped for 73 thousandths of a second when the player went down. Taking it apart showed two things. Most of it was not the fail-safe at all. It was **the first blow a player ever takes**: the red wedge that shows where the blow came from is blurred, and the first time it was drawn the picture stopped for 67 ms. That has been in the game since Stage 1, in every run anyone has played; my speed tests never saw it because their player cannot be hurt. The rest was the fail-safe's own lettering (24 ms). Both are now drawn once, too faint to see, while the start screen is up, the way ARGUS's banner has been since Stage 3. Timed again as a visitor meets them: the first blow 5 ms, going down 5 ms.
+
+**The truck (picture 39).** Rebuilt from shaped parts in a file of its own: a cab with every corner rounded, in worn green paint, with a raked windscreen in its rubber, a visor and wipers; a grille set into the front between two round lamps in housings; a steel bumper; doors with seams, handles, hinges and SITE 04 on them; mirrors on arms; the cab's skirts coming down in front of the front wheel and behind it, with a step let into the front one; and **real tyres** (a photographed one from the same free library as the other props) on steel rims with hubs and nuts. Its headlamps still cut across the floor. Pictures 39, 71 and 72.
+
+**The server hall's west wall (picture 46).** It has what a wall like that has in a room that must be kept cold: four cooling units up out of reach (a photographed model), fed from two header pipes that run its length; drain lines and the stains under them; conduit and junction boxes at shoulder height; COOLING LOOP 02, an arrow to ROWS A - E, a gas-suppression notice, an emergency power-off point by the dock's shutter, a lit panel giving the hall's temperature; and two cold wall lamps that put a pool of light on it. Nothing on it is solid, and nothing below head height stands more than a hand's width off the wall: the walkway is as clear as it was. Pictures 46 and 73.
+
+**Everything a public link needs.**
+
+- **Page title**: "HUMAN OVERRIDE · Don't let the AI win", and a description that says what it is.
+- **Link preview**: the tags LinkedIn, Slack and the rest read (title, description, picture), and the picture itself, `public/social-preview.jpg`, 1200 x 630: the game's own lobby with a horde coming on under the title. `npm run social` re-takes it.
+- **Favicon**: the red eye, as a file of its own, with a PNG for browsers that want one and an icon for a phone's home screen.
+- **No debug text or test leftovers.** A visitor's page has none of the test tools on it at all (they only exist with `?debug=1` in the address); the counter is hidden; an end-to-end check loads the page as a visitor does and reads everything on the start screen and in play for the words. The picture of ARGUS's profile card no longer shows the local test address (the card prints the page's own address, which in the pictures was `127.0.0.1`).
+- **One thing I could not finish for you: the address.** The sites that show a link preview want the picture's full address, and I do not know where the game will live. So there is `site-address.txt`: when you know the address, tell me (or put it on a line in that file) and the next build writes it into the page. Until then the game works anywhere and only the preview picture is missing from a shared link.
+
+**The music builds through a round.** The spec asks for it, and it had been listed as a rough edge since Stage 1: the bed was the same at the first robot as at the last. Now it is low and muffled in the lull, steps up when a round starts, rises and opens up as the round is fought, and is at its full level in the final stand. It never goes above the level it always played at.
+
+**Smaller things.** The strip listing every control (shown at the start of a run to a player who has the hints off) says SPACE jump, wraps on a narrow screen instead of running under the health bar and the ammunition count, and keeps real time. The start screen's one-line note no longer runs on over the lit scene. The controls list says what Space is for. A setting that nothing had used since Stage 0 (spare ammunition that never ran out) is gone from the weapon rules.
+
+### Found on the way, and fixed
+
+- **A robot close to you with a barrier in between pressed against the barrier for ever.** It had never mattered: nothing could stand between you. Found when the fence became something you could hop, before it was ever played. (Robots go round now: see above.)
+- **You could have jumped off a crate over a robot's head.** Robots were only solid to you below 1.2 metres. Found by reading the movement code for what "standing on things" would change.
+- **The strip of controls ran on the game's clock, not the wall's**, so in the frozen-time checks it vanished at once. It was the hints' own check that showed it. In play it made no difference; it is right now.
+- **Getting up from the fail-safe, the robots were in your face.** They crowd in while you are down, and being rocked did not move them. The first picture of the moment was five visors filling the screen. They are thrown back a pace now.
+- **The start screen's note ran over the bright part of the picture** at smaller window sizes, where it could not be read.
+- **The fail-safe's throw could put a robot through a shut door, on a computer slow enough.** Found by reading my own change again before committing it, not by a check. A robot is thrown back at seven metres a second. In an ordinary frame that is a few centimetres. But in a frame a tenth of a second long (the longest the game allows: a frame rate of ten, or one bad stutter at the wrong moment) it is 70 centimetres in one step, and a shut door is 26 centimetres thick. I tried it on the build as it stood: two robots touching the power room's shut door, the player a pace away, the fail-safe fired in frames that long. Both robots ended up inside the power room, behind its shut door. At sixty and at twenty frames a second it did not happen. A thrown robot is now moved in steps shorter than a robot is wide, however long the frame, and the same trial is a check: neither robot gets past the face of the door.
+- **The hints check was wrong twice, and neither time was it the game.** The first full run of everything was 214 of 215: the run the hints check started fired one shot by itself in its first instant, so FIRE was never hinted. The checks just before it press the start screen's real buttons with the real mouse, and the test page holds the mouse as "captured" all the time (a visitor's page only does while playing), so each of those clicks also counted as a pull of the trigger, waiting for the next moment of play. A visitor cannot do this: on their page a click on a menu button is not a pull of the trigger at all. I did not take that on trust: the part of the test that clicks the real PLAY button on a page with the mouse really captured now also checks that the click which starts a run fires nothing (0 shots, 12 rounds still in the sidearm). Then, run by itself on a quiet computer, the same check failed the other way: it was waiting 1.4 seconds for a hint that takes 1.9 to come, and had only been passing because a busy computer made its waits longer. It keeps real time now, and passes alone three times running and in the full run.
+- **The first blow a player ever took stopped the picture for 67 ms, and had since Stage 1.** See "Two stutters" above: found by timing the fail-safe's first appearance, fixed by drawing the damage wedge once ahead of time.
+- **My own polish had been adding pieces to draw while the stations' merge took them away.** See "Speed" above: found by counting the pieces in a frame, when the frame rates I was measuring would not agree with themselves.
+- **The 12% I reported after Stage 4 was too high, and the cause I gave for it was only part of the story.** It came from one pair of runs of a fight that is never the same twice. Measured properly this time, Stage 4 cost a few per cent, and what costs it is every separate thing in the scene, not the stations alone. See "Speed" above and the tables under the checks.
+- **One of my new checks was wrong, not the game.** To prove the reach check has teeth I asked it what it would find if you could climb onto server racks, and it found nothing there: a row of racks is only a metre deep, so its top is within reach from the aisle. The generators are what it reports, and the check says so now.
+
+## Design decisions made in Stage 5
+
+Numbered on from Stage 4's (which ended at 152). None of these was asked as a question; each is mine to defend and yours to overrule.
+
+153. **"About waist height" is one metre.** That takes in everything you named and what is like it (barriers 0.82 m, drums 0.87 to 0.93, the stacked crates 0.92, desks 0.79, the fence, which I built at exactly a metre), and leaves out the wall cabinets (1.12 m), the hand trucks, the cart and everything above. It is one number, `PLAYER.climb`.
+154. **Nothing taller than that is ever stood on, from anywhere.** A tall thing is solid at any height, not just from the floor. Without that, a crate would be a step up to a cart, the cart a step up to a container. It also means the check has an exact edge to test.
+155. **No invisible blocks over low things; the back of a heap is made tall instead.** The two corner heaps of drums look different because of it: the back pair are stacked two high. I think they look better (a drum store, with some height to it), but it is a change to two corners you had approved, so it is here.
+156. **The lab's cell has gateways, and the robots use them.** You asked for the rails to be jumpable and for no safe spot inside. A fence all the way round would have been one: the middle of the cell is further from the fence than a robot reaches. Two gateways (west and east) let them walk in, and put no dead end in the room. The gates themselves are drawn swung back and left open.
+157. **Two low things cannot be stood on, on purpose**: the uplink console and the Overclock Bench, because of what stands on them (a bank of screens; the arm). The Prototype Crate can be, though its lid opens under you; it is a low crate, and a low crate that could not be climbed would have been the complaint again.
+158. **The jump is the same height. What changed is what it is allowed to do, and three small things about how it feels**: speed carried into a low thing is kept while you are in the air (so a jump from a standstill against a barrier goes over), a press a moment early or late still counts, and the view eases up onto things. Jumping higher would have reached more than waist height.
+159. **Robots do not jump; they go round, and hit across.** As you said they need not. The change to them is the one thing in the fix that could have made the game harder, which is why the difficulty was measured again before anything else was built.
+160. **The entrance starts round 1 one blow from giving.** Two blows left gave about nine and a half seconds; one gives eight and a half. It is `SHUTTERS.entranceStart`.
+161. **The hints: which, in what order, and when they stop.** The six you listed, in the order a first minute needs them (move, fire, aim, jump, follow the marker, buy). Buying is last and waits for 750 scrap, the price of the gun on the wall in front of where you start, so it appears at the moment it can be acted on, which is usually in round 2. No hint appears after round 3: by then nobody is reading. A hint that is still up when its moment has passed is taken down unlearned and comes back next run.
+162. **What you have done is remembered, per browser.** A returning player is not taught again, which matters for anyone who plays twice. The cost is that you will see each hint once: to see them again, switch "Show hints for new players" off and on in Settings (on starts them from the first).
+163. **While there are hints to come, the old strip of controls stays away.** It listed ten controls at once at the start of every run. One thing at a time; a player with the hints off still gets it.
+164. **The frame-rate counter's setting was renamed inside** so that browsers which had stored the old default (on) forget it. Otherwise it would have been "hidden by default" for everyone but you.
+165. **The fail-safe's moment costs a second, and gives a little back.** You are down for 1.15 seconds with the world at 30% speed, and nothing can hurt you in it; the three seconds of cover start when you get up, where they used to start at the blow. And robots within five metres are thrown back about a metre as well as rocked. Both are slightly in the player's favour, and neither was measured separately.
+166. **The Turncoat kept its model and its name.** Everything that read as another game's weapon was the finish and the bareness: pale paint, brass rings, a smooth bulb, a star at the muzzle. I did not change its shape, only what is bolted to it, because you said to keep the model. If the bulb still reads wrong to you under the frame, the next step would be a different model, which needs a download from you.
+167. **The truck was rebuilt in code, not replaced with a model.** The free library the props come from has no truck (I looked through all 522 of its models), and the sites that do have one need an account, which is yours to say yes to. If you would rather have a downloaded one, tell me and I will give you the exact page to fetch. The tyres are a real model from that library.
+168. **The west wall's theme is cooling**, because it is a server hall and the hall's temperature is a small piece of story (the panel reads 31.4 C: ARGUS is working the machines hard). Everything on it is flat to the wall or above head height, because the walkway beside it was cleared on purpose in the Stage 3 feedback.
+169. **The link preview is a photograph of the game**, not a made-up poster: its own lobby, its own robots, the title in the game's own lettering.
+170. **The page's address is a text file, not a guess.** I did not invent an address for the share tags or print one on the profile card in the pictures. `site-address.txt` is empty until you have one.
+171. **The music's build is by loudness and tone, not by new music.** There is one bed. A second, busier layer would have been a new recording to find, credit and mix by measurement alone, at the very end; shaping the one that is there does what the spec asks.
+172. **The pictures are in `media/stage-5/`**: the whole set re-taken on the final build (01 to 64), and 65 to 73 new. Stage 4's are kept as they were when you approved them.
+173. **What I left alone because you said so**: the final stand, the Custodian's timing, and every later round's opening.
+174. **The truck's tyres cast no shadows of their own.** They stand in the shadow of the truck. Drawn again for every lamp that casts a shadow, ten tyres were 36,000 triangles more in every frame of the dock. I put the truck's pictures from before and after side by side (front and side) and can find no difference; if the wheels look to you as if they float, it is one word in `src/world/dock/truck.ts`. The cooling units on the server hall's wall do still cast theirs: the shadows under them are most of what gives that wall its depth.
+175. **Builds are compared in a scene that stands still, measured in turn, and the count of what a frame draws is the result I stand on.** That count is exact. The frame rate on this computer is not: the same build read 18% apart in two runs of the usual report a quarter of an hour apart, which is more than the 12% in question. So the frame rates are given beside the counts, as medians of six rounds, with how far apart one build's own readings lay, and I have not claimed more from them than they show.
+
+## Checks run at the end of Stage 5
+
+The spec asks for all six to pass before Stage 5 is called done. They do.
+
+| Check | Result |
+| --- | --- |
+| 1. Type-check and production build | Pass, zero errors |
+| 2. Unit tests | **258 of 258 pass** in 21 files. New in this stage (30 tests): what a jump clears and what it never does, and the reach check on a fence with and without its gateways and on a heap of drums with and without its back row stacked; the first-minute hints (their order, never hinting at what has been done, the marker measured from where the hint found the player, buying held back until there is scrap); the music's build; the page's share tags and the address file. One test went, with the unused setting it tested. |
+| 3. Headless browser | **216 of 216 pass** against the production build served from a sub-folder address. What is new is listed below. |
+| 4. Screenshots | 76 in `media/stage-5/`: the whole set re-taken on this build (01 to 64), and 65 to 73 new. Every one looked at, and 01 to 64 compared with the set you approved. What differs is what this stage changed: no frame-rate counter in the corner, the Turncoat in pictures 54 to 56, the truck in 38 and 39, the west wall in 46, the two corners of drums, the fence round the lab's cell, and a first-minute hint in none of them (the tool switches the hints off except for the two pictures that are of one). Five pictures were staged badly by my own tool the first time and were re-taken (the game was right in each): a strip of controls that a visitor who has changed nothing never sees lay across most of the set; ARGUS's Proxy stood with its arm across the kill switch; the shutter under attack showed no attack, because the entrance now starts a blow from giving; the phone message carried the local test address; and the first-hint picture showed eleven rounds in the sidearm. |
+| 5. Performance | See below. |
+| 6. Credits | Pass: 199 shipped asset files all trace to credited sources (two more than at the end of Stage 4: the tyre and the cooling unit, both CC0 from Poly Haven); the credits match `links.txt`; no file tracked by git is a raw download. |
+
+**New in the end-to-end test** (19 checks, making 216):
+
+- *Jumping*: standing everywhere a jump can put the player (152,874 places) with none out of reach; the same check finding the generators' tops when told the player can climb 2.2 m; eleven jumps over the lobby's barrier, three onto a drum, nine over the fence and one back; eight tall things and the cart never stood on, and the player never higher than a metre; ten runs and jumps at the lobby's drum corner from every side; a robot sent to each of the sixteen most awkward places, and from all four sides of the fence to four places inside it; a bomber's blast reaching a player on a desk, on a drum, inside the fence and on the trolley; the yard's barriers jumped at from nine places; and a hopper at the barrier and at the fence against a round-8 horde.
+- *The opening*: four shutters sound and the entrance one blow from giving; forced with the first blow, the first robot indoors between seven and ten seconds in.
+- *The hints*: MOVE, FIRE and AIM shown in turn and each going once done; a jump made early never asked for; the marker's hint ended by walking toward it; the buying hint held back until there is scrap; nothing taught twice on a second run; none at all with the hints off, and the strip of controls back.
+- *The fail-safe's moment*: down, with DOWN on the HUD; half a second of it lasting 0.15 seconds of game time; the view fallen a metre; pressing forward and fire doing nothing; then FAILSAFE ENGAGED, 60 health, three seconds of cover, robots rocked, and the view back at eye height.
+- *The fail-safe's throw in slow frames*: two robots touching the power room's shut door, the fail-safe fired in frames a tenth of a second long; neither gets past the face of the door. (On the build before the fix, both ended in the power room.)
+- *The Turncoat in a horde*: twenty-four robots of round 8 in the server hall and again in the lab; the turned robot fights for its ten seconds and destroys at least four (it destroyed eight in each); the rig is on the weapon.
+- *Speed*: the six stations are no more than forty shapes of their own between them (they are 33).
+- *The music*: lower in the lull than at the start of a round, lower then than near its end, and never above its old level.
+- *The west walk*: a robot can stand all the way along it.
+- *A visitor's page* (loaded with no debug flag, as a first-time visitor): title, description, share tags, a preview picture 1200 by 630, three icons that load; no test tools on the page; no counter, no debug panel, and none of the words (debug, autopilot, god mode, fps, localhost, test, todo) anywhere on the start screen or in play; and the first hint, MOVE, waiting.
+- *Changed, not new*: the settings list now has "Show frame rate" and "Show hints for new players"; the reach check's threshold is the jump rule's; and the real click on PLAY, on a page with the mouse really captured, is now also checked for firing nothing.
+
+### Performance (check 5)
+
+Measured on the production build on an NVIDIA GeForce RTX 4070 SUPER (a fast desktop card), at 1920 x 1080 unless it says otherwise. The heaviest moment is the one every stage has measured: the most robots the game allows, in the server hall, with every door on the map open so that all six areas are being drawn.
+
+*A full horde of ordinary robots, in the server hall, every door open* (six areas drawn):
+
+| Quality | Frames per second (median of 3 runs; lowest to highest) | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | **228** (206 to 255) | 581 | 1.26 M | 22 | 122 | 22 |
+| Medium | **181** (99 to 195) | 742 | 1.50 M | 23 | 156 | 22 |
+| High | **191** (159 to 194) | 744 | 1.50 M | 24 | 142 | 22 |
+| Ultra | **200** (185 to 202) | 775 | 1.57 M | 23 | 110 | 22 |
+
+*The same horde as ARGUS sends it*: two heavies, two bombers and four drones among the 24, and of the sixteen ordinary robots seven shielded against the gun being fired and eight with a plate over the visor.
+
+| Quality | Frames per second (median of 3 runs; lowest to highest) | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | **237** (199 to 249) | 626 | 1.26 M | 22 | 169 | 33 |
+| Medium | **178** (146 to 186) | 797 | 1.49 M | 22 | 309 | 44 |
+| High | **190** (166 to 196) | 813 | 1.50 M | 22 | 370 | 55 |
+| Ultra | **185** (121 to 193) | 850 | 1.58 M | 22 | 291 | 66 |
+
+*That horde in the loading dock*, with the player by the hall's shutter and the robots coming across the open floor:
+
+| Quality | Frames per second (median of 3 runs; lowest to highest) | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | **304** (221 to 323) | 371 | 0.90 M | 23 | 112 | 55 |
+| Medium | **232** (155 to 245) | 501 | 1.19 M | 24 | 79 | 33 |
+| High | **244** (121 to 253) | 491 | 1.18 M | 24 | 101 | 22 |
+| Ultra | **188** (186 to 188) | 505 | 1.30 M | 24 | 81 | 11 |
+
+**Smoothness**: ARGUS's horde in the server hall, with the frame rate limited to the screen's, as a player sees it. (The screen the test browser paced itself by was not the same throughout: 240 times a second in 1 of the 3 runs and 165 times a second in 2 of the 3 runs. A perfect frame is 4.2 ms at 240 a second and 6.1 ms at 165.) The usual frame and the slowest 1% are medians of the 3 runs; the worst frame and the count of frames over 25 ms are the worst of them.
+
+| | Quality | Usual frame | Slowest 1% | Worst frame | Frames over 25 ms in 5 s |
+| --- | --- | --- | --- | --- | --- |
+| 1920 x 1080 | Low | 6.1 ms | 8.8 ms | 13.3 ms | 0 |
+|  | Medium | 6.0 ms | 8.2 ms | 16.1 ms | 0 |
+|  | High | 6.0 ms | 7.8 ms | 17.2 ms | 0 |
+|  | Ultra | 6.0 ms | 7.7 ms | 14.4 ms | 0 |
+| 3840 x 2160 | Low | 6.1 ms | 7.3 ms | 11.4 ms | 0 |
+|  | Medium | 9.0 ms | 11.1 ms | 17.5 ms | 0 |
+|  | High | 9.6 ms | 11.4 ms | 15.2 ms | 0 |
+|  | Ultra | 18.7 ms | 20.9 ms | 26.0 ms | 1 |
+
+**First appearances**: the slowest frame in the second after each thing is drawn for the first time, on High; the worst of the 3 runs. The last four rows are new with this stage. (The page now waits a moment on the start screen before the run begins, as every visitor does: that is when the HUD draws its costly parts once, unseen.)
+
+| First time on screen | Slowest frame in the next second | Frames over 25 ms |
+| --- | --- | --- |
+| An ordinary robot | 7.1 ms | 0 |
+| A robot carrying shielding | 7.3 ms | 0 |
+| A robot with a plate over its visor | 7.2 ms | 0 |
+| A shot that the shielding turns | 13.7 ms | 0 |
+| A drone | 7.0 ms | 0 |
+| A heavy | 7.1 ms | 0 |
+| A bomber | 8.2 ms | 0 |
+| The bomber going off | 8.8 ms | 0 |
+| A Custodian | 7.4 ms | 0 |
+| The Proxy | 7.3 ms | 0 |
+| The ARGUS analysis arriving | 8.5 ms | 0 |
+| The analysis shrinking into its corner | 7.1 ms | 0 |
+| A timed pickup lying on the floor | 15.2 ms | 0 |
+| A pickup taken: its notice, and its timer on the HUD | 7.1 ms | 0 |
+| A boost on the HUD | 7.0 ms | 0 |
+| A grenade thrown, and going off | 7.7 ms | 0 |
+| An EMP Blast taking three robots | 8.2 ms | 0 |
+| The Turncoat fired, and a robot turned | 11.0 ms | 0 |
+| A shutter battered, and forced up | 7.0 ms | 0 |
+| Going down with the fail-safe | 8.1 ms | 0 |
+| The fail-safe firing: back on their feet | 8.4 ms | 0 |
+| A first-minute hint coming up | 7.1 ms | 0 |
+| The hint done: it turns green, and goes | 18.2 ms | 0 |
+
+Nothing stalls: the slowest in any of the runs is 18.2 ms (the hint done: it turns green, and goes). The slowest are the first hint turning green (18 ms in one run, 9 in the other two), the first timed pickup on the floor and the first shot that shielding turns: a single frame each, once. Going down with the fail-safe, which stopped the picture for 73 ms when it was first timed, is now 7 or 8 ms.
+
+**Against the earlier builds.** The tables above cannot be used to compare one build with another. The fight they measure is alive (robots are destroyed as it is measured, and their debris piles up differently every time), and the computer was doing other things besides: the three runs behind those medians gave, for the ordinary horde on Medium, 99, 181 and 195 frames a second, and two runs of an earlier build of this stage, a quarter of an hour apart, lay 18% apart across the board (239 / 181 / 191 / 165, then 193 / 147 / 157 / 164). So the comparison you asked for was made another way: **a scene that stands still** (24 robots held where they are put, every door open, lamps steady, nobody firing), with this build, the build you approved at the end of Stage 4 and the build from before Stage 4 **measured in turn, six rounds, a different one first each round**. What a frame draws in that scene is exact and the same every time; the frame rate is the median of the six rounds.
+
+| The server hall, 24 robots standing in it | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| Pieces drawn in a frame: before Stage 4 | 498 | 637 | 637 | 670 |
+| at the end of Stage 4 | 576 | 728 | 728 | 761 |
+| **now** | **536** | **686** | **686** | **721** |
+| Triangles in a frame: before Stage 4 | 1.17 M | 1.37 M | 1.37 M | 1.43 M |
+| at the end of Stage 4 | 1.18 M | 1.38 M | 1.38 M | 1.44 M |
+| **now** | **1.24 M** | **1.44 M** | **1.44 M** | **1.53 M** |
+| Frames a second (median of 6 rounds): before Stage 4 | 308 | 241 | 253 | 191 |
+| at the end of Stage 4 | 295 | 224 | 219 | 197 |
+| **now** | **305** | **229** | **216** | **202** |
+
+| The loading dock, 24 robots standing in it | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| Pieces drawn in a frame: before Stage 4 | 307 | 409 | 409 | 436 |
+| at the end of Stage 4 | 313 | 419 | 419 | 446 |
+| **now** | **323** | **434** | **434** | **462** |
+| Triangles in a frame: before Stage 4 | 0.77 M | 1.02 M | 1.02 M | 1.14 M |
+| at the end of Stage 4 | 0.77 M | 1.02 M | 1.02 M | 1.14 M |
+| **now** | **0.88 M** | **1.15 M** | **1.15 M** | **1.28 M** |
+| Frames a second (median of 6 rounds): before Stage 4 | 397 | 298 | 314 | 208 |
+| at the end of Stage 4 | 404 | 282 | 293 | 201 |
+| **now** | **405** | **291** | **303** | **209** |
+
+**What the tables say.** The count of things drawn is exact, and in the hall it is down: 728 at the end of Stage 4, 686 now, on High (637 before Stage 4). In the dock it is a little up on Stage 4 (419 to 434; 409 before), and the triangles with it (1.02 M to 1.15 M): that is the truck, which is a great deal more of a truck than it was. **The frame rates do not separate this build from Stage 4's.** Round by round against the build from before Stage 4, Stage 4's build is 7% slower over the eight measurements (the hall 10%, the dock 4%) and this build 6% slower (the hall 7%, the dock 5%); and one build's 6 readings of the same thing lay 22% apart as a rule, 48% at worst. On Ultra, where the graphics card is the limit and not the processor, the three builds are the same. So both later builds are a few per cent slower than the one before Stage 4 wherever the processor is the limit, I cannot tell the two of them apart, and the 12% is not shown to be won back.
+
+**Where a frame's time goes** (a profile of the still server-hall scene on this build, High): about three quarters of the script time is the drawing library walking through the scene and handing each thing in it to the graphics card, which it does once for the picture and again for every face of every shadow. The game's own rules, HUD and effects together are about a twentieth. With 24 robots standing in the hall that walk reaches 1,431 things in this build, 1,493 in Stage 4's and 1,348 in the build before it. That is why the number of separate things matters more here than how detailed any of them is, why six stations and five shutters cost what they do, and why merging is the saving there is to be had.
+
+Budgets held: at most 24 robots on the map; 22 lamps live at once from the shared pool (8 that can cast shadows, 14 that cannot) plus the muzzle flash and the lamp that travels with the Proxy. The building has 118 lamps now (the west wall's two are new), which compete for the same 22 places.
+
+- **Total download: 18.4 MB** of the 40 MB budget (models 9.4, textures 4.9, sound 2.4, code 1.5). It was 17.8 MB: the tyre and the cooling unit are 0.4 MB between them, the link preview picture and the icons 0.10 MB (counted here, though it is other sites and the browser's tab that fetch those, not the game), and the rest is code.
+- **Time to the title screen**: 5.1 s from local files; 4.4 s at 100 Mbps, 5.7 s at 50 Mbps, 8.6 s at 25 Mbps (simulated).
+
+## Not verified
+
+- **How any of it sounds.** I cannot hear. This stage changed three things about the sound by measurement alone: the music bed's rise through a round, the dulling of every sound while you are down, and nothing else. The eighteen sounds Stage 4 added are still unheard too.
+- **How the jump feels in your hands.** The checks prove what it clears and what it does not, from a standstill and from run-ups of several lengths. Whether clearing a barrier feels like a vault or like a scramble (at a walk you touch the top of it for a few frames on the way over; at a sprint you do not), and whether a metre is where you expected "waist height" to be, needs you.
+- **Whether hopping is an exploit for a person.** The hopper is a simple model: two places to stand, one thing to hop. A person can hop the fence on any side, run, and hop back in somewhere else. The robots come in by two gateways and can strike across the rails, and the model never lasted, but a person is more inventive than a model.
+- **The fail-safe's moment in a real fight.** I have looked at it now, in pictures taken at about real speed and in the checks. Whether a second on the floor feels dramatic or feels long when it happens to you in the middle of round 9 is yours to say; it is one number (`BOOSTS.failsafe.down`).
+- **The hints, read by someone who has never played.** They are checked for appearing, going and not repeating. Whether six hints are the right six, and whether the buying hint arrives when a new player is ready for it, needs a new player.
+- **The Turncoat's new look, against your eye.** It is no longer shiny and no longer bare, and it is in three pictures (54, 55, 56). The shape under the frame is still the model you downloaded. Whether it now belongs to this world is the judgement you made last time, and it is yours again.
+- **The truck and the west wall, against your eye**, for the same reason: pictures 38, 39, 46, 71, 72 and 73.
+- **The link preview on a real site.** The page carries the tags and the picture, and a check reads them back. Whether LinkedIn shows the card as intended can only be seen once the game has a public address and that address is in `site-address.txt`. LinkedIn also remembers a link's preview for about a week; its Post Inspector page is what refreshes it.
+- **The favicon in other browsers.** It was looked at in the test browser (Chromium) only.
+- **Whether a person finishes the mission as often as the models say.** About six times in ten for both the first-timer and the regular model this time. They never get lost, never misread a prompt, and never jump.
+- **Everything listed as not verified after Stage 4 that this stage did not touch**: how the economy plays in your hands and whether scrap still piles up, grenade feel, a swarm for a real person, the phone message on a real phone, slower hardware, browsers other than Chromium, and how bright it is on your screen.
+
+## Known rough edges
+
+- **At a walk, clearing a barrier touches the top of it.** The jump's height did not change, so for a moment you are standing on the barrier and then you are off the far side. It is quick and it never stops you, but it is a hop-up-and-over, not a clean vault.
+- **You can stand on a handrail.** The fence round the cell is a metre high and five centimetres thick, and anything low can be stood on. It is where robots can reach, so it is harmless, and it is how a jump from a standstill gets you over.
+- **The Prototype Crate can be stood on, and its lid opens through your feet.**
+- **Robots strike a player who is up on something as if they were on the floor**: there is no reaching-up animation.
+- **The stacked drums and the cell's gateways are new to two rooms you had approved.** See decisions 155 and 156.
+- **The truck is still made in code.** It has rounded corners, depth and real tyres now, and no interior behind its dark glass.
+- **The Turncoat's shell is still the model it was**, under the frame and the wiring. Aiming it still shows you the back of it: it has no sights.
+- **The music builds by getting louder and brighter, not by adding instruments.** There is one recording.
+- **The hints are remembered per browser**, so someone borrowing your computer for a first go is not taught unless you switch them off and on in Settings.
+- **The link preview picture needs the page's address** before sites will show it: see "Everything a public link needs".
+- **The crate's offer simply hangs in the air and turns**, and the bench's arm is two links and a tip. There is no animation of the weapon leaving your hands, and no throwing animation for a grenade.
+- **A robot battering a shutter uses its ordinary blow**, and the shutter shakes, sags and throws sparks; it does not dent.
+- **The Turncoat's ammunition cannot be bought**, and the bench only gives it more shots.
+- **Swarm drones are the ordinary drone**, a little faster.
+- **The test players do not jump, open the Prototype Crate or repair shutters**, so the difficulty numbers leave those out.
+- **The final stand is easy for the test players**, and stays so at your word.
+- **Unchanged from before**: the game still throws away about 100 MB of script memory a second in a heavy fight, the shielding is flat, the drone's rotors do not turn, the heavy swings like an ordinary robot, ARGUS only knows four things about you and forgets from round to round, the rounds after the switch are plainer, the sidearm and shotgun have no hands on them, Auto never raises quality again by itself, the assembly arms do not move, and the dock's lamps light the ground outside its north wall.
 
 ## Before Stage 4: your answers to the Stage 3 feedback work
 
@@ -25,7 +367,7 @@ You approved the bigger map and all seven fixes from the screenshots (the loadin
 
 ## Stage 4: what is built
 
-Everything the spec lists for Stage 4: shutters and repair, Boost Stations, the Prototype Crate and its special weapon, the Overclock Bench, timed pickups, swarm rounds, grenades, the settings and how-to-play screens, and the phone message. **Stage 5 has not been started.**
+Everything the spec lists for Stage 4: shutters and repair, Boost Stations, the Prototype Crate and its special weapon, the Overclock Bench, timed pickups, swarm rounds, grenades, the settings and how-to-play screens, and the phone message. *(This is the record of Stage 4 as it was handed over. What Stage 5 changed in it is above.)*
 
 **The stations: one in every area.** Six stations, six areas. Each is a painted cabinet built from the rooms' own kit, with a lit sign in a colour of its own, a lamp bar under the sign that lights its face and the floor in front of it, hazard stripes, and a prompt with the price when you walk up.
 
@@ -141,6 +483,8 @@ Numbered on from the Stage 3 feedback's (which ended at 128). None of these was 
 152. **The checks and the pictures switch chance pickups off.** A destroyed robot leaves a pickup one time in twenty-five, by chance, and a check that counts what is lying on the floor cannot have one turn up uninvited (one did, and failed a check that was right). So the test tools turn chance drops off (`__HO.randomDrops(false)`, debug only), and one check turns them back on to prove that they happen and that three a round is the limit. The game itself is unchanged, and the test players that measure difficulty play with them on.
 
 ## Checks run at the end of Stage 4
+
+*(As they stood then. The current counts are under "Checks run at the end of Stage 5" above.)*
 
 | Check | Result |
 | --- | --- |
@@ -741,38 +1085,6 @@ Budgets held: at most 24 robots on the map, the mission's own and the specials i
 - **Total download: 17.2 MB** of the 40 MB budget (models 8.7, textures 4.9, sound 2.1, code 1.4).
 - **Time to the title screen**: 3.6 s from local files; 3.7 s at 100 Mbps, 5.0 s at 50 Mbps, 7.7 s at 25 Mbps (simulated).
 
-## Not verified
-
-- **How any of it sounds.** I cannot hear. The eighteen new sounds (the beam, a robot turned, the stations, the crate, a pickup, the EMP, blows on a shutter, a shutter forced and repaired, a grenade bouncing, the fail-safe) were cut and levelled by measurement, like every sound before them. The earlier ones (the ring of a resisted hit, the analysis's opening, the bomber's beep) are still unheard too.
-- **How the economy plays in your hands.** The checks prove that every station sells what it says for what it says, and the test players show what a player who uses some of it can do. Whether the prices feel right, whether the core is the right place for the fourth boost, whether a shutter is worth 50, and whether you still end up with scrap you cannot spend: those need you.
-- **The Turncoat in a real fight.** It was tested on two robots standing in the open. A turned robot goes straight at the nearest robot, not round the furniture, so in a crowded room it may spend some of its ten seconds walking into a rack. I have not watched one in a full round.
-- **Throwing a grenade by feel.** Where it goes off was measured (thrown level, 11.7 metres from you; aimed 15 degrees down, 8; aimed 20 degrees up, 16); whether the arc feels natural, and whether 1.7 seconds is the right fuse, is a feel question.
-- **A swarm round for a real person.** The test players very rarely go down in one: 3 of their 152 missions ended in round 5 (all three the regular model's, at the uplink), and none of their 32 runs of ordinary rounds ended in round 5 or round 10. Drones are small and fast, which is harder for a person's aim than for a model's.
-- **The opening of a run.** The first robot is now inside the lobby about 13 seconds in, where it was 8, because round 1 has to batter the entrance shutter first. Whether that is a welcome breath or a wait needs you.
-- **The fail-safe as a moment.** The check proves what it does (back on your feet with 60 health, and a second of blows doing nothing). I have not looked at the moment itself, its flash and its notice, and whether you understand in the middle of a fight what just happened to you needs you.
-- **How to Play, read by someone who has never played.** It was written for them and checked for the words it should contain. It has not been read by one.
-- **The phone message on a real phone.** It was checked in a desktop browser pretending to be one (a 414 x 896 touch screen). The button that copies the address needs the phone's permission, which a pretend phone always gives.
-- **Whether a person finishes the mission as often as the models say.** The models say about half the time (the first-timer) and two times in three (the regular). They never get lost and never misread a prompt, they use only part of the economy, and three batches of the same model gave 75%, 33% and 47%. Your own runs are the real measure.
-- **The stations in motion and in play**: whether each can be found across its room by its light, and whether any is in the way of a fight. Each stands on a stretch of wall checked against every fitting on it (one, the lab's, was not free at first: see "Found on the way"), and the checks say nothing became unreachable or unhittable because of them.
-- **Everything listed as not verified after Stage 3 that this stage did not touch**: the analysis in motion, a resisted hit under automatic fire, the heavy in motion, every yard looking back at the building, the address on the profile card on the real site, slower hardware, browsers other than Chromium, and how bright it is on your screen.
-
-## Known rough edges
-
-- **The stations are cabinets built from the rooms' kit**: plain painted shapes with a lit sign, a glowing charge and lamps. They read as machines, but they are not as detailed as the downloaded props beside them. If they stand out the way the dock's truck did, that is a Stage 5 job alongside it.
-- **The stations cost frame rate.** They are drawn as 114 separate pieces, and in the heaviest scene that is about half a millisecond a frame: 169 frames a second on High against 185 with them hidden. Nothing stalls and it is far inside the budget, but it is waste, and merging them is on the list for Stage 5.
-- **The crate's offer simply hangs in the air and turns**, and the bench's arm is two links and a tip. There is no animation of the weapon leaving your hands.
-- **Jumping across the map with the debug tools leaves the lamps round you dark for about a second** while they hand over. Walking, they are up long before you arrive (a station's from six metres away), so a player never sees it; someone using the debug keys to skip about might.
-- **Holding the Turncoat up to aim shows you the back of it**: it has no sights, and its body is a fat teardrop. It is kept low enough that the crosshair is clear.
-- **The Turncoat's ammunition cannot be bought.** It comes with sixteen shots; only a Full Resupply (a pickup, or the end of a swarm round) refills it. And the bench will overclock it like any gun, but all it gains is more shots: the beam turns a robot for ten seconds at every level.
-- **A turned robot is not a decoy.** The others keep coming for you; it only fights them. And it walks straight at its target (see "Not verified").
-- **A robot battering a shutter uses its ordinary blow**, and the shutter shakes, sags and throws sparks; it does not dent. Forced, it hangs exactly as the shutters did before this stage.
-- **There is no throwing animation**: the grenade leaves from just below the crosshair.
-- **Swarm drones are the ordinary drone**, a little faster.
-- **The test players do not use the Prototype Crate or repair shutters**, so the numbers above leave those out.
-- **The final stand is easy for the test players now** (the regular model wins 40 of 43, the skilled 28 of 28, the first-timer 31 of 37). That is boosts, the fail-safe and overclocked guns meeting a fight that was sized before any of them existed. I have not touched it: you asked me not to make anything harder without asking.
-- **Your two notes for Stage 5 are untouched**: the dock's truck is still plain shapes, and the server hall's west wall is still blank.
-- **Unchanged from before**: the game still throws away about 100 MB of script memory a second in a heavy fight, the shielding is flat, the drone's rotors do not turn, the heavy swings like an ordinary robot, ARGUS only knows four things about you and forgets from round to round, the rounds after the switch are plainer, the screenshots' profile card shows `127.0.0.1`, the sidearm and shotgun have no hands on them, Auto never raises quality again by itself, the music does not build through a round, the assembly arms do not move, and the dock's lamps light the ground outside its north wall.
-
 ## Stage 1 feedback: what changed
 
 You approved the HUD, the prompts and the game-over screen, and listed nine things to fix, in order.
@@ -1064,9 +1376,11 @@ npm run dev            play it (opens the browser)
 npm run build          type-check and production build
 npm test               unit tests
 npm run e2e            end-to-end check of the built game
-npm run shots          re-take this stage's screenshots (media/stage-4)
+npm run shots          re-take the screenshots (media/stage-5)
+npm run social         re-take the link preview picture and the icons
 npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
 npm run mission        the whole mission with no god mode, played by a model of a player (and what it bought)
+npm run hop            a player who does nothing but hop a barrier: do the robots still get them?
 npm run perf           performance and smoothness report
 npm run check:credits  licensing check
 ```

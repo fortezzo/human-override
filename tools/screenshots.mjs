@@ -39,6 +39,12 @@ await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
 await page.evaluate(() => window.__HO.randomDrops(false));
 // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
 await page.evaluate(() => window.__HO.hints?.(false));
+// Nor the strip listing every control. It is shown for the first seconds of a run, and only to a player who has
+// switched the hints off (a visitor who has changed nothing sees the hints in its place). These pictures are
+// staged seconds after a restart, with the hints off, so it lay across the bottom of most of them: of round 8
+// in full swing, of the final stand. (Until it was made to keep real time it vanished at once in this tool, which
+// is why the set approved at the end of Stage 4 does not have it either.)
+await page.addStyleTag({ content: '.hud-hint { visibility: hidden !important; }' });
 console.log(`Rendering on: ${await gpuName(page)}`);
 
 const run = (fn, arg) => page.evaluate(fn, arg);
@@ -596,9 +602,35 @@ await run(() => {
 });
 await standAt('killSwitch', 0.5, -4);
 await clearNear(1.7);
+// (ARGUS's Proxy is never cleared from round the camera, and by now it has come right up to a player who is
+// standing still: its arm lay across the whole picture. It is put back beyond the console, to one side, and
+// given a moment to turn and start back.)
+await run(() => {
+  const ho = window.__HO;
+  const p = ho.game.player.position;
+  const proxy = ho.game.robots.find((robot) => robot.role === 'proxy' && robot.alive);
+  if (proxy && Math.hypot(proxy.position.x - p.x, proxy.position.z - p.z) < 3.4) {
+    const place = ho.mission().places.killSwitch;
+    const dx = place.at[0] - place.stand[0];
+    const dz = place.at[2] - place.stand[1];
+    const length = Math.hypot(dx, dz) || 1;
+    // Beyond the console and to the left of it, inside the room.
+    const x = Math.max(-5.6, Math.min(3.6, place.at[0] + (dx / length) * 3.2 + (dz / length) * 2.6));
+    const z = Math.max(27.2, Math.min(36.8, place.at[2] + (dz / length) * 3.2 - (dx / length) * 2.6));
+    proxy.position.set(x, 0, z);
+    // (Held there for the picture: the lamp that travels with it takes a moment to catch it up, and until it
+    // has, it lights whatever is at the camera.)
+    proxy.hold = true;
+  }
+  ho.step(1 / 60, 80);
+});
 await run(() => window.__HO.step(1 / 60, 2));
 await quiet();
 await shoot('27-mission-kill-switch');
+await run(() => {
+  const proxy = window.__HO.game.robots.find((robot) => robot.role === 'proxy');
+  if (proxy) proxy.hold = false;
+});
 
 // Pulled: every robot in the room going down, and ARGUS's eye going out.
 await run(() => {
@@ -1019,6 +1051,8 @@ await page.click('.screen.profile [data-action="profile-back"]');
     ho.clearRobots();
     ho.steadyLights(true);
     ho.scrap(400);
+    // (A sound shutter: a run begins with this one a blow from giving, which leaves no battering to photograph.)
+    ho.setShutter(true, 'yard');
     ho.place(0.5, -1.2, 4, 3);
     for (const x of [-1.1, 0, 1.1]) ho.spawnRobot(x, -9.4, 180, false, 3.0, 300);
     // Until the blow before the one that forces it.
@@ -1098,11 +1132,12 @@ await page.click('.screen.profile [data-action="profile-back"]');
 
 // ---- Stage 5: polish. The first-minute hints, the fail-safe as a moment, jumping, and the two corners that were plain.
 {
-  /** Let the game run at about real speed for a while (the HUD's own animations and the hints keep real time). */
+  /** Let the game run at real speed for a while (the HUD's own animations and the hints keep real time). */
   const live = async (seconds) => {
     for (let t = 0; t < seconds; t += 0.1) {
+      const started = Date.now();
       await run(() => window.__HO.step(1 / 60, 6));
-      await page.waitForTimeout(60);
+      await page.waitForTimeout(Math.max(20, 100 - (Date.now() - started)));
     }
   };
   const fresh = (hints) =>
@@ -1111,14 +1146,16 @@ await page.click('.screen.profile [data-action="profile-back"]');
       ho.autopilot(false);
       ho.hints(hints);
       ho.game.toTitle();
+      // (A frame on the start screen. This tool has pressed real menu buttons on a page whose mouse the debug
+      // tools hold as captured, and each press was also a pull of the trigger waiting for the next frame of
+      // play: the first-hint picture showed eleven rounds in the sidearm.)
+      ho.step(1 / 60, 1);
       ho.play();
       ho.god(true);
       ho.holdRounds(true);
       ho.clearRobots();
       ho.steadyLights(true);
       ho.announcement.clear();
-      // (The strip listing every control comes up at the start of a run for a player who has the hints off. These pictures are of other things.)
-      document.querySelector('.hud-hint').style.visibility = hints ? 'visible' : 'hidden';
     }, hints);
 
   // 65. A first-time player's first hint, and (66) the same hint done.
@@ -1231,6 +1268,15 @@ await page.click('.screen.profile [data-action="profile-back"]');
     window.__HO.steadyLights(true);
     window.__HO.step(1 / 60, 120);
   });
+  // (Like ARGUS's profile card, the note prints the page's own address, which here is this tool's local test
+  // server. In the picture it carries the game's public address if site-address.txt has one, and otherwise none.)
+  {
+    const address = fs.existsSync('site-address.txt') ? parseSiteAddress(fs.readFileSync('site-address.txt', 'utf8')) : '';
+    await phonePage.evaluate((shown) => {
+      const line = document.querySelector('.touch-url');
+      if (line) line.textContent = shown;
+    }, address.replace(/^https?:\/\//, ''));
+  }
   await phonePage.waitForTimeout(800);
   await phonePage.screenshot({ path: path.join(outDir, '64-phone-message.jpg'), type: 'jpeg', quality: 92 });
   console.log('  64-phone-message.jpg');
