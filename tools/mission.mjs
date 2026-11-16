@@ -12,8 +12,10 @@
 //
 // The regular player is the model the mission is paced for: a real person
 // a few attempts in, with nearly a beginner's hands and sensible habits
-// (the spec: a focused player finishes in 15 to 20 minutes, with a final
-// stand that is hard but winnable). The skilled player is a good deal
+// (the spec: a final stand that is hard but winnable. Its "15 to 20
+// minutes, around round 10 to 12" no longer binds: since the first real
+// playthrough the mission's length follows the player, and a fast one
+// ending before round 10 is fine). The skilled player is a good deal
 // stronger than that, and the first-timer is a rough model of someone new
 // to this kind of game. They are models, not people: they show whether the
 // numbers are in the right place, not how the game feels.
@@ -160,10 +162,7 @@ console.log('');
 if (won.length) {
   const times = won.map((r) => r.marks.saved.time);
   const rounds = won.map((r) => r.marks.saved.round);
-  const inTime = times.filter((t) => t >= 15 * 60 && t <= 20 * 60).length;
-  const inRounds = rounds.filter((r) => r >= 10 && r <= 12).length;
   console.log(`Finished the mission: ${won.length} of ${runs} (${Math.round((won.length / runs) * 100)}%). Median ${clock(median(times))} in round ${median(rounds)}; fastest ${clock(Math.min(...times))}, slowest ${clock(Math.max(...times))}.`);
-  console.log(`  ${inTime} of those ${won.length} took between 15 and 20 minutes; ${inRounds} ended in rounds 10 to 12.`);
   const stands = won.map((r) => r.marks.saved.time - r.marks.stand.time);
   console.log(`  The final stand took them ${clock(median(stands))} (median) from arming the switch to pulling it.`);
 } else {

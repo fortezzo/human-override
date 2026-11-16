@@ -152,6 +152,8 @@ async function boot(): Promise<void> {
   hud.showFps(settings.value.showFps);
 
   await game.load((fraction) => screens.setProgress(fraction));
+  // (Under the title screen: see Hud.prewarm.)
+  hud.prewarm();
   screens.setQuality(game.qualityLevel, settings.value.quality);
   screens.setBest(readBest());
   screens.show(touchOnly ? 'touch' : 'title');

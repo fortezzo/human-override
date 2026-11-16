@@ -152,6 +152,9 @@ export class Hud {
   private readonly heldNotices: Array<[string, string]> = [];
   /** A stage of the analysis held on screen (for screenshots), or null when it runs to its own clock. */
   private heldStage: 'moment' | 'corner' | null = null;
+  /** Whether the HUD is meant to be on screen, and whether it is being drawn once ahead of time (see prewarm). */
+  private visible = true;
+  private warming = false;
   private remarkUntil = 0;
   private hitNoteUntil = 0;
 
@@ -279,7 +282,42 @@ export class Hud {
   }
 
   setVisible(visible: boolean): void {
-    this.root.classList.toggle('hidden', !visible);
+    this.visible = visible;
+    // (A run begun during the warm-up is shown at full strength at once.)
+    if (visible) this.root.classList.remove('prewarm');
+    this.root.classList.toggle('hidden', !visible && !this.warming);
+  }
+
+  /**
+   * Paint, once, the things that are costly to paint for the first time,
+   * while the title screen is up and nobody can feel it.
+   *
+   * The first time ARGUS's large banner appeared, the picture stopped for
+   * a fifth of a second: the browser was building, on the graphics card,
+   * what it needs to draw big soft-shadowed lettering on a faded band, and
+   * the game shares that card. The second time cost nothing. So the whole
+   * HUD is drawn once here at two hundredths of full strength, with the
+   * banner, the corner panel, a remark and the RESISTED word all up, and
+   * taken down again well before a round can start.
+   */
+  prewarm(): void {
+    if (this.warming) return;
+    this.warming = true;
+    this.root.classList.add('prewarm');
+    this.root.classList.remove('hidden');
+    this.analysis({ round: 1, lines: [{ observed: 'Nothing yet.', adapting: 'Adapting: nothing. Yet.' }] });
+    this.analysisPanel.classList.add('show');
+    this.remark('...');
+    this.hit(false, false, 'resisted', 0x4f8dff);
+    window.setTimeout(() => {
+      this.warming = false;
+      this.root.classList.remove('prewarm');
+      // (If a run has begun meanwhile, its own reset has cleared all this already.)
+      if (!this.visible) {
+        this.reset();
+        this.root.classList.add('hidden');
+      }
+    }, 700);
   }
 
   /** A new run: clear everything left over from the last one. */

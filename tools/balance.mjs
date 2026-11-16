@@ -9,9 +9,11 @@
 // The first-timer is a rough model of someone new to this kind of game:
 // slow to notice a robot, shaky, aims at the body, backs away late, runs
 // when hurt. The spec asks that a first-time player usually goes down
-// between rounds 5 and 8, and this is how that is checked. It is a model,
-// not a person: it shows whether the numbers are in the right place, not
-// how the game feels.
+// around round 9, between rounds 7 and 10, and this is how that is checked.
+// (It asked for rounds 5 to 8 until the first real person played the whole
+// game and said that easier was the right direction. Nothing here is to be
+// made harder again without asking them.) It is a model, not a person: it
+// shows whether the numbers are in the right place, not how the game feels.
 
 import fs from 'node:fs';
 import { launch } from './lib/browser.mjs';
@@ -23,6 +25,8 @@ const pilot = process.argv[3] ?? 'firstTimer';
 const ROUND_CAP = Number(process.argv[4] ?? 14);
 /** A round that lasts this many game minutes has stalled: something cannot reach something. */
 const STALL_MINUTES = 6;
+/** The rounds the spec asks a first-time player to usually go down in, first and last. */
+const TARGET = [7, 10];
 
 // (HO_DIST=some-folder plays a copy of the build kept in that folder.)
 const dist = process.env.HO_DIST ?? 'dist';
@@ -89,11 +93,11 @@ for (let n = 0; n < runs; n++) {
 
 const rounds = results.map((r) => r.round).sort((a, b) => a - b);
 const median = rounds.length % 2 ? rounds[(rounds.length - 1) / 2] : (rounds[rounds.length / 2 - 1] + rounds[rounds.length / 2]) / 2;
-const inTarget = rounds.filter((r) => r >= 5 && r <= 8).length;
+const inTarget = rounds.filter((r) => r >= TARGET[0] && r <= TARGET[1]).length;
 const tally = {};
 for (const r of rounds) tally[r] = (tally[r] ?? 0) + 1;
 console.log(`\nEnded in round:  ${Object.entries(tally).map(([round, count]) => `${round} (x${count})`).join('   ')}`);
-console.log(`Median round ${median}; ${inTarget} of ${rounds.length} runs (${Math.round((inTarget / rounds.length) * 100)}%) ended in rounds 5 to 8; earliest ${rounds[0]}, latest ${rounds[rounds.length - 1]}.`);
+console.log(`Median round ${median}; ${inTarget} of ${rounds.length} runs (${Math.round((inTarget / rounds.length) * 100)}%) ended in rounds ${TARGET[0]} to ${TARGET[1]}; earliest ${rounds[0]}, latest ${rounds[rounds.length - 1]}.`);
 console.log(`(${((Date.now() - started) / 1000).toFixed(0)} seconds to play them.)`);
 const stalled = results.filter((r) => r.stalled).length;
 if (stalled) console.log(`

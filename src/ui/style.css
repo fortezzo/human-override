@@ -78,6 +78,11 @@ body {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* Drawn once ahead of time, too faint to see (see Hud.prewarm). */
+.hud.prewarm {
+  opacity: 0.02;
+}
+
 /* Debug photo mode: keep the HUD out of screenshots of the room. */
 .hud.photo {
   visibility: hidden;

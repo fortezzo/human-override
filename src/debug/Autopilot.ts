@@ -622,12 +622,13 @@ export class Autopilot {
     if (startsFight && this.profile.prepares) {
       const slot = weapons.loadout.slots[weapons.loadout.current];
       const loaded = !slot || slot.state.ammo >= WEAPONS[slot.id].magazine * 0.6 || slot.state.reserve === 0;
-      // (It does not start one with less than the best gun on the map,
-      // once the rack that sells it can be reached; and the patient player
-      // not with the room still full of the last round, either.)
+      // (The patient player does not start one with the room still full of the last round.)
       const best = RACKS_BEST_FIRST[0]!;
-      // (Anyone who prepares at all knows to bring the good gun: that much is learnt on the first attempt.)
-      const armed = !world.reachable.has(best.area) || weapons.loadout.slots.some((s) => s?.id === best.weapon);
+      // (Only the patient player holds out for the good gun before the
+      // uplink. While the uplink runs the map is kept from filling, so
+      // starting it is safer than fighting the same round without it, and
+      // a model that waited for the carbine first went down waiting.)
+      const armed = (!this.profile.patient && target === 'uplink') || !world.reachable.has(best.area) || weapons.loadout.slots.some((s) => s?.id === best.weapon);
       if (player.health < (this.profile.patient ? 85 : 70) || !loaded || !armed || (this.profile.patient && standing > 3)) return null;
     }
     return { ...at, label: PLACE_NAMES[target] };
