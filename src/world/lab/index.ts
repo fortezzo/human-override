@@ -217,7 +217,7 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
   // it on hangers.
   const lineZ = (LAB_LINE.z0 + LAB_LINE.z1) / 2;
   approach(b, { area: 'lab', out: 1, wallX: x1 + t, ...LAB_LINE, name: 'labLine' }, lights, haze, dustBeams);
-  b.prop('rollershutter_door', { at: [x1 + 0.3, LAB_LINE.top - 0.7, lineZ], scale: [2.75, 1.05, 1], rot: [0, HALF_PI, 0.04], collide: false });
+  // (Its shutter is a moving part: see world/Shutters.ts.)
   const railY = 4.25;
   const railZ = LAB_LINE.z0 - 0.75;
   ibeam(b, 'x', CELL.x1 - 0.6, x1, railZ, railY + 0.2, 0.2, 0.16);

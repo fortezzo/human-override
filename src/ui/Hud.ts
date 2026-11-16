@@ -42,6 +42,13 @@ export interface HudState {
   reserve: number;
   lowAmmo: number;
   reloading: boolean;
+  /** Grenades in the pouch, and the most it holds. */
+  grenades: number;
+  grenadeMax: number;
+  /** The boosts the player has: each one's name and its colour. */
+  boosts: Array<{ name: string; color: string }>;
+  /** Timed pickups in force: each one's name, its colour, and how much of its time is left (seconds, and of how many). */
+  effects: Array<{ name: string; color: string; left: number; total: number }>;
   /** Names of the weapons carried, and which is in hand. */
   slots: Array<string | null>;
   current: number;
@@ -75,8 +82,8 @@ export interface HudAnalysis {
 }
 
 /** Why a hit did less than it might have: the word shown under the crosshair. */
-export type HitNote = 'resisted' | 'plated' | 'guarded' | 'guardBroke';
-const HIT_NOTES: Record<HitNote, string> = { resisted: 'RESISTED', plated: 'ARMOUR', guarded: 'PLATE', guardBroke: 'PLATE OFF' };
+export type HitNote = 'resisted' | 'plated' | 'guarded' | 'guardBroke' | 'turned' | 'immune';
+const HIT_NOTES: Record<HitNote, string> = { resisted: 'RESISTED', plated: 'ARMOUR', guarded: 'PLATE', guardBroke: 'PLATE OFF', turned: 'TURNED', immune: 'CANNOT BE TURNED' };
 
 /**
  * ARGUS's mark, as it is painted on the facility's walls: an almond eye in
@@ -106,6 +113,11 @@ export class Hud {
   private readonly reserve: HTMLElement;
   private readonly ammoBlock: HTMLElement;
   private readonly slots: HTMLElement;
+  private readonly grenadePips: HTMLElement;
+  private readonly boostRow: HTMLElement;
+  private readonly effectRow: HTMLElement;
+  /** The draining bar of each timed pickup on show, in the order they are listed. */
+  private effectBars: HTMLElement[] = [];
   private readonly scrap: HTMLElement;
   private readonly scrapPops: HTMLElement;
   private readonly round: HTMLElement;
@@ -164,7 +176,7 @@ export class Hud {
   private toastTimer = 0;
   private hintTimer = 16;
   private shownScrap = -1;
-  private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '', objective: '', keys: '', boss: '', bossHealth: '', markerAt: '', markerDistance: '', markerLook: '' };
+  private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '', objective: '', keys: '', boss: '', bossHealth: '', markerAt: '', markerDistance: '', markerLook: '', grenades: '', boosts: '', effects: '' };
 
   constructor(parent: HTMLElement) {
     this.root = el('div', 'hud', parent);
@@ -216,7 +228,10 @@ export class Hud {
 
     this.announcer = new RoundAnnouncer(this.root, this.round);
 
+    // Timed pickups in force, each with a bar that drains; and under them the boosts the player has.
+    this.effectRow = el('div', 'hud-effects', this.root);
     this.healthBlock = el('div', 'hud-health', this.root);
+    this.boostRow = el('div', 'hud-boosts', this.healthBlock);
     el('div', 'hud-label', this.healthBlock, 'VITALS');
     const bar = el('div', 'hud-bar', this.healthBlock);
     this.healthFill = el('div', 'hud-bar-fill', bar);
@@ -233,6 +248,10 @@ export class Hud {
     this.ammo = el('span', 'hud-ammo-count', row, '0');
     this.reserve = el('span', 'hud-ammo-reserve', row, '/ 0');
     this.slots = el('div', 'hud-slots', this.ammoBlock);
+    const grenades = el('div', 'hud-grenades', this.ammoBlock);
+    el('b', '', grenades, 'G');
+    el('span', '', grenades, 'GRENADES');
+    this.grenadePips = el('span', 'hud-grenade-pips', grenades);
 
     this.prompt = el('div', 'hud-prompt', this.root);
     const line = el('div', 'hud-prompt-line', this.prompt);
@@ -243,7 +262,7 @@ export class Hud {
 
     this.hint = el('div', 'hud-hint', this.root);
     this.hint.innerHTML =
-      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
+      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>G</b> grenade <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
     this.toast = el('div', 'hud-toast', this.root);
 
     // Under the crosshair: why a hit did less than it might have.
@@ -367,7 +386,7 @@ export class Hud {
       this.hitNote.className = `hit-note show ${note}${settings.value.reducedMotion ? ' calm' : ''}`;
       if (!again) void this.hitNote.offsetWidth;
       this.hitNote.classList.add('pop');
-      this.hitNoteUntil = now + (note === 'guardBroke' ? 1100 : note === 'resisted' ? 850 : 550);
+      this.hitNoteUntil = now + (note === 'guardBroke' || note === 'turned' || note === 'immune' ? 1100 : note === 'resisted' ? 850 : 550);
     }
   }
 
@@ -501,11 +520,11 @@ export class Hud {
     this.damageTimer = 1.4;
   }
 
-  /** A round has begun, with this many robots on their way. */
-  roundStarted(round: number, robots: number): void {
+  /** A round has begun, with this many robots on their way (`swarm`: all of them drones). */
+  roundStarted(round: number, robots: number, swarm = false): void {
     // The lull is over, and ARGUS's analysis with it. (What it decided is on the robots now.)
     if (this.heldStage === null) this.clearAnalysis();
-    this.announcer.begin(round, robots);
+    this.announcer.begin(round, robots, swarm);
   }
 
   /** A round has been cleared, having paid this much scrap. */
@@ -584,6 +603,39 @@ export class Hud {
         slot.append(name ? name.toUpperCase() : 'EMPTY');
       });
     }
+
+    // Grenades: a pip for each one the pouch holds, lit for each one in it.
+    const grenades = `${state.grenades}/${state.grenadeMax}`;
+    if (grenades !== last.grenades) {
+      last.grenades = grenades;
+      this.grenadePips.textContent = '';
+      for (let i = 0; i < state.grenadeMax; i++) el('i', i < state.grenades ? 'have' : '', this.grenadePips);
+    }
+    // The boosts the player has, each in its own colour.
+    const boosts = state.boosts.map((boost) => boost.name).join('|');
+    if (boosts !== last.boosts) {
+      last.boosts = boosts;
+      this.boostRow.textContent = '';
+      for (const boost of state.boosts) el('span', 'hud-boost', this.boostRow, boost.name).style.setProperty('--tint', boost.color);
+    }
+    // Timed pickups: named, with a bar that drains as their time runs out.
+    const effects = state.effects.map((effect) => effect.name).join('|');
+    if (effects !== last.effects) {
+      last.effects = effects;
+      this.effectRow.textContent = '';
+      this.effectBars = state.effects.map((effect) => {
+        const item = el('div', 'hud-effect', this.effectRow);
+        item.style.setProperty('--tint', effect.color);
+        el('span', '', item, effect.name);
+        return el('i', '', el('div', 'hud-effect-bar', item));
+      });
+    }
+    if (state.effects.length) this.effectRow.classList.toggle('calm', settings.value.reducedMotion);
+    state.effects.forEach((effect, i) => {
+      const bar = this.effectBars[i];
+      if (bar) bar.style.transform = `scaleX(${Math.max(0, Math.min(1, effect.left / effect.total)).toFixed(3)})`;
+      bar?.parentElement?.parentElement?.classList.toggle('ending', effect.left < 5);
+    });
 
     // Scrap counts up or down to its new value instead of jumping.
     if (this.shownScrap < 0) this.shownScrap = state.scrap;

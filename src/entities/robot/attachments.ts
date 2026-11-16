@@ -20,6 +20,7 @@ export const SHIELD_COLOR: Record<string, number> = {
   shotgun: 0xffa630,
   carbine: 0x4f8dff,
   melee: 0xff4fc8,
+  turncoat: 0xf2f6ff,
 };
 
 let plates: THREE.BufferGeometry | null = null;

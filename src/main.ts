@@ -2,14 +2,18 @@
 // the HUD and menus.
 
 import './ui/style.css';
-import { PLAYER, QUALITY, WEAPONS } from './config';
+import { BOOSTS, GRENADE, PICKUPS, QUALITY, WEAPONS } from './config';
 import { settings } from './core/settings';
 import { installDebugApi, type DebugTools } from './debug/debugApi';
 import { SHIELD_COLOR } from './entities/robot/attachments';
 import { Game } from './game/Game';
 import { accuracy, readBest, type RunStats } from './game/RunStats';
+import { markName } from './sim/bench';
+import { BOOST_IDS } from './sim/boosts';
 import { KEY_IDS } from './sim/mission';
 import { AREA_NAMES } from './world/plan';
+import { STATION_COLOR } from './world/Stations';
+import { PICKUP_COLOR } from './game/FloorPickups';
 import { Hud } from './ui/Hud';
 import { Screens, type ProfileCard } from './ui/Screens';
 
@@ -64,7 +68,7 @@ async function boot(): Promise<void> {
     hud.hit(
       hit.weakPoint,
       hit.killed,
-      hit.guardBroke ? 'guardBroke' : hit.resisted ? 'resisted' : hit.guarded ? 'guarded' : hit.plated ? 'plated' : null,
+      hit.turned ? 'turned' : hit.immune ? 'immune' : hit.guardBroke ? 'guardBroke' : hit.resisted ? 'resisted' : hit.guarded ? 'guarded' : hit.plated ? 'plated' : null,
       hit.resisted ? (SHIELD_COLOR[hit.robot.shieldedAgainst ?? ''] ?? null) : null,
     );
     hud.scrapChange(hit.scrap);
@@ -73,13 +77,16 @@ async function boot(): Promise<void> {
   game.onRemark = (line) => hud.remark(line);
   game.onPlayerHurt = (angle) => hud.damage(angle);
   game.onRound = (event, round, amount) => {
-    if (event === 'start') hud.roundStarted(round, amount);
+    if (event === 'start') hud.roundStarted(round, amount, game.director.swarm);
     else hud.roundCleared(round, amount);
   };
   game.onPurchase = (purchase) => {
-    hud.scrapChange(-purchase.cost);
-    if (purchase.kind === 'weapon' && purchase.replaced) hud.showToast(`${WEAPONS[purchase.replaced].name} left behind`, 2.5);
+    if (purchase.cost > 0) hud.scrapChange(-purchase.cost);
+    if ((purchase.kind === 'weapon' || purchase.kind === 'crateTake') && purchase.replaced) hud.showToast(`${WEAPONS[purchase.replaced].name} left behind`, 2.5);
+    if (purchase.kind === 'bench') hud.showToast(`${WEAPONS[purchase.weapon].name} overclocked to ${markName(purchase.level)}`, 3);
   };
+  game.onPickup = (id) => hud.notice(PICKUPS.names[id], PICKUPS.notes[id].toUpperCase());
+  game.onRevive = () => hud.notice('FAILSAFE USED', 'YOU ARE BACK UP · BUY ANOTHER AT ITS STATION');
   const summary = (stats: RunStats, best: boolean) => ({
     round: Math.max(1, stats.round),
     kills: stats.kills,
@@ -161,14 +168,22 @@ async function boot(): Promise<void> {
   // The HUD reads the game's state once per frame.
   const tick = () => {
     if (game.state === 'playing') {
-      const { weapons, player, director, wallet } = game;
+      const { weapons, player, director, wallet, economy } = game;
       const def = weapons.def;
+      const css = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
       hud.update(1 / Math.max(game.fps, 1), {
         health: player.health,
-        maxHealth: PLAYER.maxHealth,
+        maxHealth: player.maxHealth,
         stamina: player.stamina.level,
         winded: player.stamina.winded,
-        weapon: def.name,
+        weapon: weapons.title,
+        grenades: economy.grenades.count,
+        grenadeMax: GRENADE.max,
+        boosts: BOOST_IDS.filter((id) => economy.boosts.owned[id]).map((id) => ({ name: BOOSTS[id].name, color: css(STATION_COLOR[id]) })),
+        effects: [
+          ...(economy.effects.overload > 0 ? [{ name: PICKUPS.names.overload, color: css(PICKUP_COLOR.overload), left: economy.effects.overload, total: PICKUPS.overloadSeconds }] : []),
+          ...(economy.effects.doubleScrap > 0 ? [{ name: PICKUPS.names.doubleScrap, color: css(PICKUP_COLOR.doubleScrap), left: economy.effects.doubleScrap, total: PICKUPS.doubleSeconds }] : []),
+        ],
         ammo: weapons.state.ammo,
         reserve: weapons.state.reserve,
         lowAmmo: Math.max(1, Math.floor(def.magazine * 0.2)),

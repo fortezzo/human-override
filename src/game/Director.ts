@@ -3,12 +3,12 @@
 // sim/facility.ts; this class connects them to the map and the robots.
 
 import * as THREE from 'three';
-import { ARGUS, ROBOT, ROUNDS, SPECIALS } from '../config';
+import { ARGUS, ROBOT, ROUNDS, SPECIALS, SWARM } from '../config';
 import { rand } from '../core/math';
 import type { Robot, RobotTraits } from '../entities/robot/Robot';
 import type { Adaptation } from '../sim/argus';
 import { pickEntry, pickUnseenEntry } from '../sim/facility';
-import { composeRound, type HordeRules, type SpawnOrder } from '../sim/horde';
+import { composeRound, composeSwarm, isSwarmRound, type HordeRules, type SpawnOrder } from '../sim/horde';
 import { createRounds, remaining, robotDestroyed, robotRecalled, skipRound, speedFor, updateRounds, type RoundState } from '../sim/rounds';
 import { ENTRY_PLANS, insideRoom, type AreaId, type EntryPlan } from '../world/plan';
 import type { World } from '../world/World';
@@ -65,6 +65,8 @@ export class Director {
   counters: readonly Adaptation[] = [];
   /** Debug: rounds of ordinary robots only, with no specials and no counters. */
   plain = false;
+  /** The round being played is a swarm round: drones and nothing else. */
+  swarm = false;
   /** The robots of the round being played, in the order they are sent, and how many of them have been. */
   private orders: SpawnOrder[] = [];
   private sent = 0;
@@ -89,6 +91,12 @@ export class Director {
     this.counters = [];
     this.orders = [];
     this.sent = 0;
+    this.swarm = false;
+  }
+
+  /** The most robots allowed on the map at once right now. */
+  private get limit(): number {
+    return Math.min(ROUNDS.maxActive, this.crowdLimit ?? Infinity, this.swarm ? SWARM.maxActive : Infinity);
   }
 
   /** How many of each kind the round being played is made of, and how many carry each of ARGUS's counters. */
@@ -119,7 +127,7 @@ export class Director {
 
   /** Is there room on the map for one more? */
   get room(): boolean {
-    return this.active + this.waiting < (this.crowdLimit ?? ROUNDS.maxActive);
+    return this.active + this.waiting < this.limit;
   }
 
   /**
@@ -187,7 +195,7 @@ export class Director {
   update(dt: number): void {
     if (!this.paused && !this.suspended) {
       // Robots waiting to come in count towards how full the map is.
-      const tick = updateRounds(this.rounds, this.crowdLimit === null ? ROUNDS : { ...ROUNDS, maxActive: Math.min(ROUNDS.maxActive, this.crowdLimit) }, dt, this.active + this.waiting);
+      const tick = updateRounds(this.rounds, this.limit === ROUNDS.maxActive ? ROUNDS : { ...ROUNDS, maxActive: this.limit }, dt, this.active + this.waiting);
       if (tick.started !== null) {
         this.compose(tick.started);
         this.onRoundStart(tick.started);
@@ -230,7 +238,10 @@ export class Director {
   /** Work out what the round that has just started is made of. */
   private compose(round: number): void {
     const plan = this.rounds.plan;
-    this.orders = this.plain ? Array.from({ length: plan.count }, (): SpawnOrder => ({ kind: 'drudge' })) : composeRound(HORDE, round, plan.count, this.counters, Math.random);
+    // Every fifth round is a swarm: drones only, and they come quickly.
+    this.swarm = !this.plain && isSwarmRound(SWARM, round);
+    if (this.swarm) plan.spawnInterval = SWARM.spawnInterval;
+    this.orders = this.plain ? Array.from({ length: plan.count }, (): SpawnOrder => ({ kind: 'drudge' })) : this.swarm ? composeSwarm(SWARM, round) : composeRound(HORDE, round, plan.count, this.counters, Math.random);
     // (Whatever ARGUS added for a counter is part of the round: it has to be destroyed like the rest.)
     plan.count = this.orders.length;
     this.sent = 0;
@@ -241,7 +252,7 @@ export class Director {
     const plan = this.rounds.plan;
     switch (order.kind) {
       case 'drone':
-        return { kind: 'drone', health: plan.health * SPECIALS.drone.health, speed: SPECIALS.drone.speed, attackDamage: SPECIALS.drone.damage };
+        return { kind: 'drone', health: plan.health * SPECIALS.drone.health, speed: this.swarm ? SWARM.speed : SPECIALS.drone.speed, attackDamage: SPECIALS.drone.damage };
       case 'bomber':
         // (Its blow is the blast: it does not strike.)
         return { kind: 'bomber', health: plan.health * SPECIALS.bomber.health, speed: SPECIALS.bomber.speed, attackDamage: 0 };

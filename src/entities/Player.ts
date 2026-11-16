@@ -23,6 +23,10 @@ export class Player {
   yaw = 0;
   pitch = 0;
   health = PLAYER.maxHealth;
+  /** Full health for this player right now (more with the health boost). */
+  maxHealth = PLAYER.maxHealth;
+  /** Seconds for which nothing can hurt them (just back on their feet from the fail-safe). */
+  grace = 0;
   onGround = true;
   /**
    * The height of the ground the player last stood on. Solid things are
@@ -75,9 +79,28 @@ export class Player {
     this.velocity.set(0, 0, 0);
     this.yaw = yaw;
     this.pitch = 0;
+    this.maxHealth = PLAYER.maxHealth;
     this.health = PLAYER.maxHealth;
+    this.grace = 0;
     this.sinceDamage = 99;
     this.stamina = createStamina();
+  }
+
+  /** Change what full health is. Raising it fills the player up to the new mark. */
+  setMaxHealth(max: number): void {
+    if (max > this.maxHealth && this.alive) this.health = max;
+    this.maxHealth = max;
+    this.health = Math.min(this.health, max);
+  }
+
+  /**
+   * The fail-safe: back on their feet from a blow that put them down, with
+   * this share of full health, and untouchable for `grace` seconds.
+   */
+  revive(share: number, grace: number): void {
+    this.health = Math.max(1, this.maxHealth * share);
+    this.grace = grace;
+    this.sinceDamage = 0;
   }
 
   get alive(): boolean {
@@ -86,7 +109,7 @@ export class Player {
 
   /** 0 = unhurt, 1 = nearly down. Drives the red screen edge. */
   get hurt(): number {
-    return 1 - this.health / PLAYER.maxHealth;
+    return 1 - this.health / this.maxHealth;
   }
 
   /** Kick the view up (and a little sideways) when the weapon fires. */
@@ -107,7 +130,7 @@ export class Player {
    * was hit a moment ago: see PLAYER.mercy).
    */
   damage(amount: number, fromX: number, fromZ: number): boolean {
-    if (!this.alive || this.sinceDamage < PLAYER.mercy) return false;
+    if (!this.alive || this.grace > 0 || this.sinceDamage < PLAYER.mercy) return false;
     this.health = Math.max(0, this.health - amount);
     this.sinceDamage = 0;
     this.addShake(0.5);
@@ -261,8 +284,9 @@ export class Player {
 
   private regenerate(dt: number): void {
     this.sinceDamage += dt;
-    if (this.alive && this.sinceDamage > PLAYER.regenDelay && this.health < PLAYER.maxHealth) {
-      this.health = Math.min(PLAYER.maxHealth, this.health + PLAYER.regenPerSecond * dt);
+    this.grace = Math.max(0, this.grace - dt);
+    if (this.alive && this.sinceDamage > PLAYER.regenDelay && this.health < this.maxHealth) {
+      this.health = Math.min(this.maxHealth, this.health + PLAYER.regenPerSecond * dt);
     }
   }
 

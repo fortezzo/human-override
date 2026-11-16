@@ -319,6 +319,97 @@ body {
   bottom: 18px;
   text-align: right;
 }
+/* Grenades: the key that throws one, and a pip for each the pouch holds. */
+.hud-grenades {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--ink-dim);
+}
+.hud-grenades b {
+  padding: 0 5px;
+  font-family: var(--mono);
+  font-weight: 400;
+  border: 1px solid var(--line);
+}
+.hud-grenade-pips {
+  display: inline-flex;
+  gap: 4px;
+}
+.hud-grenade-pips i {
+  width: 9px;
+  height: 13px;
+  border: 1px solid var(--line);
+  border-radius: 4px 4px 2px 2px;
+}
+.hud-grenade-pips i.have {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+/* The boosts the player has: a small tag each, in the station's colour. */
+.hud-boosts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 9px;
+  min-height: 0;
+}
+.hud-boost {
+  padding: 2px 7px 1px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--tint);
+  border: 1px solid var(--tint);
+  background: rgba(8, 10, 12, 0.6);
+}
+/* Timed pickups in force: a name and a bar that drains. */
+.hud-effects {
+  position: absolute;
+  left: 28px;
+  bottom: 118px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+}
+.hud-effect span {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--tint);
+  text-shadow: 0 0 12px color-mix(in srgb, var(--tint) 55%, transparent);
+}
+.hud-effect-bar {
+  margin-top: 3px;
+  height: 4px;
+  background: rgba(10, 12, 14, 0.7);
+  overflow: hidden;
+}
+.hud-effect-bar i {
+  display: block;
+  height: 100%;
+  background: var(--tint);
+  transform-origin: left center;
+}
+.hud-effect.ending span {
+  animation: effect-ending 0.5s steps(2, end) infinite;
+}
+.hud-effects.calm .hud-effect.ending span {
+  animation: none;
+  opacity: 0.6;
+}
+@keyframes effect-ending {
+  50% {
+    opacity: 0.35;
+  }
+}
 .hud-ammo-row {
   display: flex;
   align-items: baseline;
@@ -1264,6 +1355,14 @@ kbd {
   color: var(--ink-dim);
   opacity: 0;
   transition: opacity 0.25s ease;
+}
+/* The Turncoat: a robot turned, in the colour of everything on the player's side. */
+.hit-note.turned {
+  font-size: 22px;
+  font-weight: 700;
+  color: #4fe6ff;
+  -webkit-text-stroke: 3px rgba(4, 8, 10, 0.85);
+  paint-order: stroke fill;
 }
 .hit-note.show {
   opacity: 1;

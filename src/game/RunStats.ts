@@ -15,6 +15,8 @@ export interface RunStats {
   scrapEarned: number;
   scrapSpent: number;
   doorsOpened: number;
+  /** Times the fail-safe brought the player back. */
+  revives: number;
   /** How long the run had lasted when the kill switch was pulled (seconds), or null if it never was. */
   missionTime: number | null;
   /** Part of the mission was skipped with the debug tools, so its time is not a record. */
@@ -22,7 +24,7 @@ export interface RunStats {
 }
 
 export function createRunStats(): RunStats {
-  return { time: 0, round: 0, kills: 0, weakPointKills: 0, meleeKills: 0, shots: 0, shotsHit: 0, scrapEarned: 0, scrapSpent: 0, doorsOpened: 0, missionTime: null, missionSkipped: false };
+  return { time: 0, round: 0, kills: 0, weakPointKills: 0, meleeKills: 0, shots: 0, shotsHit: 0, scrapEarned: 0, scrapSpent: 0, doorsOpened: 0, revives: 0, missionTime: null, missionSkipped: false };
 }
 
 /** Fraction of shots that hit, 0..1. */

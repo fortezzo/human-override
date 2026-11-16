@@ -138,15 +138,15 @@ export class RoundAnnouncer {
     this.hide();
   }
 
-  /** A round has begun, with this many robots on their way. */
-  begin(round: number, robots: number): void {
+  /** A round has begun, with this many robots on their way (`swarm`: all of them drones). */
+  begin(round: number, robots: number, swarm = false): void {
     this.settle();
     this.mode = 'start';
     this.time = 0;
     this.round = round;
     this.flight = null;
     this.number.textContent = String(round);
-    this.sub.textContent = `${robots} ROBOT${robots === 1 ? '' : 'S'} INBOUND`;
+    this.sub.textContent = swarm ? `SWARM · ${robots} DRONES INBOUND` : `${robots} ROBOT${robots === 1 ? '' : 'S'} INBOUND`;
     this.clock = performance.now();
     this.render();
   }

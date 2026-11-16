@@ -19,6 +19,8 @@ import { buildHall } from './hall';
 import { buildLab, type RobotParts } from './lab';
 import { buildLobby } from './lobby';
 import { MissionSet } from './MissionSet';
+import { ShutterSet, type ShutterGate } from './Shutters';
+import { StationSet } from './Stations';
 import { AREA_BOXES, AREA_IDS, AREA_RECTS, DOOR_PLANS, ENTRY_PLANS, NAV_BOUNDS, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
 import { buildPower } from './power';
 
@@ -32,10 +34,20 @@ export class World {
   readonly dust = new Map<AreaId, DustMotes>();
   /** The parts of the map the mission moves: levers, the cage's gate, the keys. */
   readonly mission: MissionSet;
-  /** Meshes that stop bullets (rooms and doors). */
+  /** The stations: the four boosts, the crate and the bench. */
+  readonly stations: StationSet;
+  /** The roller shutters over the openings robots walk in through. */
+  readonly shutters: ShutterSet;
+  /** Meshes that stop bullets (rooms, doors, shutters). */
   readonly solids: THREE.Mesh[] = [];
-  /** Everything solid right now: the rooms, plus every door that is still shut. */
+  /** Everything solid right now: the rooms, every door that is still shut, and every shutter that is down. */
   colliders: Collider[] = [];
+  /**
+   * The same without the shutters. Robots find their way as if every
+   * shutter were open (their way in is through one, and when it is down
+   * they walk up to it and batter it), so their map is made from this.
+   */
+  private navColliders: Collider[] = [];
   readonly nav: NavGrid;
   /** The area the player is in (the last one they were in, while crossing a doorway). */
   playerArea: AreaId = 'lobby';
@@ -59,6 +71,13 @@ export class World {
     for (const id of AREA_IDS) this.areas.get(id)!.group.add(this.mission.groups[id]);
     this.group.add(this.mission.loose);
     this.lights.push(...this.mission.lights);
+    this.stations = new StationSet(assets, materials);
+    this.shutters = new ShutterSet(assets);
+    for (const id of AREA_IDS) this.areas.get(id)!.group.add(this.stations.groups[id], this.shutters.groups[id]);
+    this.fixed.push(...this.stations.colliders);
+    this.solids.push(...this.stations.solids);
+    this.lights.push(...this.stations.lights);
+    for (const gate of this.shutters.gates) this.solids.push(...gate.solids);
     for (const plan of DOOR_PLANS) {
       const door = new Door(plan, assets, materials);
       this.doors.push(door);
@@ -79,7 +98,7 @@ export class World {
     this.nav = createNavGrid(
       NAV_BOUNDS,
       0.3,
-      this.colliders,
+      this.navColliders,
       ROBOT.radius + 0.06,
       0.3,
       1.8,
@@ -134,7 +153,43 @@ export class World {
   }
 
   private rebuildColliders(): void {
-    this.colliders = this.fixed.concat(this.doors.filter((d) => !d.passable).map((d) => d.collider));
+    this.navColliders = this.fixed.concat(this.doors.filter((d) => !d.passable).map((d) => d.collider));
+    this.colliders = this.navColliders.concat(this.shutters.colliders);
+  }
+
+  // --------------------------------------------------------------- shutters
+
+  /** A shutter has been forced or run back down: what is solid has changed. */
+  shuttersChanged(): void {
+    this.rebuildColliders();
+  }
+
+  /**
+   * The shutter the player could repair from where they stand: one in
+   * their own area, within `range` metres, that they are indoors of (and
+   * clear of the opening itself, so that it cannot come down on them).
+   */
+  shutterInReach(position: THREE.Vector3, range: number): ShutterGate | null {
+    let best: ShutterGate | null = null;
+    let nearest = range;
+    for (const gate of this.shutters.gates) {
+      if (gate.plan.area !== this.playerArea) continue;
+      const { inside, along } = gate.where(position.x, position.z);
+      const half = (gate.plan.to - gate.plan.from) / 2;
+      const distance = Math.hypot(inside, Math.max(0, Math.abs(along) - half));
+      if (inside > 0.75 && distance < nearest) {
+        nearest = distance;
+        best = gate;
+      }
+    }
+    return best;
+  }
+
+  /** True if someone at (x, z) is outside a shutter or under it: running it down now would shut them out. */
+  wouldShutOut(gate: ShutterGate, x: number, z: number): boolean {
+    const { inside, along } = gate.where(x, z);
+    const half = (gate.plan.to - gate.plan.from) / 2;
+    return inside < 0.75 && inside > -30 && Math.abs(along) < half + 9;
   }
 
   // ------------------------------------------------------------- visibility
@@ -199,19 +254,23 @@ export class World {
     for (const door of this.doors) {
       if (door.update(dt)) {
         this.rebuildColliders();
-        refreshRegion(this.nav, door.rect, this.colliders);
+        refreshRegion(this.nav, door.rect, this.navColliders);
         this.onDoorPassable(door);
       }
     }
     for (const area of this.areas.values()) if (area.group.visible) area.tick?.(time);
     this.mission.update(dt, time);
+    this.stations.update(dt, time);
+    this.shutters.update(dt);
   }
 
   /** Shut every door and put the player back in the lobby (a new run). */
   reset(): void {
     for (const door of this.doors) door.reset();
+    this.shutters.reset();
+    this.stations.reset();
     this.rebuildColliders();
-    for (const door of this.doors) refreshRegion(this.nav, door.rect, this.colliders);
+    for (const door of this.doors) refreshRegion(this.nav, door.rect, this.navColliders);
     this.playerArea = 'lobby';
     this.refreshVisibility();
     this.mission.reset();

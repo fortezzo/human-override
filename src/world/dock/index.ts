@@ -304,10 +304,7 @@ export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild
   const bayMid = (bay: { z0: number; z1: number }) => (bay.z0 + bay.z1) / 2;
   approach(b, { area: 'dock', out: -1, wallX: x0 - t, ...DOCK_BAYS.north, name: 'dockNorth' }, lights, haze, dustBeams);
   approach(b, { area: 'dock', out: -1, wallX: x0 - t, ...DOCK_BAYS.south, name: 'dockSouth' }, lights, haze, dustBeams);
-  for (const bay of [DOCK_BAYS.north, DOCK_BAYS.south]) {
-    // The shutter, jammed most of the way up.
-    b.prop('rollershutter_door', { at: [x0 - 0.3, bay.top - 0.72, bayMid(bay)], scale: [3.12, 1.05, 1], rot: [0, HALF_PI, -0.035], collide: false });
-  }
+  // (Their shutters are moving parts: see world/Shutters.ts.)
   const shut = DOCK_BAYS.shut;
   // The shut bay: a ribbed steel door down to the floor, in a hazard-striped frame.
   b.box('ceilingDeck', [x0 - 0.34, 0, shut.z0], [x0 - 0.28, shut.top, shut.z1], { collide: false, cast: false });

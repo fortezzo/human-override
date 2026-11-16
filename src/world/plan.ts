@@ -215,6 +215,72 @@ export const ENTRY_PLANS: EntryPlan[] = [
   { id: 'labVent', area: 'lab', kind: 'drop', at: [12.3, 27.6], spread: 0.25, height: LAB.height, fromRound: 1 },
 ];
 
+// --------------------------------------------------------------- shutters
+
+/**
+ * The roller shutter over one of the openings robots walk in through. It
+ * hangs in the wall the opening is in. Down, it shuts the opening; forced,
+ * it is jammed part-way up, crooked, and robots come in under it.
+ */
+export interface ShutterPlan {
+  /** The entry it is over (an id in ENTRY_PLANS). */
+  id: string;
+  area: AreaId;
+  /** The wall runs along this axis, and the shutter hangs at this position on the other ... */
+  along: 'x' | 'z';
+  at: number;
+  /** ... between these two positions, down to the floor from this height. */
+  from: number;
+  to: number;
+  top: number;
+  /** Which way is indoors from it, along the other axis. */
+  inward: 1 | -1;
+  /** Forced: how high its bottom edge is jammed, and how crooked it hangs (radians). */
+  raised: number;
+  crooked: number;
+}
+
+export const SHUTTER_PLANS: ShutterPlan[] = [
+  { id: 'yard', area: 'lobby', along: 'x', at: LOBBY.z0 - 0.42, from: -1.9, to: 1.9, top: 3.1, inward: 1, raised: 2.08, crooked: 0.045 },
+  { id: 'eastBreach', area: 'power', along: 'z', at: POWER.x1 + 0.3, from: EAST_BREACH.z0, to: EAST_BREACH.z1, top: EAST_BREACH.top, inward: -1, raised: 2.45, crooked: 0.05 },
+  { id: 'dockBayNorth', area: 'dock', along: 'z', at: DOCK.x0 - 0.3, from: DOCK_BAYS.north.z0, to: DOCK_BAYS.north.z1, top: DOCK_BAYS.north.top, inward: 1, raised: DOCK_BAYS.north.top - 0.72, crooked: -0.035 },
+  { id: 'dockBaySouth', area: 'dock', along: 'z', at: DOCK.x0 - 0.3, from: DOCK_BAYS.south.z0, to: DOCK_BAYS.south.z1, top: DOCK_BAYS.south.top, inward: 1, raised: DOCK_BAYS.south.top - 0.72, crooked: -0.035 },
+  { id: 'labLine', area: 'lab', along: 'z', at: LAB.x1 + 0.3, from: LAB_LINE.z0, to: LAB_LINE.z1, top: LAB_LINE.top, inward: -1, raised: LAB_LINE.top - 0.7, crooked: 0.04 },
+];
+
+// --------------------------------------------------------------- stations
+
+/** The four Boost Stations, the Prototype Crate and the Overclock Bench: one to an area. */
+export type StationId = 'carapace' | 'autoloader' | 'hairTrigger' | 'failsafe' | 'crate' | 'bench';
+
+export interface StationPlan {
+  id: StationId;
+  area: AreaId;
+  /** Where the middle of its back meets the wall, on the floor, and the way it faces (out from that wall). */
+  at: readonly [number, number];
+  normal: readonly [number, number];
+  /** Half its width along the wall, and how far it stands out from it. */
+  half: number;
+  depth: number;
+}
+
+/**
+ * One station in each of the six areas, so that every area is worth a
+ * visit: the fail-safe in the lobby (the room every route passes through),
+ * the health boost in the power room beside the breaker that brings the
+ * stations to life, the reload boost in the server hall, the fire-rate
+ * boost in the core (bought on the way in to the final stand), the crate
+ * in the loading dock and the bench in the robotics lab.
+ */
+export const STATION_PLANS: StationPlan[] = [
+  { id: 'failsafe', area: 'lobby', at: [-2.95, LOBBY.z1], normal: [0, -1], half: 0.6, depth: 0.55 },
+  { id: 'carapace', area: 'power', at: [POWER.x0, 6.6], normal: [1, 0], half: 0.6, depth: 0.55 },
+  { id: 'autoloader', area: 'hall', at: [8.0, HALL.z0], normal: [0, 1], half: 0.6, depth: 0.55 },
+  { id: 'hairTrigger', area: 'core', at: [CORE.x0, 32], normal: [1, 0], half: 0.6, depth: 0.55 },
+  { id: 'crate', area: 'dock', at: [-17.5, DOCK.z0], normal: [0, 1], half: 0.85, depth: 0.8 },
+  { id: 'bench', area: 'lab', at: [LAB.x1, 18.8], normal: [-1, 0], half: 1.05, depth: 0.75 },
+];
+
 // ------------------------------------------------------------ the mission
 
 /** One place the mission sends the player. */

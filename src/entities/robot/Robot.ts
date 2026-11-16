@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { addsLightOnly } from '../../render/glow';
 import { PoseLayers } from './kit/PoseLayers';
-import { ARGUS, ROBOT, SPECIALS } from '../../config';
+import { ARGUS, ROBOT, SPECIALS, TURNCOAT } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { settings } from '../../core/settings';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
@@ -38,6 +38,8 @@ export interface RobotEventsOut {
   stuck: boolean;
   /** A bomber has come within reach and started its fuse. */
   primed: boolean;
+  /** It was turned to the player's side, and its time is up: its core has burnt out. */
+  burnedOut: boolean;
 }
 
 /** What makes one robot different from the next: set by the round it belongs to. */
@@ -122,6 +124,10 @@ export class Robot {
   selfDestructed = false;
   /** A primed bomber: seconds until its next beep. */
   beepIn = 0;
+  /** Turned to the player's side by the Turncoat: seconds of it left (0 = one of ARGUS's). */
+  turned = 0;
+  /** It has been turned at some point (what it does from then on is the player's doing). */
+  wasTurned = false;
 
   private readonly mixer: THREE.AnimationMixer;
   private readonly actions = new Map<ClipName, THREE.AnimationAction>();
@@ -304,6 +310,29 @@ export class Robot {
     return out.copy(weak.centre).applyMatrix4(this.bones.get(weak.bone)!.matrixWorld);
   }
 
+  /**
+   * The Turncoat's beam has caught it: for `seconds` it is on the player's
+   * side, and its lights say so.
+   */
+  turn(seconds: number): void {
+    if (!this.alive) return;
+    this.turned = Math.max(this.turned, seconds);
+    this.wasTurned = true;
+    this.eyeColor.setHex(TURNCOAT.color);
+    // A bomber that had started its fuse starts again, for its new side.
+    this.fuse = -1;
+    this.mind.state = 'chase';
+    this.mind.cooldown = 0;
+  }
+
+  /** Knocked off balance without being hurt (the fail-safe's shove). ARGUS's own machines stand their ground. */
+  shove(): void {
+    if (!this.alive || this.role || this.falling) return;
+    this.mind.state = 'stagger';
+    this.mind.timer = 0;
+    this.play('hit', 0.08, true);
+  }
+
   /** Which weapon it is shielded against, or null. */
   get shieldedAgainst(): WeaponKey | null {
     return this.armour.shield;
@@ -327,7 +356,14 @@ export class Robot {
   /** @param others every robot on the map (this one included), to keep them from walking through each other */
   update(dt: number, target: THREE.Vector3, targetAlive: boolean, grid: NavGrid, colliders: readonly Collider[], others: readonly Robot[] = []): RobotEventsOut {
     this.time += dt;
-    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false, primed: false };
+    const out: RobotEventsOut = { hitPlayer: 0, attackStarted: false, footstep: false, breakApart: false, landed: false, stuck: false, primed: false, burnedOut: false };
+    if (this.turned > 0 && this.alive) {
+      this.turned -= dt;
+      if (this.turned <= 0) {
+        this.turned = 0;
+        out.burnedOut = true;
+      }
+    }
     const flies = this.model.flies;
     if (this.shield) {
       this.shieldFlash = damp(this.shieldFlash, 0, 5.5, dt);
@@ -430,7 +466,8 @@ export class Robot {
       const running = pace > ROBOT.runAbove;
       if (this.mind.state === 'chase') {
         if (distance > ROBOT.attackRange * 0.85) {
-          const waypoint = distance > 2.2 ? nextWaypoint(grid, p.x, p.z) : null;
+          // (The robots' map leads to the player. One that has been turned is after another robot: it goes straight for it.)
+          const waypoint = distance > 2.2 && this.turned <= 0 ? nextWaypoint(grid, p.x, p.z) : null;
           if (waypoint) {
             wantX = waypoint.x - p.x;
             wantZ = waypoint.z - p.z;

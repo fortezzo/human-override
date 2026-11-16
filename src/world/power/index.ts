@@ -204,7 +204,7 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   b.addObject(screens.object);
 
   // ---- The east breach and the transformer yard beyond it
-  b.prop('rollershutter_door', { at: [x1 + 0.3, 2.45, (EAST_BREACH.z0 + EAST_BREACH.z1) / 2], scale: [3.1, 1.05, 1], rot: [0, HALF_PI, 0.05], collide: false });
+  // (Its shutter is a moving part: see world/Shutters.ts.)
   approach(b, { area: 'power', out: 1, wallX: x1 + t, z0: EAST_BREACH.z0, z1: EAST_BREACH.z1, top: EAST_BREACH.top, depth: EAST_BREACH.depth, name: 'breachEast' }, lights, haze, dustBeams);
 
   for (const entry of ENTRY_PLANS) if (entry.area === 'power' && entry.kind === 'drop') vent(b, entry.at[0], entry.at[1], h);

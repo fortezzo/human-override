@@ -8,7 +8,8 @@
 // This is rule-based game AI, not machine learning: a handful of counts
 // compared with fixed thresholds.
 
-import { ARGUS, WEAPONS, type WeaponId } from '../config';
+import { ARGUS, SWARM, WEAPONS, type WeaponId } from '../config';
+import { isSwarmRound } from '../sim/horde';
 import type { Player } from '../entities/Player';
 import type { Robot } from '../entities/robot/Robot';
 import {
@@ -149,8 +150,8 @@ export class Argus {
   /** A shot or strike landed on a robot. */
   hit(hit: HitResult): void {
     if (this.offline) return;
-    // (A bomber's blast is nobody's weapon.)
-    if (hit.weapon !== 'blast') noteHit(this.notes, hit.weapon, hit.damage, hit.weakPoint);
+    // (A bomber's blast is nobody's weapon, and nor is a grenade or an EMP: ARGUS has no plating to answer them with.)
+    if (hit.weapon !== 'blast' && hit.weapon !== 'grenade' && hit.weapon !== 'emp') noteHit(this.notes, hit.weapon, hit.damage, hit.weakPoint);
     if (!hit.killed) return;
     this.kills += 1;
     if (this.kills === 1) this.say('firstKill');
@@ -186,6 +187,14 @@ export class Argus {
    */
   roundCleared(round: number): void {
     if (this.offline) return;
+    // The round after this one is a swarm: drones carry none of its
+    // counters, so it announces none. What it has in force waits a round.
+    if (isSwarmRound(SWARM, round + 1)) {
+      this.notes = createNotes();
+      this.tracker = createTracker();
+      this.say('swarm');
+      return;
+    }
     const analysis = analyse(this.state, this.notes, ARGUS, round + 1, weaponName);
     this.notes = createNotes();
     this.tracker = createTracker();

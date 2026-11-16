@@ -294,6 +294,87 @@ export class Effects {
     });
   }
 
+  /**
+   * The Turncoat's beam: a line of light from the muzzle to whatever it
+   * struck, there for an instant, with a hard point of light at each end.
+   */
+  beam(from: THREE.Vector3, to: THREE.Vector3, color: { r: number; g: number; b: number }): void {
+    const p = this.particles;
+    _dir.copy(to).sub(from);
+    const distance = _dir.length();
+    if (distance < 0.2) return;
+    _dir.divideScalar(distance);
+    const step = Math.max(0.35, distance / 60);
+    for (let d = 0.4; d < distance; d += step) {
+      p.emitGlow({ x: from.x + _dir.x * d, y: from.y + _dir.y * d, z: from.z + _dir.z * d, vx: _dir.x * 6, vy: _dir.y * 6, vz: _dir.z * 6, life: 0.13, size: 0.05, sizeEnd: 0.012, r: color.r, g: color.g, b: color.b, alpha: 0.85, streak: 0.06 });
+    }
+    p.emitGlow({ x: to.x, y: to.y, z: to.z, vx: 0, vy: 0, vz: 0, life: 0.16, size: 0.5, sizeEnd: 0.12, r: color.r * 1.6, g: color.g * 1.6, b: color.b * 1.6, alpha: 0.8 });
+  }
+
+  /** A robot turned to the player's side: a ring of sparks in that colour thrown off it. */
+  turned(point: THREE.Vector3, color: { r: number; g: number; b: number }): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    this.sparks(point, up, this.particles.scaled(26), 1.9, 2, 6, color, 1.2);
+    this.particles.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.3, size: 0.4, sizeEnd: 1.5, r: color.r * 0.7, g: color.g * 0.7, b: color.b * 0.7, alpha: 0.4 });
+  }
+
+  /** An EMP Blast: a pale shell of light bursting outward from the player, and arcs thrown across the floor. */
+  emp(centre: THREE.Vector3, calm = false): void {
+    const p = this.particles;
+    const up = new THREE.Vector3(0, 1, 0);
+    p.emitGlow({ x: centre.x, y: centre.y + 1, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.5, size: 2, sizeEnd: 26, ...ARC, alpha: calm ? 0.12 : 0.34 });
+    p.emitGlow({ x: centre.x, y: centre.y + 1, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.12, size: 5, sizeEnd: 2, r: 9, g: 10, b: 11, alpha: calm ? 0.15 : 0.6 });
+    this.sparks(new THREE.Vector3(centre.x, 0.2, centre.z), up, p.scaled(70), 1.9, 6, 20, ARC, 1.4);
+  }
+
+  /** A robot the EMP has destroyed: its circuits arc as it goes. */
+  empStruck(point: THREE.Vector3): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    this.sparks(point, up, this.particles.scaled(14), 1.8, 1.5, 5, ARC, 1.2);
+    this.particles.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.18, size: 0.7, sizeEnd: 0.2, ...ARC, alpha: 0.6 });
+  }
+
+  /** A pickup taken: its light goes up and out. */
+  pickupTaken(point: THREE.Vector3, color: { r: number; g: number; b: number }): void {
+    const p = this.particles;
+    const up = new THREE.Vector3(0, 1, 0);
+    this.sparks(new THREE.Vector3(point.x, 1, point.z), up, p.scaled(22), 1.2, 2, 6, color, 1.3);
+    p.emitGlow({ x: point.x, y: 1.05, z: point.z, vx: 0, vy: 1.5, vz: 0, life: 0.35, size: 0.7, sizeEnd: 1.8, r: color.r * 0.5, g: color.g * 0.5, b: color.b * 0.5, alpha: 0.35 });
+  }
+
+  /** A blow landing on a shutter from outside: sparks and dust knocked off its indoor face. */
+  shutterStruck(point: THREE.Vector3, inward: THREE.Vector3): void {
+    this.sparks(point, inward, this.particles.scaled(12), 1.1, 1.5, 6, SPARK);
+    this.puff(point, inward, this.particles.scaled(4), 1.2, 0.5, 0.42, 0.4, 0.38);
+  }
+
+  /** A shutter forced up: a shower of sparks across its width and a cloud of dust. */
+  shutterForced(centre: THREE.Vector3, inward: THREE.Vector3, along: THREE.Vector3, half: number): void {
+    const p = this.particles;
+    const at = new THREE.Vector3();
+    for (let i = 0; i < 5; i++) {
+      at.copy(centre).addScaledVector(along, rand(-half, half));
+      at.y = rand(0.4, 2.4);
+      this.sparks(at, inward, p.scaled(14), 1.4, 2, 9, i % 2 ? SPARK : SPARK_HOT, 1.2);
+      this.puff(at, inward, p.scaled(3), 1.6, 0.8, 0.44, 0.42, 0.4);
+    }
+  }
+
+  /** The Overclock Bench at work: arcs off the weapon in its cradle. */
+  benchSparks(point: THREE.Vector3): void {
+    const up = new THREE.Vector3(0, 1, 0);
+    this.sparks(point, up, this.particles.scaled(34), 1.5, 1.5, 5.5, ARC, 1.2);
+    this.sparks(point, up, this.particles.scaled(10), 1.2, 1, 4, SPARK_HOT);
+    this.particles.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.2, size: 0.5, sizeEnd: 0.15, ...ARC, alpha: 0.7 });
+  }
+
+  /** The fail-safe going off: a shell of light thrown out from the player. */
+  revive(centre: THREE.Vector3, color: { r: number; g: number; b: number }, calm = false): void {
+    const p = this.particles;
+    p.emitGlow({ x: centre.x, y: centre.y + 1, z: centre.z, vx: 0, vy: 0, vz: 0, life: 0.45, size: 1, sizeEnd: 11, r: color.r, g: color.g, b: color.b, alpha: calm ? 0.12 : 0.3 });
+    this.sparks(new THREE.Vector3(centre.x, 0.3, centre.z), new THREE.Vector3(0, 1, 0), p.scaled(40), 1.9, 4, 12, color, 1.3);
+  }
+
   /** Thin smoke curling from the muzzle after a shot. */
   muzzleSmoke(point: THREE.Vector3, direction: THREE.Vector3): void {
     this.particles.emitSmoke({

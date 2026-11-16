@@ -7,7 +7,10 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { MISSION, PLAYER, QUALITY, ROBOT, SPECIALS, WEAPONS } from '../config';
+import { BENCH, BOOSTS, MISSION, PLAYER, QUALITY, ROBOT, SHUTTERS, SPECIALS, WEAPONS } from '../config';
+import { boostPrice, type BoostId } from '../sim/boosts';
+import { takeOffer } from '../sim/loadout';
+import type { PickupId } from '../sim/pickups';
 import type { Action } from '../core/input';
 import { setEdgeLight } from '../entities/robot/robotMaterial';
 import type { ArgusReport } from '../game/Argus';
@@ -20,7 +23,7 @@ import { remaining } from '../sim/rounds';
 import { findSafeSpots, findStandableOutOfReach, groupSafeSpots } from '../sim/safeSpots';
 import { cellAt, cellCentre, createNavGrid, floodFrom, nearestReachableCell, type NavGrid } from '../sim/navGrid';
 import { BREACH, VESTIBULE } from '../world/lobby/plan';
-import { AREA_IDS, DOCK, DOCK_BAYS, DOCK_PASSAGE, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LAB, LAB_LINE, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
+import { AREA_IDS, DOCK, DOCK_BAYS, DOCK_PASSAGE, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LAB, LAB_LINE, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, STATION_PLANS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
 
@@ -313,6 +316,41 @@ export interface DebugApi {
   steadyLights(on: boolean): void;
   /** Leave a bullet scar and sparks on a surface. */
   scar(x: number, y: number, z: number, nx: number, ny: number, nz: number, kind: SurfaceKind): void;
+  /** Stage 4: the stations, the shutters, the pickups and the grenades, as the game has them now. */
+  economy(): {
+    boosts: Record<string, boolean>;
+    /** What each boost station is asking right now. */
+    boostPrices: Record<string, number>;
+    maxHealth: number;
+    grace: number;
+    grenades: number;
+    grenadesInAir: number;
+    effects: { overload: number; doubleScrap: number };
+    crate: { phase: string; offer: { weapon: string; level: number; special: boolean } | null; dry: number };
+    shutters: Array<{ id: string; area: string; strength: number; shut: boolean; x: number; z: number }>;
+    pickups: Array<{ id: string; x: number; z: number; left: number }>;
+    /** Each weapon carried, as it really is: its level and the figures the bench and the boosts change. */
+    weapons: Array<{ id: string; level: number; ammo: number; reserve: number; magazine: number; reserveMax: number; damage: number; reloadTime: number; fireInterval: number } | null>;
+    /** Where each station is, and where to stand to use it. */
+    stations: Array<{ id: string; area: string; stand: [number, number]; look: [number, number] }>;
+    swarm: boolean;
+    turned: number;
+    revives: number;
+    /** The config's numbers for all of it. */
+    rules: { bench: typeof BENCH; boosts: typeof BOOSTS; shutters: typeof SHUTTERS };
+  };
+  /** Leave a timed pickup on the floor. */
+  dropPickup(id: PickupId, x: number, z: number): void;
+  /** Force a shutter up or run it down, at once and for nothing (every one of them if no id is given). */
+  setShutter(shut: boolean, id?: string): void;
+  /** The crate's next rolls use these numbers for dice, in order; after them, real ones again. */
+  crateDice(values: number[]): void;
+  /** Put a weapon in the player's hands at a given level, fully loaded. */
+  giveWeapon(id: WeaponId, level?: number): void;
+  /** Give the player a boost for nothing (or take it away). */
+  setBoost(id: BoostId, owned: boolean): void;
+  /** Turn the robot nearest the player to their side, as the Turncoat's beam would. Returns false if there is none. */
+  turnNearest(seconds?: number): boolean;
   stats(): { fps: number; calls: number; triangles: number; quality: string; gpu: string; robots: number; particles: number; gibs: number; state: string; health: number; ammo: number; aim: number; reticle: number; flash: boolean };
   /** Everything a test needs to know about the run. */
   run(): DebugState;
@@ -891,6 +929,75 @@ export function installDebugApi(game: Game): DebugTools {
     },
     scar(x, y, z, nx, ny, nz, kind) {
       game.debugScar(new THREE.Vector3(x, y, z), new THREE.Vector3(nx, ny, nz).normalize(), kind);
+    },
+    economy() {
+      const { economy, weapons, world, player } = game;
+      const carried = weapons.loadout.slots.map((slot) => {
+        if (!slot) return null;
+        const def = weapons.defOf(slot);
+        return { id: slot.id, level: slot.level, ammo: slot.state.ammo, reserve: slot.state.reserve, magazine: def.magazine, reserveMax: def.reserveMax, damage: def.damage, reloadTime: def.reloadTime, fireInterval: def.fireInterval };
+      });
+      return {
+        boosts: { ...economy.boosts.owned },
+        boostPrices: Object.fromEntries((Object.keys(BOOSTS) as BoostId[]).map((id) => [id, boostPrice(economy.boosts, id, BOOSTS)])),
+        maxHealth: player.maxHealth,
+        grace: player.grace,
+        grenades: economy.grenades.count,
+        grenadesInAir: game.grenades.count,
+        effects: { ...economy.effects },
+        crate: { phase: economy.crate.phase, offer: economy.crate.offer ? { ...economy.crate.offer } : null, dry: economy.crate.state.dry },
+        shutters: world.shutters.gates.map((gate) => ({ id: gate.plan.id, area: gate.plan.area, strength: gate.state.strength, shut: gate.shut, x: gate.centre.x, z: gate.centre.z })),
+        pickups: game.pickups.list,
+        weapons: carried,
+        stations: STATION_PLANS.map((station) => {
+          const [nx, nz] = station.normal;
+          const out = station.depth + 1.0;
+          return { id: station.id, area: station.area, stand: [station.at[0] + nx * out, station.at[1] + nz * out], look: [station.at[0] + nx * station.depth, station.at[1] + nz * station.depth] };
+        }),
+        swarm: game.director.swarm,
+        turned: game.robots.filter((robot) => robot.alive && robot.turned > 0).length,
+        revives: game.stats.revives,
+        rules: { bench: BENCH, boosts: BOOSTS, shutters: SHUTTERS },
+      };
+    },
+    dropPickup(id, x, z) {
+      game.pickups.drop(id, x, z);
+    },
+    setShutter(shut, id) {
+      for (const gate of game.world.shutters.gates) {
+        if (id && gate.plan.id !== id) continue;
+        gate.state.strength = shut ? SHUTTERS.strength : 0;
+        gate.snap();
+      }
+      game.world.shuttersChanged();
+    },
+    crateDice(values) {
+      const queue = [...values];
+      game.economy.random = () => (queue.length ? queue.shift()! : Math.random());
+    },
+    giveWeapon(id, level = 0) {
+      takeOffer(game.weapons.loadout, id, game.weapons.defAt(id, level), level);
+      game.weapons.raise();
+    },
+    setBoost(id, owned) {
+      game.economy.boosts.owned[id] = owned;
+      // (The economy puts its boosts into effect whenever one is bought: do the same here.)
+      (game.economy as unknown as { applyBoosts(): void }).applyBoosts();
+    },
+    turnNearest(seconds = 10) {
+      let best = null;
+      let nearest = Infinity;
+      for (const robot of game.robots) {
+        if (!robot.alive || robot.role || robot.turned > 0) continue;
+        const distance = robot.position.distanceTo(game.player.position);
+        if (distance < nearest) {
+          nearest = distance;
+          best = robot;
+        }
+      }
+      if (!best) return false;
+      best.turn(seconds);
+      return true;
     },
     stats() {
       const { calls, triangles } = game.renderer.stats;

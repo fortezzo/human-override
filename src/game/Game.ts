@@ -16,7 +16,7 @@ import { Argus } from './Argus';
 import { Mission } from './Mission';
 import { Sight } from './Sight';
 import { AudioEngine } from '../audio/AudioEngine';
-import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROBOT, ROUNDS, SCRAP, SPECIALS, type QualityLevel } from '../config';
+import { BOOSTS, GOVERNOR, GRENADE, LOOK, LOOKDEV, PICKUPS, QUALITY, QUALITY_ORDER, ROBOT, ROUNDS, SCRAP, SHUTTERS, SPECIALS, SWARM, TURNCOAT, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
 import { Input } from '../core/input';
 import { damp, rand } from '../core/math';
@@ -39,13 +39,23 @@ import { bakeReflectionProbe, blankEnvironment, countBrokenPixels } from '../ren
 import { Renderer } from '../render/Renderer';
 import type { Analysis } from '../sim/argus';
 import { createWallet, earn, type Wallet } from '../sim/economy';
+import { blastShare, takeGrenade } from '../sim/grenades';
+import { isSwarmRound } from '../sim/horde';
+import { powerOn } from '../sim/mission';
 import { floodFrom } from '../sim/navGrid';
+import { rollDrop, scrapMultiplier, type PickupId } from '../sim/pickups';
+import { lockdown, strikeShutter } from '../sim/shutters';
 import { ROOM, PLAYER_START } from '../world/lobby/plan';
 import { developScreens } from '../world/lobby/ScreenBank';
-import { AREA_CENTRES, AREA_IDS, type AreaId, type EntryPlan } from '../world/plan';
+import { AREA_CENTRES, AREA_IDS, STATION_PLANS, insideRoom, type AreaId, type EntryPlan } from '../world/plan';
+import type { ShutterGate } from '../world/Shutters';
+import { STATION_COLOR } from '../world/Stations';
 import { World } from '../world/World';
 import { Combat, type HitResult } from './Combat';
 import { Director } from './Director';
+import { Economy } from './Economy';
+import { FloorPickups, PICKUP_COLOR } from './FloorPickups';
+import { GrenadeSet } from './GrenadeSet';
 import { Interactions, type Purchase } from './Interactions';
 import { createRunStats, saveBest, type RunStats } from './RunStats';
 
@@ -89,6 +99,11 @@ export class Game {
   mission!: Mission;
   /** ARGUS: what it has noticed about the player, and what it is doing about it. */
   argus!: Argus;
+  /** The boosts, the bench, the crate, grenades and the timed pickups in force. */
+  economy!: Economy;
+  /** The timed pickups lying on the floor, and the grenades in the air. */
+  readonly pickups = new FloorPickups();
+  readonly grenades = new GrenadeSet();
   /** Scrap, and what happened this run. */
   wallet: Wallet = createWallet(SCRAP.start);
   /** Scrap earned in the run before the round now being played began. */
@@ -121,6 +136,10 @@ export class Game {
   onRemark: (line: string) => void = () => {};
   /** The kill switch has been pulled. `best` is true if no run has finished the mission faster. */
   onSaved: (stats: RunStats, best: boolean) => void = () => {};
+  /** The player has walked into a timed pickup. */
+  onPickup: (id: PickupId) => void = () => {};
+  /** The fail-safe has just brought the player back. */
+  onRevive: () => void = () => {};
 
   /** Debug only: overrides where the camera sits and looks. */
   debugCamera: { position: THREE.Vector3; yaw: number; pitch: number; fov?: number } | null = null;
@@ -164,6 +183,11 @@ export class Game {
   private readonly blastAt = new THREE.Vector3();
   private nextDrip = 2;
   private nextFocus = 0;
+  /** Seconds before another grenade can be thrown. */
+  private grenadeWait = 0;
+  /** Where the last robot the player destroyed was standing. */
+  private readonly lastKillAt = new THREE.Vector3();
+  private readonly tmpC = new THREE.Vector3();
 
   /** How long each part of start-up took, in milliseconds (for the performance report). */
   readonly loadTimings: Record<string, number> = {};
@@ -242,7 +266,7 @@ export class Game {
 
     this.lights = new LightRig(this.world.lights);
     this.scene.add(this.lights.group);
-    this.scene.add(this.particles.group, this.decals.group, this.casings.mesh);
+    this.scene.add(this.particles.group, this.decals.group, this.casings.mesh, this.pickups.group, this.grenades.group);
 
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
@@ -277,7 +301,8 @@ export class Game {
     this.argus = new Argus(this.director, this.player, this.robots);
     this.combat = new Combat(this.world, this.robots, this.player, this.camera, this.view, this.effects, this.casings, this.audio);
     this.mission = new Mission(this.world, this.director, this.lights, this.audio, this.player, this.camera, this.robots);
-    this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet, this.mission);
+    this.economy = new Economy(this.world, this.weapons, this.player, () => this.wallet, () => powerOn(this.mission.state));
+    this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet, this.mission, this.economy);
     this.wireEvents();
 
     this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
@@ -323,6 +348,7 @@ export class Game {
     combat.onHit = (hit) => {
       this.argus.hit(hit);
       let scrap = hit.scrap;
+      if (hit.turned) this.argus.say('turned');
       if (hit.killed) {
         this.stats.kills++;
         if (hit.weakPoint) this.stats.weakPointKills++;
@@ -331,7 +357,11 @@ export class Game {
         if (!hit.robot.extra) director.destroyed();
         // The elites pay a bounty on top of the usual award.
         scrap += this.mission.robotDestroyed(hit.robot);
+        this.lastKillAt.copy(hit.robot.position);
+        this.maybeDrop(hit.robot);
       }
+      // Double Scrap doubles everything while it lasts.
+      scrap *= scrapMultiplier(this.economy.effects);
       earn(this.wallet, scrap);
       this.stats.scrapEarned += scrap;
       this.onHit(scrap === hit.scrap ? hit : { ...hit, scrap });
@@ -347,6 +377,7 @@ export class Game {
     director.onRoundStart = (round) => {
       this.stats.round = round;
       this.earnedBeforeRound = this.wallet.earned;
+      this.economy.roundStarted();
       audio.play('sting');
       this.onRound('start', round, director.rounds.plan.count);
       this.mission.roundStarted(round);
@@ -370,6 +401,12 @@ export class Game {
     };
     this.mission.onSaved = () => this.showSaved();
     director.onRoundClear = (round) => {
+      // A swarm round ends with a Full Resupply, where the last drone fell
+      // (or at the player's feet, if that was somewhere they cannot go).
+      if (isSwarmRound(SWARM, round) && !director.plain) {
+        const at = insideRoom(this.lastKillAt.x, this.lastKillAt.z) ? this.lastKillAt : player.position;
+        this.pickups.drop('resupply', at.x, at.z, PICKUPS.swarmLifetime);
+      }
       audio.play('roundClear');
       this.onRound('clear', round, this.wallet.earned - this.earnedBeforeRound);
       this.argus.roundCleared(round);
@@ -377,8 +414,24 @@ export class Game {
 
     interactions.onPurchase = (purchase) => {
       this.stats.scrapSpent += purchase.cost;
-      audio.play('buy');
-      if (purchase.kind === 'weapon') this.argus.say('newWeapon');
+      if (purchase.kind !== 'crateTake') audio.play('buy');
+      if (purchase.kind === 'weapon' || purchase.kind === 'crateTake') this.argus.say('newWeapon');
+      if (purchase.kind === 'boost') {
+        audio.play('boostBuy');
+        player.addShake(0.1);
+        this.onNotice(BOOSTS[purchase.boost].name, BOOSTS[purchase.boost].effect.toUpperCase());
+        this.argus.say('boost');
+      }
+      if (purchase.kind === 'bench') {
+        audio.play('benchWork', { position: this.world.stations.benchAt });
+        this.effects.benchSparks(this.world.stations.benchAt);
+        player.addShake(0.1);
+      }
+      if (purchase.kind === 'crate') this.argus.say('crate');
+      if (purchase.kind === 'shutter') {
+        const gate = this.world.shutters.gate(purchase.id);
+        if (gate) audio.play('shutterRepair', { position: gate.centre });
+      }
       if (purchase.kind === 'door') {
         this.stats.doorsOpened++;
         audio.play('doorOpen', { position: purchase.door.centre });
@@ -390,6 +443,15 @@ export class Game {
       audio.play('deny');
       this.onDenied();
     };
+
+    const crateAt = new THREE.Vector3();
+    const cratePlan = STATION_PLANS.find((station) => station.id === 'crate')!;
+    crateAt.set(cratePlan.at[0], 0.6, cratePlan.at[1]);
+    this.economy.onCrate = (event) => {
+      if (event === 'tick') audio.play('crateTick', { position: crateAt });
+      else audio.play(event === 'open' ? 'crateOpen' : event === 'offer' ? 'crateOffer' : 'crateClose', { position: crateAt });
+    };
+    this.grenades.onBounce = (position, speed) => audio.play('grenadeBounce', { position, gain: Math.min(1, speed / 6) });
 
     player.onStep = () => audio.play('step', { gain: player.sprinting ? 1.2 : 0.8 });
     player.onLand = (impact) => audio.play('land', { gain: 0.4 + impact });
@@ -641,6 +703,9 @@ export class Game {
     this.decals.clear();
     this.casings.clear();
     this.particles.clear();
+    this.pickups.clear();
+    this.grenades.clear();
+    this.grenadeWait = 0;
     this.world.reset();
     this.director.reset();
     this.director.forceEntry = null;
@@ -649,9 +714,11 @@ export class Game {
     this.weapons.reset();
     this.view.show(this.weapons.def.id);
     this.wallet = createWallet(SCRAP.start);
+    // (After the player's own reset below would undo the boosts: the economy's reset puts full health back to its usual mark.)
     this.stats = createRunStats();
     this.interactions.prompt = null;
     this.player.spawn(PLAYER_START.x, PLAYER_START.z, PLAYER_START.yaw);
+    this.economy.reset();
     this.scene.environment = this.environments.get('lobby') ?? this.scene.environment;
   }
 
@@ -842,7 +909,124 @@ export class Game {
     this.interactions.update(input.wasPressed('interact'));
     this.director.update(dt);
     this.mission.update(dt);
+    this.economy.update(dt);
+    this.combat.modifiers.overload = this.economy.effects.overload > 0;
+    this.combat.modifiers.ordinaryHealth = this.director.rounds.plan.health;
+    this.updateGrenades(dt);
+    for (const id of this.pickups.update(dt, this.time, player.position.x, player.position.z, player.alive)) this.collect(id);
     this.stats.time += dt;
+  }
+
+  // ---------------------------------------------------- grenades and pickups
+
+  /** G throws a grenade, if there is one; those in the air fly, bounce and go off. */
+  private updateGrenades(dt: number): void {
+    const { player, input } = this;
+    this.grenadeWait = Math.max(0, this.grenadeWait - dt);
+    if (input.wasPressed('grenade') && player.alive && this.grenadeWait <= 0 && takeGrenade(this.economy.grenades)) {
+      this.grenadeWait = GRENADE.cooldown;
+      this.camera.getWorldDirection(this.tmpA);
+      this.grenades.throw(this.camera.position, this.tmpA, player.velocity);
+      this.audio.whoosh();
+    }
+    for (const at of this.grenades.update(dt, this.time, this.world.colliders)) {
+      this.blastAround(at, { radius: GRENADE.radius, wreck: GRENADE.wreck, hurt: GRENADE.selfDamage, weapon: 'grenade', byPlayer: true, source: null });
+    }
+  }
+
+  /**
+   * A robot the player destroyed may leave a pickup: never one of ARGUS's
+   * own machines, never during a swarm (which ends with one of its own),
+   * and only somewhere the player can walk to.
+   */
+  private maybeDrop(robot: Robot): void {
+    if (robot.role || this.director.swarm || !insideRoom(robot.position.x, robot.position.z)) return;
+    const anyBroken = this.world.shutters.gates.some((gate) => gate.state.strength < SHUTTERS.strength);
+    const id = rollDrop(this.economy.drops, PICKUPS, Math.random, (kind) => kind !== 'lockdown' || anyBroken);
+    if (id) this.pickups.drop(id, robot.position.x, robot.position.z);
+  }
+
+  /** The player has walked into a pickup: do what it does. */
+  collect(id: PickupId): void {
+    const { player, audio } = this;
+    const color = new THREE.Color(PICKUP_COLOR[id]);
+    this.effects.pickupTaken(player.position, { r: color.r * 7, g: color.g * 7, b: color.b * 7 });
+    audio.play('pickup');
+    if (id === 'resupply') this.economy.resupply();
+    else if (id === 'overload' || id === 'doubleScrap') this.economy.startTimed(id);
+    else if (id === 'emp') this.empBlast();
+    else if (id === 'lockdown') this.lockdownShutters();
+    this.onPickup(id);
+  }
+
+  /** An EMP Blast: every robot of the horde is destroyed where it stands; ARGUS's own machines lose part of their health. */
+  private empBlast(): void {
+    const { player, audio } = this;
+    this.effects.emp(player.position, settings.value.reducedMotion);
+    audio.play('empBlast');
+    audio.thump(1.4);
+    player.addShake(0.5);
+    this.blast = 0.7;
+    this.blastAt.set(player.position.x, 1.4, player.position.z);
+    const up = this.tmpA.set(0, 1, 0);
+    for (const robot of [...this.robots]) {
+      if (!robot.alive || robot.hold) continue;
+      const damage = robot.role ? robot.spec.health * PICKUPS.empElite : robot.mind.health + 1;
+      const result = robot.damage(damage, up);
+      this.effects.empStruck(robot.chest(this.tmpB));
+      this.combat.onHit({ robot, killed: result.killed, weakPoint: false, melee: false, scrap: result.killed ? SCRAP.kill : 0, weapon: 'emp', damage, resisted: false, plated: false, guarded: false, guardBroke: false });
+    }
+  }
+
+  /** Lockdown: every shutter runs back down, except one the player would be shut out by. */
+  private lockdownShutters(): void {
+    const { player } = this;
+    const gates = this.world.shutters.gates;
+    const before = gates.map((gate) => gate.shut);
+    lockdown(
+      gates.map((gate) => gate.state),
+      SHUTTERS,
+      (state) => this.world.wouldShutOut(this.world.shutters.gate(state.id)!, player.position.x, player.position.z),
+    );
+    this.world.shuttersChanged();
+    gates.forEach((gate, i) => {
+      if (gate.shut && !before[i]) this.audio.play('shutterRepair', { position: gate.centre });
+    });
+  }
+
+  /** A robot's blow (or several at once) lands on a shutter it is trying to get through. */
+  private batter(gate: ShutterGate, robot: Robot, blows: number): void {
+    const at = gate.nearest(robot.position.x, robot.position.z, -0.32, this.tmpB);
+    at.y = 1.2;
+    const inward = this.tmpC.set(gate.plan.along === 'x' ? 0 : gate.plan.inward, 0.15, gate.plan.along === 'x' ? gate.plan.inward : 0);
+    const forced = strikeShutter(gate.state, blows);
+    gate.jolt();
+    this.effects.shutterStruck(at, inward);
+    this.audio.play('shutterHit', { position: at });
+    if (!forced) return;
+    this.world.shuttersChanged();
+    const along = new THREE.Vector3(gate.plan.along === 'x' ? 1 : 0, 0, gate.plan.along === 'x' ? 0 : 1);
+    this.effects.shutterForced(at.set(gate.centre.x, 0, gate.centre.z), inward, along, (gate.plan.to - gate.plan.from) / 2);
+    this.audio.play('shutterBreak', { position: gate.centre });
+    this.player.addShake(Math.max(0, 0.45 - gate.centre.distanceTo(this.player.position) * 0.03));
+  }
+
+  /** The fail-safe: the blow that would have put the player down does not. */
+  private failsafe(): void {
+    const { player, audio } = this;
+    const rule = BOOSTS.failsafe;
+    player.revive(rule.health, rule.grace);
+    for (const robot of this.robots) {
+      if (Math.hypot(robot.position.x - player.position.x, robot.position.z - player.position.z) < rule.shove) robot.shove();
+    }
+    const color = new THREE.Color(STATION_COLOR.failsafe);
+    this.effects.revive(player.position, { r: color.r * 6, g: color.g * 6, b: color.b * 6 }, settings.value.reducedMotion);
+    audio.play('revive');
+    audio.thump(1.2);
+    player.addShake(0.4);
+    this.stats.revives++;
+    this.argus.say('revived');
+    this.onRevive();
   }
 
   /** The player (or the debug camera) has walked into a different area. */
@@ -901,6 +1085,13 @@ export class Game {
   /** The robot that stands in the breached doorway behind the title screen. */
   private spawnTitleRobot(): void {
     this.addRobot(0, ROOM.z0 - 1.4, 0).hold = true;
+    // (Behind the lobby's shutter, which is down when a run begins: at the title it stands forced, as it always did.)
+    const gate = this.world.shutters.gate('yard');
+    if (gate) {
+      gate.state.strength = 0;
+      gate.snap();
+      this.world.shuttersChanged();
+    }
   }
 
   private updateRobots(dt: number): void {
@@ -917,7 +1108,34 @@ export class Game {
     let lit: Robot | null = null;
     for (let i = this.robots.length - 1; i >= 0; i--) {
       const robot = this.robots[i]!;
-      const events = robot.update(dt, target, playing && player.alive, this.world.nav, this.world.colliders, this.robots);
+      // Three things a robot can be after: another robot, if the Turncoat
+      // has turned it; a shutter, if one is down in front of it; otherwise
+      // the player.
+      const foe = robot.turned > 0 && robot.alive ? this.foeFor(robot) : null;
+      const gate = playing && robot.alive && robot.turned <= 0 && robot.grounded ? this.world.shutters.blocking(robot.position.x, robot.position.z) : null;
+      let events;
+      if (robot.turned > 0 && robot.alive) {
+        events = robot.update(dt, foe ? foe.position : robot.position, foe !== null, this.world.nav, this.world.colliders, this.robots);
+        if (foe && events.hitPlayer > 0) this.turnedBlow(robot, foe);
+        events.hitPlayer = 0;
+        events.stuck = false;
+      } else if (gate) {
+        events = robot.update(dt, gate.nearest(robot.position.x, robot.position.z, 0.5, this.tmpC), true, this.world.nav, this.world.colliders, this.robots);
+        // Its blow lands on the shutter. (A bomber has no blow: it sets itself to the task. ARGUS's Proxy takes one down in a single blow.)
+        if (events.hitPlayer > 0 || (robot.kind === 'bomber' && events.attackStarted)) this.batter(gate, robot, robot.role === 'proxy' ? SHUTTERS.strength : robot.kind === 'heavy' ? 2 : 1);
+        events.hitPlayer = 0;
+        events.stuck = false;
+        events.primed = false;
+        robot.fuse = -1;
+      } else {
+        events = robot.update(dt, target, playing && player.alive, this.world.nav, this.world.colliders, this.robots);
+      }
+      if (events.burnedOut && robot.alive) {
+        // Its time on the player's side is up: its core burns out, and that is the player's kill.
+        robot.damage(robot.mind.health + 1, this.tmpA.set(0, 1, 0));
+        this.effects.empStruck(robot.chest(this.tmpB));
+        this.combat.onHit({ robot, killed: true, weakPoint: false, melee: false, scrap: SCRAP.kill, weapon: 'turncoat', damage: 0, resisted: false, plated: false, guarded: false, guardBroke: false });
+      }
       if (robot.model.lamp && robot.alive && !robot.poweredDown) lit = robot;
 
       // With a crowd on the map, not every footfall needs a sound.
@@ -926,7 +1144,7 @@ export class Game {
         audio.play('robotStep', { position: robot.position });
       }
       if (events.attackStarted) audio.play('robotAttack', { position: robot.chest(this.tmpB) });
-      if (events.hitPlayer > 0) this.hurtPlayer(events.hitPlayer, robot);
+      if (events.hitPlayer > 0) this.hurtPlayer(events.hitPlayer, robot.position.x, robot.position.z);
       if (events.landed) {
         audio.play('robotLand', { position: robot.position });
         this.effects.landing(robot.position);
@@ -1012,60 +1230,103 @@ export class Game {
     if (this.escort.intensity < 0.02) this.escort.intensity = 0;
   }
 
+  /** The nearest robot of ARGUS's for a turned one to go after, within reach of its search. */
+  private foeFor(robot: Robot): Robot | null {
+    let best: Robot | null = null;
+    let nearest = TURNCOAT.seek;
+    for (const other of this.robots) {
+      if (other === robot || !other.alive || other.turned > 0 || other.hold || !other.grounded) continue;
+      const distance = Math.hypot(other.position.x - robot.position.x, other.position.z - robot.position.z);
+      if (distance < nearest) {
+        nearest = distance;
+        best = other;
+      }
+    }
+    return best;
+  }
+
+  /** A turned robot's blow lands on one of ARGUS's: the damage is the player's doing. */
+  private turnedBlow(robot: Robot, foe: Robot): void {
+    const ordinary = this.director.rounds.plan.health;
+    const damage = ordinary * TURNCOAT.blow * (robot.kind === 'drone' ? 0.35 : robot.kind === 'heavy' ? 2 : 1);
+    const direction = this.tmpA.set(foe.position.x - robot.position.x, 0.2, foe.position.z - robot.position.z).normalize();
+    const point = foe.chest(this.tmpB);
+    const result = foe.damage(damage, direction);
+    this.effects.robotHit(point, direction, false);
+    this.audio.play('meleeHit', { position: point });
+    this.combat.onHit({ robot: foe, killed: result.killed, weakPoint: false, melee: false, scrap: result.killed ? SCRAP.kill : 0, weapon: 'turncoat', damage, resisted: false, plated: false, guarded: false, guardBroke: false });
+  }
+
   /**
    * A bomber goes off at `centre`: everything within reach of the blast
    * is hurt, less with distance. The player, if they did not get clear;
    * and every robot round it, which is why it is worth shooting a bomber
    * while it is still among its own. Robots it destroys are the player's
-   * kills if the player set it off.
+   * kills if the player set it off (or had turned it).
    */
   private explode(centre: THREE.Vector3, source: Robot): void {
     const rule = SPECIALS.bomber;
+    // (One the player had turned goes off among ARGUS's and spares the player.)
+    this.blastAround(centre, { radius: rule.radius, wreck: rule.wreck, hurt: source.wasTurned ? 0 : rule.damage, weapon: 'blast', byPlayer: !source.selfDestructed || source.wasTurned, source });
+  }
+
+  /**
+   * Something has gone off at `centre`: a bomber, or a grenade. `wreck`
+   * is the damage to robots at the middle of it, as a multiple of an
+   * ordinary robot's health this round; `hurt` the damage to the player
+   * at the middle of it. Both fall away to nothing at `radius`.
+   */
+  private blastAround(centre: THREE.Vector3, blast: { radius: number; wreck: number; hurt: number; weapon: 'blast' | 'grenade'; byPlayer: boolean; source: Robot | null }): void {
     const { player, audio } = this;
-    this.effects.explosion(centre, rule.radius);
+    this.effects.explosion(centre, blast.radius);
     audio.play('explosion', { position: centre });
     audio.thump(1.6);
     this.blast = 1;
     this.blastAt.set(centre.x, centre.y + 0.6, centre.z);
 
-    const reach = (x: number, z: number): number => 1 - Math.hypot(x - centre.x, z - centre.z) / rule.radius;
+    const reach = (x: number, z: number): number => blastShare(Math.hypot(x - centre.x, z - centre.z), blast.radius);
     const near = reach(player.position.x, player.position.z);
     player.addShake(Math.max(0, 0.35 + near * 0.9));
     // (Not through a wall: the blast needs a clear line to the player. But
     // it is not stopped by a barrel or a crate: a line from above head
     // height over where it went off counts as well, so low cover is none.)
     const above = this.blastAt.clone().setY(Math.max(centre.y, 1.7));
-    if (near > 0 && (this.sight.clearLineTo(centre) || this.sight.clearLineTo(above))) this.hurtPlayer(rule.damage * near, source);
+    if (near > 0 && blast.hurt > 0 && (this.sight.clearLineTo(centre) || this.sight.clearLineTo(above))) this.hurtPlayer(blast.hurt * near, centre.x, centre.z);
 
-    const byPlayer = !source.selfDestructed;
     const ordinary = this.director.rounds.plan.health;
     for (const robot of this.robots) {
-      if (!robot.alive || robot === source) continue;
+      if (!robot.alive || robot === blast.source || robot.hold) continue;
       const share = reach(robot.position.x, robot.position.z);
       if (share <= 0) continue;
       const direction = this.tmpA.set(robot.position.x - centre.x, 0.4, robot.position.z - centre.z).normalize();
-      const damage = ordinary * rule.wreck * share;
+      const damage = ordinary * blast.wreck * share;
       const result = robot.damage(damage, direction);
-      if (!result.killed) continue;
-      if (byPlayer) {
-        this.combat.onHit({ robot, killed: true, weakPoint: false, melee: false, scrap: SCRAP.kill, weapon: 'blast', damage, resisted: false, plated: false, guarded: false, guardBroke: false });
-      } else {
+      if (blast.byPlayer) {
+        // (A grenade that only hurts a robot still pays for the hit, once.)
+        if (result.killed || blast.weapon === 'grenade') {
+          this.combat.onHit({ robot, killed: result.killed, weakPoint: false, melee: false, scrap: result.killed ? SCRAP.kill : SCRAP.hit, weapon: blast.weapon, damage, resisted: false, plated: false, guarded: false, guardBroke: false });
+        }
+      } else if (result.killed) {
         if (!robot.extra) this.director.destroyed();
         this.mission.robotDestroyed(robot);
       }
     }
   }
 
-  private hurtPlayer(amount: number, robot: Robot): void {
+  /** The player takes a blow from something at (fromX, fromZ). */
+  private hurtPlayer(amount: number, fromX: number, fromZ: number): void {
     const { player } = this;
     if (this.godMode || !player.alive || this.state !== 'playing') return;
-    if (!player.damage(amount, robot.position.x, robot.position.z)) return;
+    if (!player.damage(amount, fromX, fromZ)) return;
     this.audio.play('hurt');
     // Bearing of the attacker relative to where the player is looking.
-    const dx = robot.position.x - player.position.x;
-    const dz = robot.position.z - player.position.z;
+    const dx = fromX - player.position.x;
+    const dz = fromZ - player.position.z;
     this.onPlayerHurt(Math.atan2(dx, -dz) + player.yaw);
-    if (!player.alive) this.endRun();
+    if (player.alive) return;
+    // Down: unless they are carrying the fail-safe, which is used up bringing them back.
+    if (this.economy.spendFailsafe()) this.failsafe();
+    else this.endRun();
   }
 
   /** Robots to point out on the HUD: every one left, once only a few remain. */

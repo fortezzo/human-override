@@ -389,10 +389,11 @@ export class Mission {
   private throwBreaker(): void {
     if (!restorePower(this.state)) return;
     this.world.mission.setPower(true);
+    this.world.stations.setPower(true);
     this.lights.power = true;
     this.audio.play('missionPower', { position: new THREE.Vector3(...MISSION_PLACES.breaker.at) });
     this.player.addShake(0.2);
-    this.onNotice('POWER RESTORED', 'THE KEY CAGE IS UNLOCKED');
+    this.onNotice('POWER RESTORED', 'KEY CAGE UNLOCKED · STATIONS ONLINE');
     this.onCue('powerRestored');
   }
 
@@ -507,6 +508,7 @@ export class Mission {
     this.onNotice = (title, detail) => (last = [title, detail]);
     if (want >= 1) this.throwBreaker();
     this.world.mission.setPower(want >= 1, true);
+    this.world.stations.setPower(want >= 1);
     if (want >= 2) {
       state.custodian = 'collected';
       state.uplink = 'done';

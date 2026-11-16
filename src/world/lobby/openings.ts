@@ -30,9 +30,7 @@ function buildBreach(b: LevelBuilder): void {
   // Tread-plate threshold.
   b.box('treadPlate', [x0 + 0.07, 0, z0 - t - 0.05], [x1 - 0.07, 0.012, z0 + 0.05], { collide: false, cast: false });
 
-  // The shutter: stretched to span the entrance, stuck part-way up and
-  // knocked crooked. Its top half is hidden inside the wall above.
-  b.prop('rollershutter_door', { at: [0, 2.08, z0 - 0.42], scale: [3.42, 1.2, 1], rot: [0, 0, 0.045], collide: false });
+  // (The shutter itself is a moving part: see world/Shutters.ts.)
   // Guide rails the shutter runs in.
   b.box('darkSteel', [x0 + 0.07, 0, z0 - 0.4], [x0 + 0.13, top, z0 - 0.14], { collide: false });
   b.box('darkSteel', [x1 - 0.13, 0, z0 - 0.4], [x1 - 0.07, top, z0 - 0.14], { collide: false });

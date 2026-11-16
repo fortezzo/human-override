@@ -125,10 +125,10 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
       coil: { color: 0xc9a25a, metalness: 1, roughness: 0.42 },
       cell: { color: 0x0a1418, metalness: 0.2, roughness: 0.3, emissive: 0x4fe6ff, glow: 3.2 },
     },
-    hip: { x: 0.18, y: -0.2, z: -0.52, yaw: 0.07, pitch: 0.03, roll: 0 },
+    hip: { x: 0.2, y: -0.155, z: -0.64, yaw: 0.1, pitch: 0.04, roll: 0 },
     // No sights on it: held up under the eye, the cell on top just below the point of aim.
-    aim: { x: 0, y: -0.139, z: -0.46, yaw: 0, pitch: 0, roll: 0 },
-    sprint: { x: 0.14, y: -0.24, z: -0.42, yaw: 0.4, pitch: 0.5, roll: 0.1 },
+    aim: { x: 0, y: -0.172, z: -0.66, yaw: 0, pitch: 0.01, roll: 0 },
+    sprint: { x: 0.14, y: -0.22, z: -0.5, yaw: 0.4, pitch: 0.45, roll: 0.1 },
     length: 0.44,
     muzzles: [[0, 0.037, -0.224]],
     ejectionPort: null,

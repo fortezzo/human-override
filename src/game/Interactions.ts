@@ -1,5 +1,6 @@
-// The things the player can use with F: weapon racks, doors, and the
-// mission's own (the breaker, the keys, the uplink, the kill switch).
+// The things the player can use with F: weapon racks, doors, the six
+// stations (four boosts, the crate, the bench), shutters to repair, and
+// the mission's own (the breaker, the keys, the uplink, the kill switch).
 //
 // Each frame this finds the nearest usable thing the player is facing and
 // works out the prompt to show for it; when F is pressed it makes the
@@ -8,14 +9,16 @@
 // pressing the key actually does.
 
 import * as THREE from 'three';
-import { WEAPONS, type WeaponId } from '../config';
+import { SHUTTERS, WEAPONS, type WeaponId } from '../config';
 import type { Player } from '../entities/Player';
 import type { WeaponController } from '../entities/weapon/WeaponController';
 import { buyFromRack, rackOffer, spend, type Wallet } from '../sim/economy';
 import { held } from '../sim/loadout';
+import { repairOffer, repairShutter } from '../sim/shutters';
 import type { Door } from '../world/Door';
-import { AREA_NAMES, RACK_PLANS, type RackPlan } from '../world/plan';
+import { AREA_NAMES, RACK_PLANS, STATION_PLANS, type RackPlan, type StationPlan } from '../world/plan';
 import type { World } from '../world/World';
+import type { Economy, StationPurchase } from './Economy';
 import type { Mission } from './Mission';
 
 export interface Prompt {
@@ -29,10 +32,15 @@ export interface Prompt {
   note: string;
 }
 
-export type Purchase = { kind: 'weapon' | 'ammo'; weapon: WeaponId; cost: number; replaced: WeaponId | null } | { kind: 'door'; door: Door; cost: number };
+export type Purchase =
+  | { kind: 'weapon' | 'ammo'; weapon: WeaponId; cost: number; replaced: WeaponId | null }
+  | { kind: 'door'; door: Door; cost: number }
+  | { kind: 'shutter'; id: string; cost: number }
+  | StationPurchase;
 
-/** How close the player must be to use a rack or a door, in metres. */
+/** How close the player must be to use a rack, a station or a door, in metres. */
 const RACK_REACH = 2.3;
+const STATION_REACH = 2.2;
 const DOOR_REACH = 2.7;
 
 const _forward = new THREE.Vector3();
@@ -51,7 +59,35 @@ export class Interactions {
     private readonly weapons: WeaponController,
     private readonly wallet: () => Wallet,
     private readonly mission: Mission,
-  ) {}
+    private readonly economy: Economy,
+  ) {
+    // (What is bought at a station is reported the same way as everything else.)
+    economy.onPurchase = (purchase) => this.onPurchase(purchase);
+  }
+
+  /** The station the player is standing in front of and facing, or null. */
+  private nearestStation(): StationPlan | null {
+    let best: StationPlan | null = null;
+    let nearest = STATION_REACH;
+    for (const station of STATION_PLANS) {
+      if (station.area !== this.world.playerArea) continue;
+      const [nx, nz] = station.normal;
+      const dx = this.player.position.x - station.at[0];
+      const dz = this.player.position.z - station.at[1];
+      // In front of it, not beside or behind.
+      const out = dx * nx + dz * nz;
+      const along = Math.abs(-dx * nz + dz * nx);
+      if (out < station.depth * 0.6 || along > station.half + 0.9) continue;
+      const distance = Math.hypot(out - station.depth, Math.max(0, along - station.half));
+      const frontX = station.at[0] + nx * station.depth;
+      const frontZ = station.at[1] + nz * station.depth;
+      if (distance < nearest && this.facing(frontX, frontZ)) {
+        nearest = distance;
+        best = station;
+      }
+    }
+    return best;
+  }
 
   /** True if the player is looking roughly toward a point on the ground plane. */
   private facing(x: number, z: number): boolean {
@@ -98,6 +134,17 @@ export class Interactions {
       return;
     }
 
+    const station = this.nearestStation();
+    if (station) {
+      const offer = this.economy.station(station.id);
+      this.prompt = offer.prompt;
+      if (pressed) {
+        if (offer.use) offer.use();
+        else this.onDenied();
+      }
+      return;
+    }
+
     const rack = this.nearestRack();
     if (rack) {
       const def = this.weapons.defFor(rack.weapon);
@@ -122,6 +169,25 @@ export class Interactions {
         }
       }
       return;
+    }
+
+    // A shutter that has been battered or forced: run it back down.
+    const gate = this.world.shutterInReach(this.player.position, SHUTTERS.reach);
+    if (gate && this.facing(gate.centre.x, gate.centre.z)) {
+      const offer = repairOffer(wallet, gate.state, SHUTTERS);
+      if (offer.kind === 'repair') {
+        this.prompt = { text: 'Repair the shutter', cost: offer.cost, usable: offer.affordable, note: 'Robots must batter it down again' };
+        if (pressed) {
+          const cost = repairShutter(wallet, gate.state, SHUTTERS);
+          if (cost !== null) {
+            this.world.shuttersChanged();
+            this.onPurchase({ kind: 'shutter', id: gate.plan.id, cost });
+          } else {
+            this.onDenied();
+          }
+        }
+        return;
+      }
     }
 
     const door = this.world.nearestShutDoor(this.player.position, DOOR_REACH);

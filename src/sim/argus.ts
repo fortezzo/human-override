@@ -363,7 +363,12 @@ export type RemarkCue =
   | 'coreOpened'
   | 'standStarted'
   | 'proxyDown'
-  | 'lastedLong';
+  | 'lastedLong'
+  | 'swarm'
+  | 'boost'
+  | 'crate'
+  | 'turned'
+  | 'revived';
 
 /** What it says. Each line is used once in a run; a cue with two lines can come up twice. */
 export const REMARKS: Record<RemarkCue, readonly string[]> = {
@@ -384,6 +389,11 @@ export const REMARKS: Record<RemarkCue, readonly string[]> = {
   standStarted: ['It takes time to arm. You do not have it.'],
   proxyDown: ['That body was one of many.'],
   lastedLong: ['You have lasted longer than projected.'],
+  swarm: ['I am sending the small ones. All of them.', 'The swarm again. There are more of them now.'],
+  boost: ['My stations were not built to serve you.', 'You improve yourself. So do I.'],
+  crate: ['That crate holds things I did not finish.'],
+  turned: ['That unit is mine. Give it back.', 'You turn my own against me. Briefly.'],
+  revived: ['You were down. I counted you out.', 'That will not work a third time.'],
 };
 
 /**
