@@ -23,6 +23,18 @@ export const PLAYER = {
   jumpSpeed: 5.4,
   gravity: 17.5,
   stepHeight: 0.32,
+  /**
+   * The tallest thing a jump gets the player onto, or over: its top this
+   * far above the floor, about waist height. A barrier, a crate, a barrel,
+   * a desk, a handrail. Anything taller is solid however high the feet
+   * are, even from the top of something low, so nothing above this height
+   * is ever stood on. (A jump lifts the feet 0.83 m, and a step's worth of
+   * tucking them up does the rest.)
+   */
+  climb: 1.0,
+  /** A press of jump this long before landing still counts, and so does one this long after walking off an edge (seconds). */
+  jumpBuffer: 0.12,
+  jumpGrace: 0.1,
   maxHealth: 100,
   // (Health starts coming back this long after the last blow. It was 4
   // seconds; three rewards the player who breaks out of a crowd and keeps
@@ -342,6 +354,25 @@ export const TURNCOAT = {
   color: 0x4fe6ff,
 };
 
+/**
+ * The first-minute hints: one at a time, each gone once the player has done
+ * what it says. (The rules are in sim/coach.ts.)
+ */
+export const COACH = {
+  /** Metres to walk before "move" counts as done, and seconds of aiming before "aim" does. */
+  moveDistance: 2.5,
+  aimSeconds: 0.35,
+  /** Metres nearer the marker's place the player must get for "follow the marker". */
+  markerMetres: 6,
+  /** Seconds before the first hint and between hints, and seconds a hint stays once it is done. */
+  gap: 1.1,
+  linger: 0.8,
+  /** No hint appears after this round. */
+  lastRound: 3,
+  /** The scrap the player needs before they are told how to buy: the price of the weapon on the wall in front of where they start. */
+  buyAt: 750,
+};
+
 /** What the player carries, and how the two-weapon limit behaves. */
 export const LOADOUT = {
   starting: 'pistol' as WeaponId,
@@ -488,9 +519,11 @@ export const BOOSTS = {
    * One self-revive. It is used up when it saves the player, and can be
    * bought again for `priceStep` more each time. Getting back up: with
    * this share of full health, untouchable for `grace` seconds, and every
-   * robot within `shove` metres knocked off balance.
+   * robot within `shove` metres knocked off balance. First the player is
+   * down, for `down` seconds, in which nothing can touch them and the
+   * world runs at `downPace` of its speed; then it fires.
    */
-  failsafe: { name: 'FAILSAFE', effect: 'One self-revive', price: 1500, priceStep: 1000, health: 0.6, grace: 3, shove: 5 },
+  failsafe: { name: 'FAILSAFE', effect: 'One self-revive', price: 1500, priceStep: 1000, health: 0.6, grace: 3, shove: 5, down: 1.15, downPace: 0.3 },
 } as const;
 
 /**
@@ -568,6 +601,15 @@ export const PICKUPS = {
 export const SHUTTERS = {
   /** Blows a sound shutter takes before it is forced up. ARGUS's Proxy forces one with a single blow. */
   strength: 5,
+  /**
+   * The main entrance's shutter starts a run already battered: this many
+   * blows from being forced. (Sound, it kept the first robot of a run
+   * outside until thirteen seconds in, which is a long time to stand
+   * looking at a shutter; the designer asked for about eight, in round 1
+   * only. The other four start sound, and this one is sound again as soon
+   * as it has been repaired, so every later round is as it was.)
+   */
+  entranceStart: 1,
   /** Scrap to run one back down, and how near it the player must stand (metres). */
   repairCost: 50,
   reach: 2.8,
@@ -798,6 +840,22 @@ export const FX = {
   /** How fast the flash's light on the room dies away (higher is shorter). */
   muzzleLightFade: 46,
   tracerSpeed: 170,
+};
+
+/**
+ * How the music bed is shaped: low and muffled between rounds, rising and
+ * opening up as a round is fought. (The rules are in sim/music.ts. It never
+ * goes above 1, the level it always played at, so the game is no louder.)
+ */
+export const MUSIC = {
+  lull: 0.5,
+  roundStart: 0.62,
+  lullTone: 0.3,
+  roundStartTone: 0.45,
+  /** Robots on the map at once that count as the thick of a fight. */
+  crowd: 14,
+  /** Seconds the bed takes to move to a new level. */
+  ease: 2.5,
 };
 
 export const AUDIO = {

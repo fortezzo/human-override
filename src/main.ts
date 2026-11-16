@@ -2,7 +2,7 @@
 // the HUD and menus.
 
 import './ui/style.css';
-import { BOOSTS, GRENADE, PICKUPS, QUALITY, WEAPONS } from './config';
+import { BOOSTS, COACH, GRENADE, PICKUPS, QUALITY, WEAPONS } from './config';
 import { settings } from './core/settings';
 import { installDebugApi, type DebugTools } from './debug/debugApi';
 import { SHIELD_COLOR } from './entities/robot/attachments';
@@ -10,6 +10,7 @@ import { Game } from './game/Game';
 import { accuracy, readBest, type RunStats } from './game/RunStats';
 import { markName } from './sim/bench';
 import { BOOST_IDS } from './sim/boosts';
+import { HINTS, createCoach, updateCoach, type HintId } from './sim/coach';
 import { KEY_IDS } from './sim/mission';
 import { AREA_NAMES } from './world/plan';
 import { STATION_COLOR } from './world/Stations';
@@ -86,7 +87,11 @@ async function boot(): Promise<void> {
     if (purchase.kind === 'bench') hud.showToast(`${WEAPONS[purchase.weapon].name} overclocked to ${markName(purchase.level)}`, 3);
   };
   game.onPickup = (id) => hud.notice(PICKUPS.names[id], PICKUPS.notes[id].toUpperCase());
-  game.onRevive = () => hud.notice('FAILSAFE USED', 'YOU ARE BACK UP · BUY ANOTHER AT ITS STATION');
+  game.onDown = () => hud.failsafe('down');
+  game.onRevive = () => {
+    hud.failsafe('up');
+    hud.notice('FAILSAFE USED', 'BUY ANOTHER AT ITS STATION');
+  };
   const summary = (stats: RunStats, best: boolean) => ({
     round: Math.max(1, stats.round),
     kills: stats.kills,
@@ -149,14 +154,50 @@ async function boot(): Promise<void> {
   };
   screens.onHover = () => game.audio.play('uiHover');
   let wasMuted = settings.value.muted;
+  let hintsOn = settings.value.hints;
   settings.onChange((s) => {
-    hud.showFps(s.showFps);
+    // (In debug mode the counter is always up: it is one of the debug tools.)
+    hud.showFps(s.frameRate || debug);
+    if (s.hints !== hintsOn) {
+      // The hints switched on or off in the settings: start them again, or stop them.
+      hintsOn = s.hints;
+      coach = createCoach(COACH, s.hints ? s.learned : HINTS);
+    }
     if (s.muted !== wasMuted) {
       wasMuted = s.muted;
       hud.showToast(s.muted ? 'Sound off (press M to turn it back on)' : 'Sound on', 2.5);
     }
   });
-  hud.showFps(settings.value.showFps);
+  hud.showFps(settings.value.frameRate || debug);
+
+  // ---- The first-minute hints: what the player has done since the last frame, and so which hint (if any) to show.
+  let coach = createCoach(COACH, settings.value.hints ? settings.value.learned : HINTS);
+  const before = { time: 0, shots: 0, spent: 0, x: 0, z: 0, at: performance.now() };
+  const coaching = (marker: { distance: number } | null): { hint: HintId; done: boolean } | null => {
+    const { player, stats } = game;
+    const now = performance.now();
+    // (A run that has only just begun: a fresh coach, which knows what earlier runs taught.)
+    if (stats.time < before.time) coach = createCoach(COACH, settings.value.hints ? settings.value.learned : HINTS);
+    const step = Math.hypot(player.position.x - before.x, player.position.z - before.z);
+    const learned = updateCoach(
+      coach,
+      COACH,
+      {
+        walked: player.onGround && step < 1 ? step : 0,
+        fired: stats.shots > before.shots,
+        aiming: player.aim > 0.6,
+        jumped: !player.onGround && player.velocity.y > 1,
+        bought: stats.scrapSpent > before.spent,
+        canBuy: game.wallet.scrap >= COACH.buyAt,
+        markerDistance: marker ? marker.distance : null,
+        round: game.director.rounds.round,
+      },
+      Math.min(0.25, (now - before.at) / 1000),
+    );
+    if (learned.length && settings.value.hints) settings.set({ learned: [...new Set([...settings.value.learned, ...learned])] });
+    Object.assign(before, { time: stats.time, shots: stats.shots, spent: stats.scrapSpent, x: player.position.x, z: player.position.z, at: now });
+    return coach.showing ? { hint: coach.showing, done: coach.done } : null;
+  };
 
   await game.load((fraction) => screens.setProgress(fraction));
   // (Under the title screen: see Hud.prewarm.)
@@ -171,6 +212,7 @@ async function boot(): Promise<void> {
       const { weapons, player, director, wallet, economy } = game;
       const def = weapons.def;
       const css = (color: number): string => `#${color.toString(16).padStart(6, '0')}`;
+      const objectiveMarker = game.objectiveMarker();
       hud.update(1 / Math.max(game.fps, 1), {
         health: player.health,
         maxHealth: player.maxHealth,
@@ -198,7 +240,8 @@ async function boot(): Promise<void> {
         prompt: game.interactions.prompt,
         markers: game.markers(),
         objective: { ...game.mission.objective, keys: KEY_IDS.map((id) => game.mission.state.keys[id]) },
-        objectiveMarker: game.objectiveMarker(),
+        objectiveMarker,
+        coach: coaching(objectiveMarker),
         boss: game.mission.boss,
         spread: weapons.spread(player),
         fov: game.camera.fov,

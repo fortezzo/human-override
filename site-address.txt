@@ -1,0 +1,10 @@
+# The public address of the game, once it has one. For example:
+#
+#   https://your-name.github.io/human-override/
+#
+# Put it on a line of its own below (with the slash at the end) and run
+# "npm run build". The built page then tells LinkedIn, Slack and the rest
+# exactly where to find the picture they show when the link is shared
+# (they need a full address for that; "next to the page" is not enough).
+# Left empty, the game still works anywhere; only that picture is missing
+# from a shared link.

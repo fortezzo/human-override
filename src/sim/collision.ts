@@ -34,14 +34,26 @@ export interface CircleBody {
  * Pushes the circle out of every box it overlaps. Boxes whose top is within
  * `stepHeight` of the feet are ignored (they are walked onto instead).
  * Returns true if anything was touched.
+ *
+ * `climb` is for a body that can jump: the height of the tallest thing it
+ * may ever get on top of. A box taller than that is solid however high the
+ * feet are, so a jump clears a barrier and never a server rack, even from
+ * the top of a crate. (Left out, there is no such limit, which is right
+ * for robots: their feet never leave the floor.)
+ *
+ * `only` narrows it to the boxes on one side of that line: 'tall' for what
+ * can never be got over, 'low' for what can.
  */
-export function resolveCircle(body: CircleBody, colliders: readonly Collider[], stepHeight: number): boolean {
+export function resolveCircle(body: CircleBody, colliders: readonly Collider[], stepHeight: number, climb = Infinity, only?: 'tall' | 'low'): boolean {
   let touched = false;
   // A few passes settle the body when it is wedged into a corner.
   for (let pass = 0; pass < 3; pass++) {
     let moved = false;
     for (const c of colliders) {
-      if (body.head <= c.y0 || body.feet >= c.y1 - stepHeight) continue;
+      if (body.head <= c.y0) continue;
+      const low = c.y1 <= climb;
+      if (low && body.feet >= c.y1 - stepHeight) continue;
+      if (only && (only === 'low') !== low) continue;
 
       // Into the box's own frame.
       const dx = body.x - c.x;
@@ -92,11 +104,12 @@ export function resolveCircle(body: CircleBody, colliders: readonly Collider[], 
 /**
  * Height of the highest surface under the circle that the body could be
  * standing on (box tops at or below the feet plus a step), or `floor`.
+ * Nothing taller than `climb` counts: see resolveCircle.
  */
-export function groundHeight(body: CircleBody, colliders: readonly Collider[], stepHeight: number, floor = 0): number {
+export function groundHeight(body: CircleBody, colliders: readonly Collider[], stepHeight: number, floor = 0, climb = Infinity): number {
   let ground = floor;
   for (const c of colliders) {
-    if (c.y1 <= ground || c.y1 > body.feet + stepHeight) continue;
+    if (c.y1 <= ground || c.y1 > climb || c.y1 > body.feet + stepHeight) continue;
     const dx = body.x - c.x;
     const dz = body.z - c.z;
     const lx = Math.abs(dx * c.cos + dz * c.sin);

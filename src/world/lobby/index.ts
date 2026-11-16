@@ -4,7 +4,7 @@ import type { Assets } from '../../core/assets';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { vent, weaponRack, type AreaBuild } from '../build/room';
+import { vent, weaponRack, type AreaBuild, type Fixtures } from '../build/room';
 import { SignAtlas } from '../build/SignAtlas';
 import { ENTRY_PLANS, RACK_PLANS } from '../plan';
 import { buildFurnishing } from './furnishing';
@@ -16,7 +16,7 @@ import { ScreenBank } from './ScreenBank';
 import { buildServices } from './services';
 import { buildShell } from './shell';
 
-export function buildLobby(assets: Assets, materials: MaterialLibrary): AreaBuild {
+export function buildLobby(assets: Assets, materials: MaterialLibrary, stations?: Fixtures): AreaBuild {
   const builder = new LevelBuilder(assets, materials);
   const screens = new ScreenBank();
   const signs = new SignAtlas();
@@ -42,6 +42,7 @@ export function buildLobby(assets: Assets, materials: MaterialLibrary): AreaBuil
   screens.finish();
   builder.addObject(screens.object);
 
+  stations?.(builder);
   const built = builder.build();
   return { id: 'lobby', ...built, lights, haze: lighting.haze, dustBeams: lighting.dustBeams, tick: (time) => screens.update(time) };
 }

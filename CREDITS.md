@@ -63,6 +63,8 @@ Used under the Adobe Mixamo terms. Only the skeleton and the recorded movements 
 | [Classic Laptop](https://polyhaven.com/a/classic_laptop) | Arrangemonk | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [Metal Stool 02](https://polyhaven.com/a/metal_stool_02) | Ulan Cabanilla | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | [School Chair 01](https://polyhaven.com/a/SchoolChair_01) | Ethan Place | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| [Old Tyre](https://polyhaven.com/a/old_tyre) | MP | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| [Exterior Aircon Unit](https://polyhaven.com/a/exterior_aircon_unit) | Monsta3D | [CC0](https://creativecommons.org/publicdomain/zero/1.0/) |
 
 ## Surface textures and decals
 

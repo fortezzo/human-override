@@ -33,6 +33,8 @@ const started = Date.now();
 await page.goto(`${site.url}?debug=1`);
 await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
 await page.evaluate(() => window.__HO.randomDrops?.(false));
+// (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+await page.evaluate(() => window.__HO.hints?.(false));
 console.log(`GPU: ${await gpuName(page)}`);
 console.log(`Resolution: 1920 x 1080`);
 console.log(`Start-up: ${((Date.now() - started) / 1000).toFixed(1)} s to title screen (local files, no network delay)`);
@@ -160,6 +162,8 @@ const paced = async (width, height) => {
   await limited.page.goto(`${site.url}?debug=1`);
   await limited.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
   await limited.page.evaluate(() => window.__HO.randomDrops?.(false));
+  // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+  await limited.page.evaluate(() => window.__HO.hints?.(false));
   await limited.page.evaluate(() => {
     const ho = window.__HO;
     ho.play();
@@ -221,6 +225,8 @@ await paced(3840, 2160);
   await fresh.page.goto(`${site.url}?debug=1`);
   await fresh.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
   await fresh.page.evaluate(() => window.__HO.randomDrops?.(false));
+  // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+  await fresh.page.evaluate(() => window.__HO.hints?.(false));
   await fresh.page.evaluate(() => {
     const ho = window.__HO;
     ho.play();

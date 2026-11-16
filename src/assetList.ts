@@ -58,6 +58,8 @@ export const PROPS = [
   'classic_laptop',
   'metal_stool_02',
   'SchoolChair_01',
+  'old_tyre',
+  'exterior_aircon_unit',
 ] as const;
 
 export const MODELS = {

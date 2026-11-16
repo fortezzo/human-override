@@ -9,6 +9,7 @@ import { FX, type WeaponId } from '../../config';
 import type { ModelId, SurfaceId } from '../../assetList';
 import type { Assets } from '../../core/assets';
 import type { FlashLook } from './MuzzleFlash';
+import { buildTurncoatRig } from './turncoatRig';
 import { SIGHT_HEIGHT } from './ReflexSight';
 
 export interface Pose {
@@ -38,6 +39,8 @@ export interface ViewModelDef {
   model: ModelId;
   /** For a gun whose model has no images of its own: how each of its named parts is painted. */
   parts?: Record<string, PartPaint>;
+  /** Anything bolted onto the model, built in the model's own coordinates; `glow` scales how brightly its lit parts shine. */
+  rig?: (glow: number) => THREE.Object3D;
   /** How long the gun is, muzzle to the back of it, in metres. */
   length: number;
   /** Multiplies the model's paint: lifts near-black guns to a dark gunmetal that can hold light. */
@@ -113,20 +116,23 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     flash: { size: 1, seconds: FX.muzzleFlashTime, shape: 'star' },
     reloadMotion: 1,
   },
-  // The Prototype Crate's special weapon. Its model comes with no images
-  // that can be used, so each of its three kinds of part is painted here:
-  // the body in the game's own dark steel, the rings round the barrel and
-  // the grip in worn brass, and the cell on top lit the colour of
-  // everything that is on the player's side.
+  // The Prototype Crate's special weapon: something the lab at Site 04
+  // was still working on. Its model is a bare shell with no images of its
+  // own, so each of its three kinds of part is painted here (the body in
+  // dark worn steel, the windings round the barrel and the grip in
+  // blackened steel with a cold sheen, the cell on top lit the colour of
+  // its beam), and the lab's hardware and wiring are bolted onto it: see
+  // turncoatRig.ts. (It was pale with brass rings once, and read as a toy.)
   turncoat: {
     model: 'turncoat',
     paint: 1,
     roughness: 1,
     parts: {
-      body: { color: 0xd8d4c6, gain: 2.6, metalness: 0.3, roughness: 0.5, surface: 'Metal046B' },
-      coil: { color: 0xc9a25a, metalness: 1, roughness: 0.42 },
-      cell: { color: 0x0a1418, metalness: 0.2, roughness: 0.3, emissive: 0x4fe6ff, glow: 3.2 },
+      body: { color: 0x9aa0a6, gain: 1.9, metalness: 0.45, roughness: 0.6, surface: 'Metal046B' },
+      coil: { color: 0x3a3f46, metalness: 0.75, roughness: 0.46 },
+      cell: { color: 0x0a1418, metalness: 0.2, roughness: 0.3, emissive: 0x4fe6ff, glow: 2.4 },
     },
+    rig: buildTurncoatRig,
     hip: { x: 0.2, y: -0.155, z: -0.64, yaw: 0.1, pitch: 0.04, roll: 0 },
     // No sights on it: held up under the eye, the cell on top just below the point of aim.
     aim: { x: 0, y: -0.172, z: -0.66, yaw: 0, pitch: 0.01, roll: 0 },
@@ -135,7 +141,8 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     muzzles: [[0, 0.037, -0.224]],
     ejectionPort: null,
     reflexSight: false,
-    flash: { size: 0.8, seconds: 0.05, shape: 'burst', tint: [0.9, 2.8, 3.4] },
+    // Not a gun's flash: a discharge, the colour of the beam it sends.
+    flash: { size: 1.05, seconds: 0.07, shape: 'arc', tint: [0.75, 2.6, 3.3] },
     reloadMotion: 0.8,
   },
 };
@@ -177,5 +184,7 @@ export function dressGun(model: THREE.Object3D, def: ViewModelDef, assets: Asset
     mesh.material = material;
     made.push(material);
   });
+  // (Added after the model's own parts have been painted: it comes with its own finish.)
+  if (def.rig) model.add(def.rig(look.glow ?? 1));
   return made;
 }

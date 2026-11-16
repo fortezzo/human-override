@@ -3,12 +3,33 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>HUMAN OVERRIDE</title>
-    <meta name="description" content="HUMAN OVERRIDE - a round-based survival shooter in the browser. Don't let the AI win." />
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' fill='%23050607'/%3E%3Ccircle cx='32' cy='32' r='22' fill='none' stroke='%23ff4326' stroke-width='5' stroke-dasharray='38 8'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%23ff4326'/%3E%3C/svg%3E" />
+    <title>HUMAN OVERRIDE · Don't let the AI win</title>
+    <meta name="description" content="A round-based survival shooter that runs in your browser. Hold a facility against endless rounds of robots, find three override keys and pull the kill switch, while the AI in charge studies how you play and adapts." />
+    <meta name="theme-color" content="#050607" />
+
+    <!-- What other sites show when the link is shared. (%SITE_URL% is filled in when the site is built: see site-address.txt.) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="HUMAN OVERRIDE" />
+    <meta property="og:title" content="HUMAN OVERRIDE · Don't let the AI win" />
+    <meta property="og:description" content="A survival shooter in your browser. Endless rounds of robots, one kill switch, and an AI that studies how you play and adapts." />
+    <meta property="og:url" content="%SITE_URL%" />
+    <meta property="og:image" content="%SITE_URL%social-preview.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Robots with glowing red visors advance through a dark security lobby, under the title HUMAN OVERRIDE." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="HUMAN OVERRIDE · Don't let the AI win" />
+    <meta name="twitter:description" content="A survival shooter in your browser. Endless rounds of robots, one kill switch, and an AI that studies how you play and adapts." />
+    <meta name="twitter:image" content="%SITE_URL%social-preview.jpg" />
+
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="icon" type="image/png" sizes="64x64" href="./favicon.png" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
   </head>
   <body>
     <div id="app"></div>
+    <noscript>HUMAN OVERRIDE is a game that runs in the browser, and it needs JavaScript switched on to run.</noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

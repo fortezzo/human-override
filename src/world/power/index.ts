@@ -8,7 +8,7 @@ import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, drum, ibeam, vent, wall, type AreaBuild, type Haze } from '../build/room';
+import { approach, drum, ibeam, vent, wall, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LOBBY, POWER, WALL } from '../plan';
@@ -87,7 +87,7 @@ function transformer(b: LevelBuilder, x: number, z: number): void {
   }
 }
 
-export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuild {
+export function buildPower(assets: Assets, materials: MaterialLibrary, stations?: Fixtures): AreaBuild {
   const b = new LevelBuilder(assets, materials);
   const atlas = new SignAtlas(2048, 2048);
   const screens = new ScreenBank();
@@ -313,6 +313,7 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   lights.push({ name: 'powerBounce', area: 'power', kind: 'point', color: 0xffc890, intensity: 6.5, position: [16, 2.4, 8.6], distance: 13 });
   lights.push({ name: 'powerBounceN', area: 'power', kind: 'point', color: 0xffc890, intensity: 5.5, position: [16, 2.6, 0.6], distance: 12 });
 
+  stations?.(b);
   const built = b.build();
   return { id: 'power', ...built, lights, haze, dustBeams, tick: (time) => screens.update(time) };
 }

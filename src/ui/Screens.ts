@@ -32,6 +32,15 @@ const CONTROLS: Array<[string, string]> = [
   ['M', 'Mute'],
 ];
 
+/** The five lines at the top of How to Play: enough to start with, for someone who will read no further. */
+const QUICK_START: string[] = [
+  `<b>Move</b> with <kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> and look with the mouse. <kbd>Shift</kbd> runs, <kbd>Space</kbd> jumps over anything up to waist height.`,
+  `<b>Shoot</b> with <kbd>Left click</kbd>, aim with <kbd>Right click</kbd>, reload with <kbd>R</kbd>. Aim for the head.`,
+  `<b>Keep moving.</b> Robots only hurt you up close, and your health comes back by itself when you get away.`,
+  `<b>Spend your scrap.</b> Every hit earns some. Walk up to a weapon on a wall, or a door, and press <kbd>F</kbd> to buy it.`,
+  `<b>Follow the marker</b> <span class="howto-mark">\u25c6</span> to the next step of the mission. Pull the kill switch and you win.`,
+];
+
 /**
  * How to play, for someone who has never played a game like this: short
  * paragraphs in plain words, in the order a new player needs them.
@@ -252,7 +261,9 @@ export class Screens {
     const mute = this.toggle('Sound off (M)', settings.value.muted, (v) => settings.set({ muted: v }));
     block.appendChild(mute);
     settings.onChange((s) => ((mute.querySelector('input') as HTMLInputElement).checked = s.muted));
-    block.appendChild(this.toggle('Show frame rate', settings.value.showFps, (v) => settings.set({ showFps: v })));
+    block.appendChild(this.toggle('Show frame rate', settings.value.frameRate, (v) => settings.set({ frameRate: v })));
+    // (Switched on again, they start from the beginning: whatever had been learned is forgotten.)
+    block.appendChild(this.toggle('Show hints for new players', settings.value.hints, (v) => settings.set(v ? { hints: true, learned: [] } : { hints: false })));
     block.appendChild(this.toggle('Reduce screen shake and flashing', settings.value.reducedMotion, (v) => settings.set({ reducedMotion: v })));
     block.appendChild(h('div', 'setting-note', 'Your settings are remembered on this computer.'));
 
@@ -280,6 +291,10 @@ export class Screens {
     guide.innerHTML =
       `<div class="panel-title">HOW TO PLAY</div>
        <div class="howto-scroll">
+         <div class="howto-quick">
+           <h3>QUICK START</h3>
+           <ol>${QUICK_START.map((line) => `<li>${line}</li>`).join('')}</ol>
+         </div>
          <div class="howto-columns">${HOW_TO_PLAY.map((section) => `<section><h3>${section.title}</h3><div>${section.body}</div></section>`).join('')}</div>
          <h3>CONTROLS</h3>
          <div class="howto-controls">${CONTROLS.map(([key, what]) => `<div class="control"><kbd>${key}</kbd><span>${what}</span></div>`).join('')}</div>

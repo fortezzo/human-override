@@ -95,6 +95,9 @@ export const POLYHAVEN_MODELS = [
   { id: 'classic_laptop', tex: 512, tris: 3000 },
   { id: 'metal_stool_02', tex: 256, tris: 1800 },
   { id: 'SchoolChair_01', tex: 256, tris: 1800 },
+  // Stage 5: the truck's wheels, and the cooling units on the server hall's west wall
+  { id: 'old_tyre', tex: 512, tris: 1800 },
+  { id: 'exterior_aircon_unit', tex: 512, tris: 4000, keep: /^exterior_aircon_unit_rusted/, groups: [{ name: 'unit', match: /^exterior_aircon_unit_rusted/, origin: 'exterior_aircon_unit_rusted' }] },
 ];
 
 /** Sound packs from Kenney (CC0). `slug` is the page name on kenney.nl. */

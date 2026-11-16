@@ -4,6 +4,7 @@
 
 import type * as THREE from 'three';
 import type { LevelBuilder } from '../build/LevelBuilder';
+import { stackedDrums } from '../build/room';
 import { ROOM } from './plan';
 import type { ScreenBank, ScreenFeed } from './ScreenBank';
 
@@ -93,17 +94,20 @@ function buildDefences(b: LevelBuilder): WorkLights['flood'] {
 function buildClutter(b: LevelBuilder): void {
   const { x0, z0, z1 } = ROOM;
 
-  // North-west corner: fuel and chemical drums.
-  b.prop('Barrel_01', { at: [x0 + 0.75, 0, z0 + 0.7], rotY: 0.4 });
-  b.prop('Barrel_01', { at: [x0 + 1.5, 0, z0 + 0.62], rotY: 2.1 });
-  b.prop('barrel_03', { at: [x0 + 0.72, 0, z0 + 1.5], rotY: 1.0 });
-  b.prop('barrel_03', { at: [x0 + 2.35, 0, z0 + 0.75], rotY: 0.2 });
-  b.prop('barrel_03', { at: [x0 + 1.7, 0.33, z0 + 1.9], rot: [HALF_PI, 0.5, 0] });
-  // The corner they stand in is solid: nobody gets in among them. (There
-  // was a gap between two of them only just as wide as the player, and a
-  // space in the middle that no robot could reach.
-  // This is the corner the first person to finish the mission stood in.)
-  b.blocker([x0, 0, z0], [x0 + 2.72, 1.0, z0 + 1.95]);
+  // North-west corner: fuel and chemical drums. The two at the back are
+  // stacked two high, and the ones in front of them can be jumped onto.
+  // (This is the corner the first person to finish the mission stood in:
+  // five drums with a gap between two of them only just as wide as the
+  // player, and a space in the middle that no robot could reach. For a
+  // while one invisible block covered the lot. Now each drum is solid by
+  // itself, the space in the middle is filled, and the check in
+  // tools/e2e.mjs stands on every one of them and sends a robot.)
+  stackedDrums(b, x0 + 0.42, z0 + 0.42, 0.4);
+  stackedDrums(b, x0 + 1.12, z0 + 0.4, 2.1);
+  b.prop('barrel_03', { at: [x0 + 0.4, 0, z0 + 1.1], rotY: 1.0 });
+  b.prop('barrel_03', { at: [x0 + 1.06, 0, z0 + 1.08], rotY: 2.6 });
+  b.prop('barrel_03', { at: [x0 + 1.8, 0, z0 + 0.4], rotY: 0.2 });
+  b.prop('barrel_03', { at: [x0 + 2.0, 0.33, z0 + 1.15], rot: [HALF_PI, 0.5, 0] });
 
   // Between the windows: a hand truck and the boxes that came off it.
   b.prop('hand_truck', { at: [x0 + 0.42, 0, 0.35], rotY: HALF_PI + 0.12 });
@@ -128,7 +132,8 @@ function buildClutter(b: LevelBuilder): void {
   // (Far enough east that they do not stand in front of the warning sign.)
   b.prop('steel_frame_shelves_03', { at: [6.85, 0, z1 - 0.4], rotY: Math.PI });
   b.prop('cardboard_box_01', { at: [4.4, 0, z1 - 1.2], rotY: 0.8, kind: 'soft' });
-  b.prop('Barrel_01', { at: [8.4, 0, z1 - 1.3], rotY: 1.2 });
+  // (Tight in the corner: a jump over it must not land anywhere.)
+  b.prop('Barrel_01', { at: [8.62, 0, z1 - 0.4], rotY: 1.2 });
 
   // Watching from the corners.
   b.prop('security_camera_01', { at: [8.72, 3.95, z0 + 0.3], rotY: -Math.PI / 4 - 0.25, collide: false });

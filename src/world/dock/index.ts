@@ -14,7 +14,7 @@ import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialKey, MaterialLibrary } from '../../render/materials';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, column, drum, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
+import { approach, column, drum, ibeam, stackedDrums, vent, wall, weaponRack, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { DOCK, DOCK_BAYS, DOCK_COLUMNS, DOCK_PASSAGE, DOOR_PLANS, ENTRY_PLANS, HALL, LOBBY, RACK_PLANS, WALL } from '../plan';
 
@@ -212,7 +212,7 @@ function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number, light
   }
 }
 
-export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild {
+export function buildDock(assets: Assets, materials: MaterialLibrary, stations?: Fixtures): AreaBuild {
   const b = new LevelBuilder(assets, materials);
   const atlas = new SignAtlas(2048, 2048);
   const lights: LightDef[] = [];
@@ -344,13 +344,19 @@ export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild
   b.prop('wooden_military_crate', { at: [x1 - 0.55, 0, 22.5], rotY: HALF_PI, kind: 'wood' });
   b.prop('wooden_military_crate', { at: [x1 - 0.55, 0, 23.65], rotY: HALF_PI, kind: 'wood' });
   b.prop('wooden_military_crate', { at: [x1 - 0.57, 0.46, 23.1], rotY: HALF_PI + 0.08, kind: 'wood', collide: false });
+  b.blocker([x1 - 0.85, 0.46, 22.48], [x1 - 0.29, 0.92, 23.72]);
   b.prop('industrial_storage_cart', { at: [x1 - 0.6, 0, 25.1], rotY: HALF_PI });
-  b.blocker([x1 - 1.1, 0, 19.8], [x1, 1.2, z1]);
-  b.prop('Barrel_01', { at: [x0 + 0.5, 0, z1 - 0.5], rotY: 0.6 });
-  b.prop('barrel_03', { at: [x0 + 1.3, 0, z1 - 0.48], rotY: 1.9 });
-  b.prop('Barrel_01', { at: [x0 + 0.52, 0, z1 - 1.3], rotY: 2.4 });
-  // (The corner they stand in is solid as far as the container's end.)
-  b.blocker([x0, 0, z1 - 1.8], [x0 + 1.8, 1.1, z1]);
+  // (Each of them solid by itself: the crates can be jumped onto, the hand
+  // truck and the cart are too tall to be. Nothing in the strip is further
+  // from the open floor than a robot reaches.)
+  // Drums in the south-west corner, filling it as far as the container's
+  // end: the back pair stacked two high, the front pair low enough to jump
+  // onto. (A gap between drums and container made a slot once that the
+  // player fitted into and a robot did not.)
+  stackedDrums(b, x0 + 0.42, z1 - 0.42, 0.6);
+  stackedDrums(b, x0 + 1.24, z1 - 0.42, 1.9);
+  b.prop('Barrel_01', { at: [x0 + 0.42, 0, z1 - 1.14], rotY: 2.4 });
+  b.prop('barrel_03', { at: [x0 + 1.22, 0, z1 - 1.1], rotY: 0.9 });
   b.prop('metal_tool_chest', { at: [x0 + 0.38, 0, 11.0], rotY: HALF_PI });
   b.prop('utility_box_01', { at: [-20.4, 0, z1 - 0.26], rotY: Math.PI });
   b.prop('utility_box_02', { at: [-14.0, 0, z0 + 0.26], rotY: 0 });
@@ -467,6 +473,7 @@ export function buildDock(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'dockBounceW', area: 'dock', kind: 'point', color: 0xffb070, intensity: 26, position: [-28, 2.4, 14.5], distance: 16 });
   lights.push({ name: 'dockBounceE', area: 'dock', kind: 'point', color: 0xffb070, intensity: 26, position: [-16, 2.4, 15], distance: 16 });
 
+  stations?.(b);
   const built = b.build();
   return { id: 'dock', ...built, lights, haze, dustBeams };
 }

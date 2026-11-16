@@ -9,7 +9,7 @@ import { ARGUS, ROBOT, SPECIALS, TURNCOAT } from '../../config';
 import { angleDelta, clamp, damp, rand } from '../../core/math';
 import { settings } from '../../core/settings';
 import { resolveCircle, type CircleBody, type Collider } from '../../sim/collision';
-import { nextWaypoint, type NavGrid } from '../../sim/navGrid';
+import { cellAt, clearLine, nextWaypoint, type NavGrid } from '../../sim/navGrid';
 import { rayCapsule, raySphere } from '../../sim/rayShapes';
 import type { WeaponKey } from '../../sim/argus';
 import { createArmour, type Armour } from '../../sim/armour';
@@ -467,7 +467,13 @@ export class Robot {
       if (this.mind.state === 'chase') {
         if (distance > ROBOT.attackRange * 0.85) {
           // (The robots' map leads to the player. One that has been turned is after another robot: it goes straight for it.)
-          const waypoint = distance > 2.2 && this.turned <= 0 ? nextWaypoint(grid, p.x, p.z) : null;
+          // Close in, a robot stops reading the map and walks straight at
+          // the player, unless something it cannot cross stands between it
+          // and the nearest floor to them: a barrier they have jumped, the
+          // fence they have hopped. Then the map still shows the way round.
+          const here = distance <= 2.2 ? cellAt(grid, p.x, p.z) : -1;
+          const direct = here >= 0 && grid.goal >= 0 && clearLine(grid, here, grid.goal);
+          const waypoint = !direct && this.turned <= 0 ? nextWaypoint(grid, p.x, p.z) : null;
           if (waypoint) {
             wantX = waypoint.x - p.x;
             wantZ = waypoint.z - p.z;

@@ -17,7 +17,7 @@ import { type DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialKey, MaterialLibrary } from '../../render/materials';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, drum, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
+import { approach, drum, ibeam, vent, wall, weaponRack, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { DOOR_PLANS, ENTRY_PLANS, HALL, KEY_CAGE, LAB, LAB_LINE, RACK_PLANS, WALL } from '../plan';
@@ -121,6 +121,8 @@ function ball(b: LevelBuilder, key: MaterialKey, at: Vec3, radius: number): void
 function assemblyArm(b: LevelBuilder, base: [number, number], joints: [Vec3, Vec3, Vec3, Vec3]): void {
   const [bx, bz] = base;
   const [shoulder, elbow, wrist, tip] = joints;
+  // (Solid from the floor to its shoulder: nobody climbs an assembly arm.)
+  b.blocker([bx - 0.36, 0, bz - 0.36], [bx + 0.36, 2.2, bz + 0.36]);
   // Pedestal and turret.
   b.box('darkSteel', [bx - 0.42, 0, bz - 0.42], [bx + 0.42, 0.06, bz + 0.42], { collide: false, cast: false });
   drum(b, 'hazard', [bx, 0.38, bz], 0.3, 0.64, 'y', 20);
@@ -155,7 +157,7 @@ function assemblyArm(b: LevelBuilder, base: [number, number], joints: [Vec3, Vec
   }
 }
 
-export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: RobotParts): AreaBuild {
+export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: RobotParts, stations?: Fixtures): AreaBuild {
   const b = new LevelBuilder(assets, materials);
   const atlas = new SignAtlas(2048, 2048);
   const screens = new ScreenBank();
@@ -229,11 +231,29 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
     b.box('hazard', [hx - 0.2, railY - 0.68, railZ - 0.035], [hx + 0.2, railY - 0.62, railZ + 0.035], { collide: false, cast: false });
   }
 
-  // ---- The assembly cell: fenced, so nothing walks into it.
+  // ---- The assembly cell: a waist-high fence round it, with a gateway
+  // standing open on its west side and another on its east. The fence can
+  // be jumped; the gateways are for the robots, which cannot, so that
+  // whoever hops in has company. (The cell was one solid block once, so
+  // that nothing walked into it. A fence that can be seen over and not got
+  // over is the knee-high barrier that stops the player dead.)
   const { x0: cx0, x1: cx1, z0: cz0, z1: cz1 } = CELL;
   const cmx = (cx0 + cx1) / 2;
   const cmz = (cz0 + cz1) / 2;
-  b.blocker([cx0, 0, cz0], [cx1, 2.4, cz1]);
+  /** Height of the fence's top rail, and the gateway in the middle third of the west and east sides. */
+  const fenceTop = 1.0;
+  const cellGate = { z0: cz0 + (cz1 - cz0) / 3, z1: cz0 + ((cz1 - cz0) * 2) / 3 };
+  const fenceRuns: Array<[Vec3, Vec3]> = [
+    [[cx0, 0, cz0], [cx1, 0, cz0]],
+    [[cx0, 0, cz1], [cx1, 0, cz1]],
+    [[cx0, 0, cz0], [cx0, 0, cellGate.z0]],
+    [[cx0, 0, cellGate.z1], [cx0, 0, cz1]],
+    [[cx1, 0, cz0], [cx1, 0, cellGate.z0]],
+    [[cx1, 0, cellGate.z1], [cx1, 0, cz1]],
+  ];
+  for (const [from, to] of fenceRuns) {
+    b.blocker([Math.min(from[0], to[0]) - 0.05, 0, Math.min(from[2], to[2]) - 0.05], [Math.max(from[0], to[0]) + 0.05, fenceTop, Math.max(from[2], to[2]) + 0.05]);
+  }
   // Hazard paint on the floor inside the fence, and a steel plate under the jig.
   const stripes = atlas.stripes(512, 64, PAINT.yellow, PAINT.black, 0.5);
   const hatch = (centre: Vec3, width: number, roll = 0) => b.decal(atlas.texture, centre, [0, 1, 0], width, 0.3, { uvRect: stripes.uv, roll, opacity: 0.85 });
@@ -251,15 +271,31 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
     posts.push([cx0, pz], [cx1, pz]);
   }
   for (const [px, pz] of posts) {
-    b.box('hazard', [px - 0.04, 0, pz - 0.04], [px + 0.04, 1.2, pz + 0.04], { collide: false });
+    b.box('hazard', [px - 0.04, 0, pz - 0.04], [px + 0.04, fenceTop + 0.04, pz + 0.04], { collide: false });
     b.box('darkSteel', [px - 0.07, 0, pz - 0.07], [px + 0.07, 0.03, pz + 0.07], { collide: false, cast: false });
   }
-  for (const y of [0.55, 1.15]) {
-    b.tube('hazard', [cx0, y, cz0], [cx1, y, cz0], 0.025, false);
-    b.tube('hazard', [cx0, y, cz1], [cx1, y, cz1], 0.025, false);
-    b.tube('hazard', [cx0, y, cz0], [cx0, y, cz1], 0.025, false);
-    b.tube('hazard', [cx1, y, cz0], [cx1, y, cz1], 0.025, false);
+  for (const y of [0.5, fenceTop - 0.03]) {
+    for (const [from, to] of fenceRuns) b.tube('hazard', [from[0], y, from[2]], [to[0], y, to[2]], 0.025, false);
   }
+  // Each gateway's own gate: a leaf of the same two rails, swung back against the fence inside the cell and left there.
+  for (const [gx, into] of [
+    [cx0, 1],
+    [cx1, -1],
+  ] as const) {
+    const hinge: Vec3 = [gx, 0, cellGate.z1];
+    const swung: Vec3 = [gx + into * 0.16, 0, cellGate.z1 + (cellGate.z1 - cellGate.z0) * 0.94];
+    for (const y of [0.5, fenceTop - 0.03]) b.tube('steelPlate', [hinge[0] + into * 0.07, y, hinge[2] + 0.04], [swung[0], y, swung[2]], 0.02, false);
+    b.box('steelPlate', [swung[0] - 0.03, 0.08, swung[2] - 0.03], [swung[0] + 0.03, fenceTop, swung[2] + 0.03], { collide: false, cast: false });
+    for (const y of [0.3, 0.8]) b.box('darkSteel', [gx + into * 0.03 - 0.03, y - 0.05, cellGate.z1 - 0.02], [gx + into * 0.03 + 0.05, y + 0.05, cellGate.z1 + 0.06], { collide: false, cast: false });
+    // A latch plate on the post the gate shuts against, and a hazard chevron on the floor of the gateway.
+    b.box('darkSteel', [gx - 0.05, 0.84, cellGate.z0 - 0.05], [gx + 0.05, 0.96, cellGate.z0 + 0.02], { collide: false, cast: false });
+    hatch([gx, 0, (cellGate.z0 + cellGate.z1) / 2], cellGate.z1 - cellGate.z0 - 0.2, HALF_PI);
+  }
+  // What stands inside the fence is solid, each thing by itself: the jig
+  // and the unit on it, and the three arms' pedestals.
+  // (With room for a robot to walk between any two of them: they come in
+  // by the gateways and must be able to get right round the jig.)
+  b.blocker([cmx - 0.4, 0, cmz - 0.45], [cmx + 0.4, 2.4, cmz + 0.35]);
   // The jig: a column with a clamp at hip height, holding the unit being built.
   drum(b, 'darkSteel', [cmx, 0.05, cmz], 0.5, 0.1, 'y', 20, false);
   b.tube('steelPlate', [cmx, 0.1, cmz - 0.32], [cmx, 1.22, cmz - 0.32], 0.07);
@@ -268,20 +304,20 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
   // Three arms round it: one welding at its shoulder, one holding its other
   // arm ready, one folded back and waiting.
   const chest: Vec3 = [cmx, 1.62, cmz];
-  assemblyArm(b, [cx0 + 0.75, cz0 + 0.8], [
-    [cx0 + 0.75, 1.75, cz0 + 0.8],
+  assemblyArm(b, [cx0 + 0.62, cz0 + 0.62], [
+    [cx0 + 0.62, 1.75, cz0 + 0.62],
     [cx0 + 1.5, 2.55, cz0 + 1.45],
     [chest[0] - 0.62, 2.05, chest[2] - 0.5],
     [chest[0] - 0.36, 1.78, chest[2] - 0.26],
   ]);
-  assemblyArm(b, [cx1 - 0.75, cz0 + 0.9], [
-    [cx1 - 0.75, 1.7, cz0 + 0.9],
+  assemblyArm(b, [cx1 - 0.62, cz0 + 0.62], [
+    [cx1 - 0.62, 1.7, cz0 + 0.62],
     [cx1 - 1.2, 2.35, cz0 + 1.75],
     [chest[0] + 1.02, 1.82, chest[2] - 0.12],
     [chest[0] + 0.86, 1.66, chest[2] - 0.04],
   ]);
-  assemblyArm(b, [cmx + 0.3, cz1 - 0.75], [
-    [cmx + 0.3, 1.7, cz1 - 0.75],
+  assemblyArm(b, [cmx + 0.3, cz1 - 0.62], [
+    [cmx + 0.3, 1.7, cz1 - 0.62],
     [cmx + 0.75, 2.75, cz1 - 1.05],
     [cmx + 0.5, 2.9, cz1 - 1.85],
     [cmx + 0.42, 2.62, cz1 - 2.0],
@@ -307,18 +343,19 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
     drudge.place(leftArm, [cmx, jigY, cmz], [0, -HALF_PI, 0]);
     // Its other arm, in the second assembly arm's grip (roughly: it is on its way in).
     drudge.place(rightArm, [cmx + 0.3, jigY + 0.06, cmz + 0.4], [0, -HALF_PI, 0.16]);
-    // Its legs, on a trolley inside the fence.
-    b.box('steelPlate', [cx1 - 1.5, 0.34, cz1 - 2.2], [cx1 - 0.5, 0.4, cz1 - 0.6], { collide: false });
+    // Its legs, on a trolley inside the fence, in the south-east corner. (Solid, and low enough to step up onto with a jump.)
+    b.box('steelPlate', [cx1 - 1.16, 0.34, cz1 - 1.7], [cx1 - 0.16, 0.4, cz1 - 0.14], { collide: false });
+    b.blocker([cx1 - 1.16, 0, cz1 - 1.7], [cx1 - 0.16, 0.56, cz1 - 0.14]);
     for (const [tx, tz] of [
-      [cx1 - 1.44, cz1 - 2.14],
-      [cx1 - 0.56, cz1 - 2.14],
-      [cx1 - 1.44, cz1 - 0.66],
-      [cx1 - 0.56, cz1 - 0.66],
+      [cx1 - 1.1, cz1 - 1.64],
+      [cx1 - 0.22, cz1 - 1.64],
+      [cx1 - 1.1, cz1 - 0.2],
+      [cx1 - 0.22, cz1 - 0.2],
     ] as const) {
       b.tube('darkSteel', [tx, 0, tz], [tx, 0.34, tz], 0.02, false);
     }
-    drudge.set(leftLeg, 'on', [cx1 - 1.2, 0.4, cz1 - 1.4], [HALF_PI, 0.2, 0]);
-    drudge.set(rightLeg, 'on', [cx1 - 0.8, 0.4, cz1 - 1.4], [HALF_PI, -0.15, 0]);
+    drudge.set(leftLeg, 'on', [cx1 - 0.86, 0.4, cz1 - 0.92], [HALF_PI, 0.2, 0]);
+    drudge.set(rightLeg, 'on', [cx1 - 0.46, 0.4, cz1 - 0.92], [HALF_PI, -0.15, 0]);
     // Torsos coming in on the line, hanging from their hangers.
     hangers.forEach((hx, i) => drudge.set(torso, 'under', [hx, railY - 0.66, railZ], [0, HALF_PI + (i - 1) * 0.12, 0]));
     // Limbs on the south wall: arms hang from the rail by the shoulder, legs stand in a rack further along.
@@ -403,7 +440,7 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
   b.prop('metal_office_desk', { at: [11.2, 0, z0 + 0.5], rotY: 0 });
   b.prop('metal_office_desk', { at: [13.3, 0, z0 + 0.5], rotY: 0 });
   b.prop('metal_tool_chest', { at: [15.0, 0, z0 + 0.4], rotY: 0 });
-  b.blocker([x0, 0, z0], [15.7, 1.1, z0 + 1.05]);
+  // (Desks and chest are each solid by themselves, and low enough to jump onto.)
   b.prop('classic_laptop', { at: [11.0, 0.76, z0 + 0.5], rotY: 0.25, collide: false });
   b.prop('desk_lamp_arm_01', { at: [12.0, 0.76, z0 + 0.3], rotY: 0.6, collide: false });
   b.prop('clipboard', { at: [13.1, 0.77, z0 + 0.62], rotY: -0.4, collide: false });
@@ -521,6 +558,7 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
   lights.push({ name: 'labBounceN', area: 'lab', kind: 'point', color: 0xcffff2, intensity: 9, position: [16.2, 2.3, 17.2], distance: 12 });
   lights.push({ name: 'labBounceS', area: 'lab', kind: 'point', color: 0xcffff2, intensity: 9, position: [15.6, 2.3, 27.2], distance: 12 });
 
+  stations?.(b);
   const built = b.build();
   return { id: 'lab', ...built, lights, haze, dustBeams, tick: (time) => screens.update(time) };
 }

@@ -3,12 +3,15 @@
 //
 // Each is built from the same kit as the rooms (so it sits in the same
 // light and takes the same bullet holes), with a lit sign of its own that
-// says what it is and what it does. Everything here only shows what it is
+// says what it is and what it does. The part of a station that never moves
+// is built into the room it stands in, by the room's own builder, so it
+// costs nothing extra to draw; what lights up is a few shapes more. Everything here only shows what it is
 // told to show: whether the power is on, which boosts have been bought,
 // what the crate is offering. What may be bought, and for how much, is
 // decided in sim/ and game/Economy.ts.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { BENCH, BOOSTS, CRATE, WEAPONS, type WeaponId } from '../config';
 import type { Assets } from '../core/assets';
 import { damp } from '../core/math';
@@ -16,8 +19,8 @@ import { VIEW_MODELS, dressGun } from '../entities/weapon/viewModels';
 import type { LightDef } from '../render/lighting';
 import type { MaterialKey, MaterialLibrary } from '../render/materials';
 import type { BoostId } from '../sim/boosts';
-import type { Collider } from '../sim/collision';
 import { LevelBuilder } from './build/LevelBuilder';
+import type { Fixtures } from './build/room';
 import { PAINT, SignAtlas, type Sign } from './build/SignAtlas';
 import { STATION_PLANS, type AreaId, type StationId, type StationPlan } from './plan';
 
@@ -208,43 +211,88 @@ const ICONS: Record<StationId, (g: CanvasRenderingContext2D, cx: number, cy: num
   },
 };
 
-/** A flat lit panel showing part of the panels' picture. */
-function panelQuad(texture: THREE.Texture, uv: [number, number, number, number], width: number, height: number): { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial } {
-  const geometry = new THREE.PlaneGeometry(width, height);
-  const at = geometry.getAttribute('uv') as THREE.BufferAttribute;
-  // (PlaneGeometry's corners: top left, top right, bottom left, bottom right.)
-  at.setXY(0, uv[0], uv[3]);
-  at.setXY(1, uv[2], uv[3]);
-  at.setXY(2, uv[0], uv[1]);
-  at.setXY(3, uv[2], uv[1]);
-  const material = new THREE.MeshBasicMaterial({ map: texture, toneMapped: false, fog: false });
-  return { mesh: new THREE.Mesh(geometry, material), material };
-}
+/**
+ * Several lit shapes drawn as one. Each part keeps a brightness and colour
+ * of its own (stored on its corners, so that one can change without the
+ * others), which is how a station's sign, its card and its lamps can each
+ * be lit or dark without each being a separate thing to draw.
+ */
+class LitParts {
+  private readonly shapes: THREE.BufferGeometry[] = [];
+  private readonly ranges = new Map<string, [number, number]>();
+  private corners = 0;
+  private colors: THREE.BufferAttribute | null = null;
 
-/** One lamp or lit strip whose colour is changed as things happen. */
-function lamp(size: Vec3, at: Vec3): { mesh: THREE.Mesh; material: THREE.MeshBasicMaterial } {
-  const material = new THREE.MeshBasicMaterial({ color: 0x050607, toneMapped: false, fog: false });
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material);
-  mesh.position.set(...at);
-  return { mesh, material };
+  /** A flat panel showing part of the panels' picture, facing the way `turn` says. */
+  panel(part: string, uv: [number, number, number, number], width: number, height: number, at: Vec3, turn: number): void {
+    const geometry = new THREE.PlaneGeometry(width, height);
+    const corners = geometry.getAttribute('uv') as THREE.BufferAttribute;
+    // (PlaneGeometry's corners: top left, top right, bottom left, bottom right.)
+    corners.setXY(0, uv[0], uv[3]);
+    corners.setXY(1, uv[2], uv[3]);
+    corners.setXY(2, uv[0], uv[1]);
+    corners.setXY(3, uv[2], uv[1]);
+    geometry.rotateY(turn);
+    geometry.translate(at[0], at[1], at[2]);
+    this.add(part, geometry);
+  }
+
+  /** A lamp or lit strip: a small box. */
+  lamp(part: string, size: Vec3, at: Vec3): void {
+    const geometry = new THREE.BoxGeometry(...size);
+    geometry.translate(at[0], at[1], at[2]);
+    this.add(part, geometry);
+  }
+
+  private add(part: string, geometry: THREE.BufferGeometry): void {
+    const plain = geometry.toNonIndexed();
+    geometry.dispose();
+    this.ranges.set(part, [this.corners, plain.getAttribute('position').count]);
+    this.corners += plain.getAttribute('position').count;
+    this.shapes.push(plain);
+  }
+
+  /** All of them as one shape. `map` is the picture the panels show (left out for plain lamps). */
+  build(name: string, map?: THREE.Texture): THREE.Mesh {
+    const merged = mergeGeometries(this.shapes)!;
+    for (const shape of this.shapes) shape.dispose();
+    this.colors = new THREE.BufferAttribute(new Float32Array(this.corners * 3), 3);
+    merged.setAttribute('color', this.colors);
+    const mesh = new THREE.Mesh(merged, new THREE.MeshBasicMaterial({ map: map ?? null, vertexColors: true, toneMapped: false, fog: false }));
+    mesh.name = name;
+    return mesh;
+  }
+
+  /** Light one part: a colour, times a brightness (more than 1 glows). */
+  set(part: string, color: THREE.Color | number, level = 1): void {
+    const range = this.ranges.get(part);
+    if (!range || !this.colors) return;
+    const c = typeof color === 'number' ? WHITE.setScalar(color) : color;
+    for (let i = range[0]; i < range[0] + range[1]; i++) this.colors.setXYZ(i, c.r * level, c.g * level, c.b * level);
+    this.colors.needsUpdate = true;
+  }
 }
+const WHITE = new THREE.Color();
 
 interface BoostParts {
-  sign: THREE.MeshBasicMaterial;
-  card: THREE.MeshBasicMaterial;
-  strips: THREE.MeshBasicMaterial[];
-  status: THREE.MeshBasicMaterial;
+  /** Its sign and its card (parts 'sign' and 'card'). */
+  panels: LitParts;
+  /** Its lamps: the strips either side of the charge and the bar under the sign ('strips'), and the status lamp ('status'). */
+  lamps: LitParts;
   canister: THREE.Mesh;
   light: LightDef;
 }
+
+/** A boost station's status lamp with the power out, and once it has sold its charge. */
+const STATUS_DEAD = new THREE.Color(1.6, 0.1, 0.05);
+const STATUS_SOLD = new THREE.Color(1.6, 1.7, 1.6);
 
 export class StationSet {
   /** The pieces that stand in each area, to be drawn with it. */
   readonly groups: Record<AreaId, THREE.Group> = { lobby: new THREE.Group(), hall: new THREE.Group(), power: new THREE.Group(), core: new THREE.Group(), dock: new THREE.Group(), lab: new THREE.Group() };
   readonly lights: LightDef[] = [];
-  /** What is solid because of them, and what stops bullets. */
-  readonly colliders: Collider[] = [];
-  readonly solids: THREE.Mesh[] = [];
+  /** The part of each station that never moves, waiting to be built into its room. */
+  private readonly fixedParts: Array<{ area: AreaId; build: Fixtures }> = [];
 
   private readonly panels = new Panels();
   private stripes!: Sign;
@@ -266,8 +314,7 @@ export class StationSet {
   readonly offerAt = new THREE.Vector3();
 
   // The bench.
-  private benchSign!: THREE.MeshBasicMaterial;
-  private benchCard!: THREE.MeshBasicMaterial;
+  private benchPanels!: LitParts;
   private benchCoil: THREE.MeshBasicMaterial[] = [];
   private benchArm!: THREE.Group;
   private benchTip!: THREE.MeshBasicMaterial;
@@ -292,14 +339,21 @@ export class StationSet {
     this.reset();
   }
 
-  /** Build the fixed part of a station with the rooms' own kit, and keep what is solid about it. */
-  private fixed(plan: StationPlan, build: (b: LevelBuilder) => void): void {
-    const b = new LevelBuilder(this.assets, this.materials);
-    build(b);
-    const built = b.build();
-    this.groups[plan.area].add(built.group);
-    this.colliders.push(...built.colliders);
-    this.solids.push(...built.solids);
+  /** The fixed part of a station: kept until its room is built, and built into it. */
+  private fixed(plan: StationPlan, build: Fixtures): void {
+    this.fixedParts.push({ area: plan.area, build });
+  }
+
+  /**
+   * Everything that never moves about the stations in one area, for that
+   * area's builder to build with the room. (They were built apart from
+   * their rooms once, each a dozen shapes of its own, and the six of them
+   * cost a tenth of the frame rate with every door on the map open.)
+   */
+  fixtures(area: AreaId): Fixtures {
+    return (b) => {
+      for (const part of this.fixedParts) if (part.area === area) part.build(b);
+    };
   }
 
   // ------------------------------------------------------- a boost station
@@ -346,32 +400,21 @@ export class StationSet {
       b.decal(atlas.texture, point(1.0, 0, 0), [0, 1, 0], 1.3, 0.46, { uvRect: stripes.uv, opacity: 0.7, roll: plan.normal[0] !== 0 ? Math.PI / 2 : 0 });
     });
 
-    // The lit parts.
+    // The lit parts: its sign and card as one shape, its lamps as another.
     const rule = BOOSTS[id];
-    const place = (mesh: THREE.Object3D, at: Vec3): void => {
-      mesh.position.set(...at);
-      mesh.rotation.y = turn;
-      group.add(mesh);
-    };
-    const sign = panelQuad(this.panels.texture, this.panels.sign(rule.name, css(color)), 2 * w + 0.12, 0.36);
-    place(sign.mesh, point(0.404, 2.47, 0));
+    const panels = new LitParts();
+    panels.panel('sign', this.panels.sign(rule.name, css(color)), 2 * w + 0.12, 0.36, point(0.404, 2.47, 0), turn);
     const lines = rule.effect.toUpperCase().split(' ');
     const half = Math.ceil(lines.length / 2);
-    const card = panelQuad(this.panels.texture, this.panels.card(lines.length > 2 ? [lines.slice(0, half).join(' '), lines.slice(half).join(' ')] : [rule.effect.toUpperCase()], String(rule.price), css(color), ICONS[id]), 0.84, 0.246);
-    place(card.mesh, point(0.534, 0.64, 0));
+    panels.panel('card', this.panels.card(lines.length > 2 ? [lines.slice(0, half).join(' '), lines.slice(half).join(' ')] : [rule.effect.toUpperCase()], String(rule.price), css(color), ICONS[id]), 0.84, 0.246, point(0.534, 0.64, 0), turn);
+    group.add(panels.build(`station-${id}-panels`, this.panels.texture));
 
-    const strips: THREE.MeshBasicMaterial[] = [];
-    for (const a of [-0.44, 0.44]) {
-      const strip = lamp(plan.normal[0] !== 0 ? [0.02, 0.62, 0.04] : [0.04, 0.62, 0.02], point(0.54, 1.31, a));
-      group.add(strip.mesh);
-      strips.push(strip.material);
-    }
+    const lamps = new LitParts();
+    for (const a of [-0.44, 0.44]) lamps.lamp('strips', plan.normal[0] !== 0 ? [0.02, 0.62, 0.04] : [0.04, 0.62, 0.02], point(0.54, 1.31, a));
     // A lamp bar under the sign, which is what lights the cabinet's face and the floor in front of it.
-    const bar = lamp(plan.normal[0] !== 0 ? [0.06, 0.03, 0.9] : [0.9, 0.03, 0.06], point(0.46, 2.215, 0));
-    group.add(bar.mesh);
-    strips.push(bar.material);
-    const status = lamp([0.07, 0.07, 0.07], point(0.545, 1.9, -w + 0.16));
-    group.add(status.mesh);
+    lamps.lamp('strips', plan.normal[0] !== 0 ? [0.06, 0.03, 0.9] : [0.9, 0.03, 0.06], point(0.46, 2.215, 0));
+    lamps.lamp('status', [0.07, 0.07, 0.07], point(0.545, 1.9, -w + 0.16));
+    group.add(lamps.build(`station-${id}-lamps`));
 
     // The charge: a glowing cell that is taken when the boost is bought.
     const cell = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.5, 14), new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2.6), toneMapped: false, fog: false }));
@@ -380,7 +423,7 @@ export class StationSet {
 
     const light: LightDef = { name: `station-${id}`, area: plan.area, kind: 'point', color, intensity: 15, position: point(0.9, 1.8, 0), distance: 5.5, when: 'powerOn' };
     this.lights.push(light);
-    this.boosts.set(id, { sign: sign.material, card: card.material, strips, status: status.material, canister: cell, light });
+    this.boosts.set(id, { panels, lamps, canister: cell, light });
   }
 
   // ---------------------------------------------------------------- the crate
@@ -414,16 +457,13 @@ export class StationSet {
     });
 
     const color = STATION_COLOR.crate;
-    const sign = panelQuad(this.panels.texture, this.panels.sign('PROTOTYPE CRATE', css(color)), 1.74, 0.36);
-    sign.mesh.position.set(...point(0.204, 2.16, 0));
-    sign.mesh.rotation.y = turn;
-    sign.material.color.setScalar(1.9);
-    group.add(sign.mesh);
-    const card = panelQuad(this.panels.texture, this.panels.card(['A RANDOM', 'WEAPON'], String(CRATE.price), css(color), ICONS.crate), 0.9, 0.264);
-    card.mesh.position.set(...point(0.204, 1.72, 0));
-    card.mesh.rotation.y = turn;
-    card.material.color.setScalar(1.5);
-    group.add(card.mesh);
+    // (The crate needs no power: its sign and card are always lit.)
+    const panels = new LitParts();
+    panels.panel('sign', this.panels.sign('PROTOTYPE CRATE', css(color)), 1.74, 0.36, point(0.204, 2.16, 0), turn);
+    panels.panel('card', this.panels.card(['A RANDOM', 'WEAPON'], String(CRATE.price), css(color), ICONS.crate), 0.9, 0.264, point(0.204, 1.72, 0), turn);
+    group.add(panels.build('station-crate-panels', this.panels.texture));
+    panels.set('sign', 1.9);
+    panels.set('card', 1.5);
 
     // The lid: hinged along the back, built about its hinge.
     const hinge = new THREE.Group();
@@ -441,9 +481,10 @@ export class StationSet {
     group.add(hinge);
 
     // The light inside, seen when the lid is up.
-    const glow = lamp(plan.normal[0] !== 0 ? [0.56, 0.02, 2 * w - 0.2] : [2 * w - 0.2, 0.02, 0.56], point(0.43, top - 0.02, 0));
-    this.crateGlow = glow.material;
-    group.add(glow.mesh);
+    this.crateGlow = new THREE.MeshBasicMaterial({ color: 0x050607, toneMapped: false, fog: false });
+    const glow = new THREE.Mesh(new THREE.BoxGeometry(...((plan.normal[0] !== 0 ? [0.56, 0.02, 2 * w - 0.2] : [2 * w - 0.2, 0.02, 0.56]) as Vec3)), this.crateGlow);
+    glow.position.set(...point(0.43, top - 0.02, 0));
+    group.add(glow);
 
     // What it offers: one of each gun, hanging over the open case, one shown at a time.
     this.offerAt.set(...point(0.43, 1.2, 0));
@@ -492,8 +533,9 @@ export class StationSet {
     const w = plan.half;
 
     this.fixed(plan, (b) => {
-      // (One solid block for the whole of it: nobody walks under a workbench.)
-      b.blocker(point(0, 0, -w).map((v, i) => Math.min(v, point(0.72, 0, w)[i]!)) as Vec3, point(0, 0.92, -w).map((v, i) => Math.max(v, point(0.72, 0.92, w)[i]!)) as Vec3);
+      // (One solid block for the whole of it, up past the arm that works over
+      // it: nobody walks under a workbench, or jumps up to stand in one.)
+      b.blocker(point(0, 0, -w).map((v, i) => Math.min(v, point(0.72, 0, w)[i]!)) as Vec3, point(0, 1.9, -w).map((v, i) => Math.max(v, point(0.72, 1.9, w)[i]!)) as Vec3);
       // The top, two cabinets under it, a shelf between.
       box(b, 'steelPlate', 0, 0.86, -w, 0.72, 0.92, w, false, true);
       box(b, 'rustedSteel', 0.7, 0.84, -w, 0.73, 0.92, w);
@@ -533,16 +575,10 @@ export class StationSet {
     });
 
     const color = STATION_COLOR.bench;
-    const sign = panelQuad(this.panels.texture, this.panels.sign('OVERCLOCK BENCH', css(color)), 2 * w - 0.06, 0.36);
-    sign.mesh.position.set(...point(0.244, 2.31, 0));
-    sign.mesh.rotation.y = turn;
-    group.add(sign.mesh);
-    this.benchSign = sign.material;
-    const card = panelQuad(this.panels.texture, this.panels.card(['UPGRADES THE', 'WEAPON IN HAND'], `FROM ${BENCH.price}`, css(color), ICONS.bench), 0.86, 0.252);
-    card.mesh.position.set(...point(0.054, 1.84, 0.58));
-    card.mesh.rotation.y = turn;
-    group.add(card.mesh);
-    this.benchCard = card.material;
+    this.benchPanels = new LitParts();
+    this.benchPanels.panel('sign', this.panels.sign('OVERCLOCK BENCH', css(color)), 2 * w - 0.06, 0.36, point(0.244, 2.31, 0), turn);
+    this.benchPanels.panel('card', this.panels.card(['UPGRADES THE', 'WEAPON IN HAND'], `FROM ${BENCH.price}`, css(color), ICONS.bench), 0.86, 0.252, point(0.054, 1.84, 0.58), turn);
+    group.add(this.benchPanels.build('station-bench-panels', this.panels.texture));
 
     // Rings round the coil that light as it works.
     for (const u of [1.06, 1.22, 1.38]) {
@@ -559,20 +595,23 @@ export class StationSet {
     shoulder.rotation.y = turn;
     this.benchArm = new THREE.Group();
     const steel = new THREE.MeshStandardMaterial({ color: 0x2a2e33, metalness: 0.9, roughness: 0.45 });
-    const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 0.36, 8), steel);
-    upper.rotation.x = Math.PI / 2;
-    upper.position.set(0, 0, 0.18);
-    const elbow = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), steel);
-    elbow.position.set(0, 0, 0.36);
-    const fore = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.022, 0.3, 8), steel);
-    fore.position.set(0, -0.15, 0.36);
+    // (Its two links and the joint between them are one shape: they move together.)
+    const links = new THREE.Mesh(
+      mergeGeometries([
+        new THREE.CylinderGeometry(0.022, 0.026, 0.36, 8).rotateX(Math.PI / 2).translate(0, 0, 0.18),
+        new THREE.SphereGeometry(0.04, 10, 8).translate(0, 0, 0.36),
+        new THREE.CylinderGeometry(0.016, 0.022, 0.3, 8).translate(0, -0.15, 0.36),
+        new THREE.SphereGeometry(0.05, 10, 8),
+      ])!,
+      steel,
+    );
+    links.castShadow = true;
     this.benchTip = new THREE.MeshBasicMaterial({ color: 0x050607, toneMapped: false, fog: false });
     const tip = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.08, 10), this.benchTip);
     tip.rotation.x = Math.PI;
     tip.position.set(0, -0.33, 0.36);
-    for (const mesh of [upper, elbow, fore]) mesh.castShadow = true;
-    this.benchArm.add(upper, elbow, fore, tip);
-    shoulder.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), steel), this.benchArm);
+    this.benchArm.add(links, tip);
+    shoulder.add(this.benchArm);
     group.add(shoulder);
     this.benchAt.set(...point(0.4, 1.06, 0.3));
 
@@ -622,20 +661,20 @@ export class StationSet {
     for (const [id, parts] of this.boosts) {
       const color = new THREE.Color(STATION_COLOR[id]);
       const owned = this.owned[id];
-      parts.sign.color.setScalar(this.power ? 2.3 : 0.16);
-      parts.card.color.setScalar(this.power ? (owned ? 0.7 : 1.6) : 0.12);
-      for (const strip of parts.strips) strip.color.copy(color).multiplyScalar(this.power ? (owned ? 0.5 : 2.6) : 0.02);
+      parts.panels.set('sign', this.power ? 2.3 : 0.16);
+      parts.panels.set('card', this.power ? (owned ? 0.7 : 1.6) : 0.12);
+      parts.lamps.set('strips', color, this.power ? (owned ? 0.5 : 2.6) : 0.02);
       // Its lamp: red with the power out, its own colour when it has something to sell, white once it has sold it.
-      if (!this.power) parts.status.color.setRGB(1.6, 0.1, 0.05);
-      else if (owned) parts.status.color.setRGB(1.6, 1.7, 1.6);
-      else parts.status.color.copy(color).multiplyScalar(2.4);
+      if (!this.power) parts.lamps.set('status', STATUS_DEAD);
+      else if (owned) parts.lamps.set('status', STATUS_SOLD);
+      else parts.lamps.set('status', color, 2.4);
       parts.canister.visible = !owned;
       (parts.canister.material as THREE.MeshBasicMaterial).color.copy(color).multiplyScalar(this.power ? 2.6 : 0.12);
       parts.light.intensity = owned ? 7 : 15;
     }
-    if (this.benchSign) {
-      this.benchSign.color.setScalar(this.power ? 2.3 : 0.16);
-      this.benchCard.color.setScalar(this.power ? 1.6 : 0.12);
+    if (this.benchPanels) {
+      this.benchPanels.set('sign', this.power ? 2.3 : 0.16);
+      this.benchPanels.set('card', this.power ? 1.6 : 0.12);
     }
   }
 

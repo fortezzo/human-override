@@ -8,6 +8,10 @@
 // The shotgun's is a different shape: a short ragged burst round a hot
 // core. At the size a shotgun's flash has to be, the long thin spikes of
 // the star read as a cartoon "bang".
+//
+// And the Turncoat's is not a flash at all. It fires no powder: what shows
+// at its muzzle is the discharge that sends the beam, a ring with a few
+// forked arcs off it, and a thin lance of light down the line of the shot.
 
 import * as THREE from 'three';
 import { FX } from '../../config';
@@ -95,6 +99,91 @@ function burstTexture(): THREE.Texture {
   return texture;
 }
 
+/** A discharge seen from behind the gun: a hard ring round a small core, and forked arcs thrown off it. */
+function arcTexture(): THREE.Texture {
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const g = canvas.getContext('2d')!;
+  const c = size / 2;
+  g.translate(c, c);
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  // A soft halo, kept faint: the light of it, not a ball.
+  const halo = g.createRadialGradient(0, 0, 0, 0, 0, c * 0.7);
+  halo.addColorStop(0, 'rgba(255,255,255,0.5)');
+  halo.addColorStop(0.5, 'rgba(255,255,255,0.12)');
+  halo.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = halo;
+  g.fillRect(-c, -c, size, size);
+  // Arcs: each a jagged line from the ring outward, forking once.
+  const bolt = (angle: number, reach: number, seed: number): void => {
+    let x = Math.cos(angle) * c * 0.3;
+    let y = Math.sin(angle) * c * 0.3;
+    g.beginPath();
+    g.moveTo(x, y);
+    const steps = 5;
+    for (let i = 1; i <= steps; i++) {
+      const along = 0.3 + ((reach - 0.3) * i) / steps;
+      const wander = Math.sin(seed * 12.9898 + i * 78.233) * 0.34 * (i < steps ? 1 : 0.4);
+      x = Math.cos(angle + wander * 0.5) * c * along;
+      y = Math.sin(angle + wander * 0.5) * c * along;
+      g.lineTo(x, y);
+    }
+    g.stroke();
+  };
+  [0.4, 1.7, 2.9, 4.1, 5.3].forEach((angle, i) => {
+    g.strokeStyle = 'rgba(255,255,255,0.95)';
+    g.lineWidth = 3.4;
+    bolt(angle, 0.92 - (i % 2) * 0.2, i + 1);
+    g.strokeStyle = 'rgba(255,255,255,0.7)';
+    g.lineWidth = 1.8;
+    bolt(angle + 0.32, 0.62, i + 7);
+  });
+  // The ring itself, and the core inside it.
+  g.strokeStyle = 'rgba(255,255,255,1)';
+  g.lineWidth = 7;
+  g.beginPath();
+  g.arc(0, 0, c * 0.3, 0, Math.PI * 2);
+  g.stroke();
+  const core = g.createRadialGradient(0, 0, 0, 0, 0, c * 0.2);
+  core.addColorStop(0, 'rgba(255,255,255,1)');
+  core.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = core;
+  g.fillRect(-c, -c, size, size);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+/** The start of a beam seen from the side: a thin lance of light, pointing along +X of the image. */
+function lanceTexture(): THREE.Texture {
+  const width = 256;
+  const height = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const g = canvas.getContext('2d')!;
+  const mid = height / 2;
+  const along = g.createLinearGradient(0, 0, width, 0);
+  along.addColorStop(0, 'rgba(255,255,255,1)');
+  along.addColorStop(0.5, 'rgba(255,255,255,0.7)');
+  along.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = along;
+  g.beginPath();
+  g.moveTo(0, mid - 9);
+  g.lineTo(60, mid - 5);
+  g.lineTo(250, mid - 1);
+  g.lineTo(250, mid + 1);
+  g.lineTo(60, mid + 5);
+  g.lineTo(0, mid + 9);
+  g.closePath();
+  g.fill();
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 /** A tongue of flame seen from the side, pointing along +X of the image. */
 function tongueTexture(): THREE.Texture {
   const width = 256;
@@ -135,7 +224,7 @@ export interface FlashLook {
   size: number;
   /** How long it stays after the frame it fires on, in seconds. */
   seconds: number;
-  shape: 'star' | 'burst';
+  shape: 'star' | 'burst' | 'arc';
   /** Its colour, if not a gunshot's (linear red, green and blue; above 1 glows). */
   tint?: [number, number, number];
 }
@@ -173,11 +262,11 @@ export class MuzzleFlash {
       return material;
     };
 
-    this.star = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), make(look.shape === 'burst' ? burstTexture() : starTexture()));
+    this.star = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), make(look.shape === 'arc' ? arcTexture() : look.shape === 'burst' ? burstTexture() : starTexture()));
     // Two crossed cards along the barrel, each starting at the muzzle.
     const card = new THREE.PlaneGeometry(1, 0.5);
     card.translate(0.5, 0, 0);
-    const tongueMaterial = make(tongueTexture());
+    const tongueMaterial = make(look.shape === 'arc' ? lanceTexture() : tongueTexture());
     for (const roll of [0, Math.PI / 2]) {
       const tongue = new THREE.Mesh(card, tongueMaterial);
       // The image's +X runs down the barrel, which points along -Z.
@@ -195,8 +284,8 @@ export class MuzzleFlash {
     const size = rand(0.17, 0.25) * (1 - aim * 0.3) * calm * this.look.size;
     this.star.scale.setScalar(size);
     this.star.rotation.z = rand(0, Math.PI * 2);
-    // A burst throws its flame out sideways more than forward.
-    const forward = this.look.shape === 'burst' ? rand(0.8, 1.25) : rand(1.3, 2.1);
+    // A burst throws its flame out sideways more than forward; a discharge sends its lance a long way down the line of the shot.
+    const forward = this.look.shape === 'arc' ? rand(3.4, 4.6) : this.look.shape === 'burst' ? rand(0.8, 1.25) : rand(1.3, 2.1);
     this.tongues.scale.set(size * rand(0.8, 1.15), size * rand(0.8, 1.15), size * forward);
     this.tongues.rotation.z = rand(0, Math.PI);
     this.group.visible = true;

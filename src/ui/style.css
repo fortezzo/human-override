@@ -451,7 +451,11 @@ body {
   color: var(--ink-dim);
   background: rgba(8, 10, 12, 0.55);
   border: 1px solid var(--line);
-  white-space: nowrap;
+  /* (One line where there is room between the health bar and the ammunition count; two where there is not.) */
+  max-width: calc(100vw - 660px);
+  min-width: 420px;
+  text-align: center;
+  line-height: 1.7;
   transition: opacity 1.2s ease;
 }
 .hud-hint b {
@@ -465,6 +469,207 @@ body {
 }
 .hud-hint.faded {
   opacity: 0;
+}
+
+/* The fail-safe's moment: a pulse line across the view, flat and red when
+   the player goes down, beating and violet when it brings them back. */
+.hud-failsafe {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 31%;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  --fs: var(--red);
+}
+.hud-failsafe.show {
+  opacity: 1;
+  transition: opacity 0.08s ease;
+}
+.hud-failsafe.up {
+  --fs: #c77dff;
+}
+.fs-pulse {
+  display: block;
+  width: 100%;
+  height: 90px;
+  overflow: visible;
+}
+.fs-pulse path {
+  fill: none;
+  stroke: var(--fs);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 6px var(--fs));
+  transform-origin: 50% 50%;
+  transform-box: fill-box;
+}
+.hud-failsafe.down .fs-pulse path {
+  animation: fs-flat 0.75s ease-out forwards;
+}
+.hud-failsafe.up .fs-pulse path {
+  animation: fs-beat 0.9s ease-out forwards;
+}
+@keyframes fs-flat {
+  0% {
+    transform: scaleY(1.25);
+  }
+  30% {
+    transform: scaleY(0.55);
+  }
+  100% {
+    transform: scaleY(0.02);
+  }
+}
+@keyframes fs-beat {
+  0% {
+    transform: scaleY(0.02);
+  }
+  18% {
+    transform: scaleY(1.9);
+  }
+  45% {
+    transform: scaleY(0.8);
+  }
+  70% {
+    transform: scaleY(1.25);
+  }
+  100% {
+    transform: scaleY(1);
+  }
+}
+.fs-title {
+  margin-top: 4px;
+  font-size: 92px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2em;
+  /* (Letter-spacing leaves a gap after the last letter: pull the word back to the middle.) */
+  text-indent: 0.2em;
+  color: var(--fs);
+  text-shadow:
+    0 0 26px color-mix(in srgb, var(--fs) 70%, transparent),
+    0 2px 0 rgba(0, 0, 0, 0.6);
+}
+.hud-failsafe.up .fs-title {
+  font-size: 76px;
+  /* (Pale, with the violet as its glow: violet letters on the violet flash could not be read.) */
+  color: #f7eeff;
+  text-shadow:
+    0 0 6px #c77dff,
+    0 0 30px #c77dff,
+    0 2px 0 rgba(0, 0, 0, 0.6);
+  animation: fs-punch 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+}
+@keyframes fs-punch {
+  0% {
+    transform: scale(1.6);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+.fs-sub {
+  margin-top: 10px;
+  font-family: var(--mono);
+  font-size: 19px;
+  letter-spacing: 0.42em;
+  text-indent: 0.42em;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.8);
+}
+.hud-failsafe.down .fs-sub {
+  animation: fs-blink 0.42s steps(2, start) infinite;
+}
+@keyframes fs-blink {
+  to {
+    visibility: hidden;
+  }
+}
+@media (max-height: 760px) {
+  .fs-title {
+    font-size: 68px;
+  }
+  .hud-failsafe.up .fs-title {
+    font-size: 56px;
+  }
+}
+
+/* The first-minute hints: one at a time, large enough to read at a glance in a fight. */
+.hud-coach {
+  position: absolute;
+  left: 50%;
+  bottom: 27%;
+  transform: translate(-50%, 10px);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 20px 10px 14px;
+  white-space: nowrap;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--amber);
+  opacity: 0;
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease,
+    border-color 0.2s ease;
+}
+.hud-coach.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.hud-coach-keys {
+  display: flex;
+  gap: 5px;
+}
+.hud-coach kbd {
+  min-width: 34px;
+  padding: 4px 10px;
+  font-size: 17px;
+  text-align: center;
+  color: #0b0d0f;
+  background: var(--amber);
+  border: 0;
+  transition: background 0.2s ease;
+}
+.hud-coach kbd.mark {
+  color: var(--teal);
+  background: none;
+  font-size: 22px;
+  padding: 0 4px;
+  min-width: 0;
+  text-shadow: 0 0 10px rgba(79, 230, 255, 0.7);
+}
+.hud-coach-text {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  transition: color 0.2s ease;
+}
+.hud-coach-tick {
+  width: 0;
+  overflow: hidden;
+  font-size: 22px;
+  font-weight: 700;
+  color: #7dffb0;
+  transition: width 0.2s ease;
+}
+/* Done: it turns green and is ticked, for the moment before it goes. */
+.hud-coach.done {
+  border-left-color: #7dffb0;
+}
+.hud-coach.done kbd:not(.mark) {
+  background: #7dffb0;
+}
+.hud-coach.done .hud-coach-text {
+  color: #7dffb0;
+}
+.hud-coach.done .hud-coach-tick {
+  width: 22px;
 }
 
 .hud-toast {
@@ -673,6 +878,31 @@ kbd {
 .title-links .button {
   padding: 9px 16px;
   font-size: 14px;
+}
+/* The five lines at the top of How to Play, for someone who reads nothing else. */
+.howto-quick {
+  margin-bottom: 20px;
+  padding: 14px 18px 12px;
+  background: rgba(255, 179, 71, 0.06);
+  border: 1px solid rgba(255, 179, 71, 0.28);
+  border-left: 3px solid var(--amber);
+}
+.howto-quick ol {
+  margin: 4px 0 0;
+  padding-left: 24px;
+}
+.howto-quick li {
+  margin-bottom: 4px;
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--ink);
+}
+.howto-quick li b {
+  color: var(--amber);
+  letter-spacing: 0.04em;
+}
+.howto-mark {
+  color: var(--teal);
 }
 /* How to play: short sections in two columns, read top to bottom. */
 .howto .panel.wide {

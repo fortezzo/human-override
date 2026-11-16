@@ -15,8 +15,8 @@ import { PROXY } from '../entities/robot/designs/proxy';
 import { Argus } from './Argus';
 import { Mission } from './Mission';
 import { Sight } from './Sight';
-import { AudioEngine } from '../audio/AudioEngine';
-import { BOOSTS, GOVERNOR, GRENADE, LOOK, LOOKDEV, PICKUPS, QUALITY, QUALITY_ORDER, ROBOT, ROUNDS, SCRAP, SHUTTERS, SPECIALS, SWARM, TURNCOAT, type QualityLevel } from '../config';
+import { AudioEngine, type LoopHandle } from '../audio/AudioEngine';
+import { BOOSTS, GOVERNOR, GRENADE, LOOK, LOOKDEV, MUSIC, PICKUPS, QUALITY, QUALITY_ORDER, ROBOT, ROUNDS, SCRAP, SHUTTERS, SPECIALS, SWARM, TURNCOAT, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
 import { Input } from '../core/input';
 import { damp, rand } from '../core/math';
@@ -42,7 +42,8 @@ import { createWallet, earn, type Wallet } from '../sim/economy';
 import { blastShare, takeGrenade } from '../sim/grenades';
 import { isSwarmRound } from '../sim/horde';
 import { powerOn } from '../sim/mission';
-import { floodFrom } from '../sim/navGrid';
+import { musicLevel, type MusicLevel } from '../sim/music';
+import { cellAt, clearLine, floodFrom } from '../sim/navGrid';
 import { rollDrop, scrapMultiplier, type PickupId } from '../sim/pickups';
 import { lockdown, strikeShutter } from '../sim/shutters';
 import { ROOM, PLAYER_START } from '../world/lobby/plan';
@@ -140,6 +141,8 @@ export class Game {
   onPickup: (id: PickupId) => void = () => {};
   /** The fail-safe has just brought the player back. */
   onRevive: () => void = () => {};
+  /** The player has gone down with a fail-safe to bring them back: it fires in a moment. */
+  onDown: () => void = () => {};
 
   /** Debug only: overrides where the camera sits and looks. */
   debugCamera: { position: THREE.Vector3; yaw: number; pitch: number; fov?: number } | null = null;
@@ -179,7 +182,19 @@ export class Game {
   private fade = 1;
   private fadeTarget = 1;
   private bedsStarted = false;
+  /** The music bed, the level it was last sent to, and seconds until that is looked at again. */
+  private music: LoopHandle | null = null;
+  private musicLevel: MusicLevel = { gain: MUSIC.lull, tone: MUSIC.lullTone };
+  private musicIn = 0;
   private soundClock = { casing: 0, scrap: 0, voice: 4, servo: 2, step: 0, drone: 1 };
+  /**
+   * The fail-safe as it happens. `downFor` is the seconds since the blow
+   * that put the player down, counted in real time while the world runs
+   * slow (-1 when it is not happening); `surge` is how bright the flash
+   * of it firing still is.
+   */
+  private downFor = -1;
+  private surge = 0;
   /** The light of a blast: how bright it still is (1 at the moment it goes off), and where. */
   private blast = 0;
   private readonly blastAt = new THREE.Vector3();
@@ -708,6 +723,9 @@ export class Game {
     this.pickups.clear();
     this.grenades.clear();
     this.grenadeWait = 0;
+    this.downFor = -1;
+    this.surge = 0;
+    this.audio.muffle(0, 0.05);
     this.world.reset();
     this.director.reset();
     this.director.forceEntry = null;
@@ -800,7 +818,27 @@ export class Game {
     if (this.bedsStarted) return;
     this.bedsStarted = true;
     this.audio.loop('ambienceRoom', 1, 3);
-    this.audio.loop('musicBed', 1, 2.4);
+    this.music = this.audio.loop('musicBed', MUSIC.lull, 2.4);
+    this.music.setTone(MUSIC.lullTone, 0.01);
+  }
+
+  /** The music bed follows the fight: low between rounds, building as a round goes on (the rule is in sim/music.ts). */
+  private updateMusic(dt: number): void {
+    this.musicIn -= dt;
+    if (!this.music || this.musicIn > 0) return;
+    this.musicIn = 0.5;
+    const rounds = this.director.rounds;
+    const playing = this.state === 'playing';
+    const level = musicLevel(MUSIC, {
+      fighting: playing && (rounds.phase === 'active' || this.director.suspended),
+      progress: rounds.plan.count > 0 ? rounds.destroyed / rounds.plan.count : 0,
+      active: this.director.active,
+      climax: playing && (this.director.suspended || this.mission.boss !== null),
+    });
+    if (Math.abs(level.gain - this.musicLevel.gain) < 0.01 && Math.abs(level.tone - this.musicLevel.tone) < 0.01) return;
+    this.musicLevel = level;
+    this.music.setGain(level.gain, MUSIC.ease);
+    this.music.setTone(level.tone, MUSIC.ease);
   }
 
   start(): void {
@@ -831,10 +869,14 @@ export class Game {
   frame(dt: number, draw = true): void {
     if (dt > 0) this.fps += (1 / dt - this.fps) * 0.06;
     const simulate = this.state !== 'paused';
-    const step = simulate ? dt : 0;
+    // (With the player down and the fail-safe about to fire, everything runs slow.)
+    const step = simulate ? dt * (this.downFor >= 0 ? BOOSTS.failsafe.downPace : 1) : 0;
     this.time += step;
 
-    if (this.state === 'playing') this.updatePlay(step);
+    if (this.state === 'playing') {
+      this.updatePlay(step);
+      this.updateFailsafe(simulate ? dt : 0);
+    }
     else if (this.state === 'title') this.updateTitle();
     else if (this.state === 'over' || this.state === 'saved') this.view.root.visible = false;
 
@@ -877,10 +919,15 @@ export class Game {
     }
 
     this.audio.setListener(this.camera);
+    this.updateMusic(dt);
     this.fade = damp(this.fade, this.fadeTarget, 5, dt);
     developScreens(this.renderer.three);
     this.renderer.grade.fade = this.fade;
-    this.renderer.grade.damage = this.state === 'title' ? 0 : Math.min(1, this.player.hurt * 1.15);
+    this.renderer.grade.damage = this.state === 'title' ? 0 : Math.min(1, this.player.hurt * 1.15) * (1 - this.player.downPose);
+    this.renderer.grade.down = this.state === 'playing' || this.state === 'paused' ? this.player.downPose : 0;
+    // (After the flash, its colour stays round the edge of the view for as long as nothing can hurt the player, fading as that runs out.)
+    const cover = this.state === 'playing' ? 0.26 * Math.min(1, this.player.grace / BOOSTS.failsafe.grace) : 0;
+    this.renderer.grade.surge = Math.max(cover, settings.value.reducedMotion ? this.surge * 0.35 : this.surge);
     if (draw) this.renderer.render(dt, this.time);
     // Drawing is also what works out where every bone of every robot is,
     // which hit tests depend on; without it, do that part by hand.
@@ -896,19 +943,21 @@ export class Game {
     const def = weapons.def;
     player.aimFov = def.aimFov;
     player.aimTime = def.aimTime;
-    const wantAim = input.isDown('aim') && !weapons.busy;
+    // (Down, waiting for the fail-safe: nothing the player presses does anything, and the weapon has dropped out of sight.)
+    const down = this.downFor >= 0;
+    const wantAim = !down && input.isDown('aim') && !weapons.busy;
     this.obstacles.length = 0;
     for (const robot of this.robots) if (robot.alive && robot.grounded) this.obstacles.push(robot.position);
     player.update(dt, this.world.colliders, wantAim, look, this.obstacles);
     this.camera.updateMatrixWorld(true);
     if (!this.debugCamera && this.world.track(player.position.x, player.position.z)) this.areaChanged();
 
-    weapons.update(dt, player);
+    if (!down) weapons.update(dt, player);
     this.argus.update(dt);
-    this.view.root.visible = !this.hideWeapon;
+    this.view.root.visible = !this.hideWeapon && !(down && this.downFor > 0.18);
     this.view.update(dt, player, look, { reload: weapons.reload, swap: weapons.swap, strike: weapons.strike });
 
-    this.interactions.update(input.wasPressed('interact'));
+    this.interactions.update(!down && input.wasPressed('interact'));
     this.director.update(dt);
     this.mission.update(dt);
     this.economy.update(dt);
@@ -1013,10 +1062,44 @@ export class Game {
     this.player.addShake(Math.max(0, 0.45 - gate.centre.distanceTo(this.player.position) * 0.03));
   }
 
-  /** The fail-safe: the blow that would have put the player down does not. */
+  /**
+   * Down, with a fail-safe to bring them back. For a moment that is all
+   * that happens: the view falls and drains of colour, the world slows, and
+   * nothing the player presses does anything. (It used to fire in the same
+   * instant as the blow, and all there was to see of it was a flash: in
+   * the middle of a fight nobody could tell that they had just been saved,
+   * or by what.)
+   */
+  private goDown(): void {
+    this.downFor = 0;
+    this.player.frozen = true;
+    this.player.velocity.set(0, this.player.velocity.y, 0);
+    this.audio.thump(1.7);
+    this.audio.muffle(1, 0.12);
+    this.onDown();
+  }
+
+  /** The moment of the fail-safe, counted in real time: down for a beat, and then it fires. */
+  private updateFailsafe(dt: number): void {
+    const { player } = this;
+    if (this.downFor >= 0) {
+      this.downFor += dt;
+      if (this.downFor >= BOOSTS.failsafe.down) this.failsafe();
+    }
+    // The view goes down in a third of a second and comes back up faster.
+    player.downPose = this.downFor >= 0 ? Math.min(1, player.downPose + dt / 0.32) : Math.max(0, player.downPose - dt / 0.2);
+    this.surge = damp(this.surge, 0, 3.4, dt);
+  }
+
+  /** The fail-safe fires: the blow that put the player down has not finished them. */
   private failsafe(): void {
     const { player, audio } = this;
     const rule = BOOSTS.failsafe;
+    this.downFor = -1;
+    this.surge = 1;
+    player.frozen = false;
+    audio.muffle(0, 0.35);
+    this.weapons.raise();
     player.revive(rule.health, rule.grace);
     for (const robot of this.robots) {
       if (Math.hypot(robot.position.x - player.position.x, robot.position.z - player.position.z) < rule.shove) robot.shove();
@@ -1234,8 +1317,12 @@ export class Game {
 
   /** The nearest robot of ARGUS's for a turned one to go after, within reach of its search. */
   private foeFor(robot: Robot): Robot | null {
+    const nav = this.world.nav;
+    const here = cellAt(nav, robot.position.x, robot.position.z);
     let best: Robot | null = null;
     let nearest = TURNCOAT.seek;
+    let reachable: Robot | null = null;
+    let nearestReachable = TURNCOAT.seek;
     for (const other of this.robots) {
       if (other === robot || !other.alive || other.turned > 0 || !other.grounded) continue;
       const distance = Math.hypot(other.position.x - robot.position.x, other.position.z - robot.position.z);
@@ -1243,8 +1330,16 @@ export class Game {
         nearest = distance;
         best = other;
       }
+      // (It walks straight at whatever it picks, so one it can walk straight at is worth more than a nearer one behind a rack.)
+      if (distance < nearestReachable && here >= 0) {
+        const there = cellAt(nav, other.position.x, other.position.z);
+        if (there >= 0 && clearLine(nav, here, there)) {
+          nearestReachable = distance;
+          reachable = other;
+        }
+      }
     }
-    return best;
+    return reachable ?? best;
   }
 
   /** A turned robot's blow lands on one of ARGUS's: the damage is the player's doing. */
@@ -1327,7 +1422,7 @@ export class Game {
     this.onPlayerHurt(Math.atan2(dx, -dz) + player.yaw);
     if (player.alive) return;
     // Down: unless they are carrying the fail-safe, which is used up bringing them back.
-    if (this.economy.spendFailsafe()) this.failsafe();
+    if (this.economy.spendFailsafe()) this.goDown();
     else this.endRun();
   }
 

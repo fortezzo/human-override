@@ -25,6 +25,9 @@ uniform float uDamage;
 uniform float uFade;
 uniform float uShadowLift;
 uniform float uBrightness;
+uniform float uDown;
+uniform float uSurge;
+uniform vec3 uSurgeTint;
 
 // ACES filmic tone curve (fit by Stephen Hill).
 const mat3 ACES_IN = mat3(
@@ -92,6 +95,15 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float hurt = uDamage * smoothstep(0.18, 0.75, edge);
   color = mix(color, vec3(0.55, 0.02, 0.0) + color * 0.35, clamp(hurt, 0.0, 0.85));
 
+  // Down: the colour drains out of the picture and the dark closes in
+  // from its edges, until all that is left is a dim patch in the middle.
+  float grey = dot(color, vec3(0.2126, 0.7152, 0.0722));
+  color = mix(color, vec3(grey) * vec3(1.0, 0.84, 0.82), uDown * 0.9);
+  color *= 1.0 - uDown * (0.28 + 0.7 * smoothstep(0.06, 0.6, edge));
+  // The fail-safe firing: its own colour flooding in from the edges, and
+  // the whole picture lifted for a moment.
+  color += uSurgeTint * uSurge * (0.1 + 0.72 * smoothstep(0.16, 0.8, edge));
+
   // The player's brightness setting: a gamma curve, so it opens up the
   // dark end without washing out the lights.
   color = pow(clamp(color, 0.0, 1.0), vec3(1.0 / uBrightness));
@@ -122,6 +134,9 @@ export class GradeEffect extends Effect {
         ['uFade', new Uniform(1)],
         ['uShadowLift', new Uniform(LOOKDEV.shadowLift)],
         ['uBrightness', new Uniform(1)],
+        ['uDown', new Uniform(0)],
+        ['uSurge', new Uniform(0)],
+        ['uSurgeTint', new Uniform(new Vector3(0.78, 0.49, 1))],
       ]),
     });
   }
@@ -146,6 +161,16 @@ export class GradeEffect extends Effect {
   /** 1 = normal, 0 = faded to black. */
   set fade(value: number) {
     this.set('uFade', value);
+  }
+
+  /** 0 = on their feet, 1 = down: the picture drained and closed in. */
+  set down(value: number) {
+    this.set('uDown', Math.min(1, Math.max(0, value)));
+  }
+
+  /** The fail-safe's flash, 1 at the moment it fires. */
+  set surge(value: number) {
+    this.set('uSurge', Math.min(1, Math.max(0, value)));
   }
 
   set exposure(value: number) {

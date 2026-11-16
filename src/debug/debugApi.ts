@@ -12,6 +12,7 @@ import { boostPrice, type BoostId } from '../sim/boosts';
 import { takeOffer } from '../sim/loadout';
 import type { PickupId } from '../sim/pickups';
 import type { Action } from '../core/input';
+import { settings } from '../core/settings';
 import { setEdgeLight } from '../entities/robot/robotMaterial';
 import type { ArgusReport } from '../game/Argus';
 import type { Game } from '../game/Game';
@@ -113,8 +114,8 @@ export interface DebugApi {
   view(x: number, y: number, z: number, yawDeg: number, pitchDeg: number, fov?: number): void;
   /** Hand the camera back to the player. */
   releaseView(): void;
-  /** Put the player somewhere, facing a direction (degrees). */
-  place(x: number, z: number, yawDeg: number, pitchDeg?: number): void;
+  /** Put the player somewhere, facing a direction (degrees); `height` is where their feet are (the floor, unless they are to stand on something). */
+  place(x: number, z: number, yawDeg: number, pitchDeg?: number, height?: number): void;
   /** Turn the player to look at the nearest robot's head or chest. Returns false if there is none. */
   aimAtRobot(part: 'head' | 'chest'): boolean;
   /** Hold or release a control, as if a key or button were pressed. */
@@ -192,10 +193,10 @@ export interface DebugApi {
    * The same thing found by standing everywhere: every place the player
    * can come to stand by the game's rules of movement (sampled every 20 cm
    * across the whole map, on the floor and on top of whatever can be stood
-   * on) from which no robot could strike them. `climb` is how far above
-   * their footing the player can get onto something: one step, in the
-   * game; give the height of a jump to see what jumping onto things would
-   * bring back. Returns how many places were stood on, and the patches out
+   * on) from which no robot could strike them. `climb` is the height of the
+   * tallest thing the player can get on top of: PLAYER.climb, in the game;
+   * give a greater height to see what being able to climb higher would let
+   * them reach. Returns how many places were stood on, and the patches out
    * of reach (there should be none); and the most awkward places that are
    * still in reach, each with somewhere about five metres' walk away for a
    * robot to set out from, so that a check can watch one arrive and strike.
@@ -337,12 +338,14 @@ export interface DebugApi {
     turned: number;
     revives: number;
     /** The config's numbers for all of it. */
-    rules: { bench: typeof BENCH; boosts: typeof BOOSTS; shutters: typeof SHUTTERS; crate: typeof CRATE; pickups: typeof PICKUPS; grenade: typeof GRENADE; swarm: typeof SWARM; turncoat: typeof TURNCOAT; scrap: typeof SCRAP };
+    rules: { climb: number; bench: typeof BENCH; boosts: typeof BOOSTS; shutters: typeof SHUTTERS; crate: typeof CRATE; pickups: typeof PICKUPS; grenade: typeof GRENADE; swarm: typeof SWARM; turncoat: typeof TURNCOAT; scrap: typeof SCRAP };
   };
   /** Leave a timed pickup on the floor. */
   dropPickup(id: PickupId, x: number, z: number): void;
   /** Whether destroyed robots leave pickups by chance (they do, unless this is told otherwise); false also clears any lying about. */
   randomDrops(on: boolean): void;
+  /** The first-minute hints: off, or on and starting again from the first of them (as the setting does). */
+  hints(on: boolean): void;
   /** Force a shutter up or run it down, at once and for nothing (every one of them if no id is given). */
   setShutter(shut: boolean, id?: string): void;
   /** The crate's next rolls use these numbers for dice, in order; after them, real ones again. */
@@ -472,8 +475,8 @@ export function installDebugApi(game: Game): DebugTools {
     releaseView() {
       game.debugCamera = null;
     },
-    place(x, z, yawDeg, pitchDeg = 0) {
-      game.player.position.set(x, 0, z);
+    place(x, z, yawDeg, pitchDeg = 0, height = 0) {
+      game.player.position.set(x, height, z);
       game.player.velocity.set(0, 0, 0);
       game.player.yaw = THREE.MathUtils.degToRad(yawDeg);
       game.player.pitch = THREE.MathUtils.degToRad(pitchDeg);
@@ -825,7 +828,7 @@ export function installDebugApi(game: Game): DebugTools {
       );
       return groupSafeSpots(spots, cell);
     },
-    outOfReach(climb = PLAYER.stepHeight) {
+    outOfReach(climb = PLAYER.climb) {
       // (A sample every 10 cm, for a body 5 cm slimmer than the player's:
       // someone sliding along two obstacles gets through a gap that leaves
       // them two centimetres to spare, and a coarser grid of full-width
@@ -959,7 +962,7 @@ export function installDebugApi(game: Game): DebugTools {
         swarm: game.director.swarm,
         turned: game.robots.filter((robot) => robot.alive && robot.turned > 0).length,
         revives: game.stats.revives,
-        rules: { bench: BENCH, boosts: BOOSTS, shutters: SHUTTERS, crate: CRATE, pickups: PICKUPS, grenade: GRENADE, swarm: SWARM, turncoat: TURNCOAT, scrap: SCRAP },
+        rules: { climb: PLAYER.climb, bench: BENCH, boosts: BOOSTS, shutters: SHUTTERS, crate: CRATE, pickups: PICKUPS, grenade: GRENADE, swarm: SWARM, turncoat: TURNCOAT, scrap: SCRAP },
       };
     },
     dropPickup(id, x, z) {
@@ -968,6 +971,9 @@ export function installDebugApi(game: Game): DebugTools {
     randomDrops(on) {
       game.randomDrops = on;
       if (!on) game.pickups.clear();
+    },
+    hints(on) {
+      settings.set(on ? { hints: true, learned: [] } : { hints: false });
     },
     setShutter(shut, id) {
       for (const gate of game.world.shutters.gates) {

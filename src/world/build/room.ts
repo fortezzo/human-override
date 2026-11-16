@@ -36,6 +36,13 @@ export interface AreaBuild {
   argus?: { awake: number };
 }
 
+/**
+ * Something else to be built into a room with the room's own builder, so
+ * that it is merged into the room's few large shapes instead of adding
+ * shapes of its own to draw (the stations: see world/Stations.ts).
+ */
+export type Fixtures = (b: LevelBuilder) => void;
+
 export interface Opening {
   from: number;
   to: number;
@@ -279,6 +286,21 @@ export function weaponRack(b: LevelBuilder, atlas: SignAtlas, assets: Assets, pl
   lamp.position.set(...point(0.07, 0.6, 0));
   b.addObject(lamp);
   lights.push({ name: `rack-${plan.area}-${plan.weapon}`, area: plan.area, kind: 'point', color: 0xffa53a, intensity: 5, position: point(0.42, 0.3, 0), distance: 4 });
+}
+
+/**
+ * Two steel drums, one standing on the other: taller than anyone can jump,
+ * which is the point. Low things can be jumped onto, so the back of a heap
+ * of them in a corner would be somewhere a robot's arm does not reach. The
+ * drums at the back of each such heap are stacked like this, and the ones
+ * in front, which can be climbed, are all within a robot's reach of the
+ * open floor.
+ */
+export function stackedDrums(b: LevelBuilder, x: number, z: number, turn = 0): void {
+  const height = 0.93;
+  b.prop('Barrel_01', { at: [x, 0, z], rotY: turn, collide: false });
+  b.prop('Barrel_01', { at: [x + 0.02, height, z - 0.015], rotY: turn + 2.2, collide: false });
+  b.blocker([x - 0.32, 0, z - 0.32], [x + 0.34, height * 2, z + 0.32]);
 }
 
 /** A round drum, tank or disc of any size, lying along the given axis. */

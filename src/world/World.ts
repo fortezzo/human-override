@@ -59,7 +59,17 @@ export class World {
   /** @param robots the robot types whose parts furnish the lab (left out, the lab's racks and jigs stand empty) */
   constructor(assets: Assets, materials: MaterialLibrary, robots?: RobotParts) {
     this.group.name = 'world';
-    for (const area of [buildLobby(assets, materials), buildHall(assets, materials), buildPower(assets, materials), buildCore(assets, materials), buildDock(assets, materials), buildLab(assets, materials, robots)]) {
+    // (The stations first: the part of each that never moves is built into the room it stands in.)
+    this.stations = new StationSet(assets, materials);
+    const fixtures = (id: AreaId) => this.stations.fixtures(id);
+    for (const area of [
+      buildLobby(assets, materials, fixtures('lobby')),
+      buildHall(assets, materials, fixtures('hall')),
+      buildPower(assets, materials, fixtures('power')),
+      buildCore(assets, materials, fixtures('core')),
+      buildDock(assets, materials, fixtures('dock')),
+      buildLab(assets, materials, robots, fixtures('lab')),
+    ]) {
       this.areas.set(area.id, area);
       this.group.add(area.group);
       this.fixed.push(...area.colliders);
@@ -71,11 +81,8 @@ export class World {
     for (const id of AREA_IDS) this.areas.get(id)!.group.add(this.mission.groups[id]);
     this.group.add(this.mission.loose);
     this.lights.push(...this.mission.lights);
-    this.stations = new StationSet(assets, materials);
     this.shutters = new ShutterSet(assets);
     for (const id of AREA_IDS) this.areas.get(id)!.group.add(this.stations.groups[id], this.shutters.groups[id]);
-    this.fixed.push(...this.stations.colliders);
-    this.solids.push(...this.stations.solids);
     this.lights.push(...this.stations.lights);
     for (const gate of this.shutters.gates) this.solids.push(...gate.solids);
     for (const plan of DOOR_PLANS) {

@@ -10,7 +10,7 @@ import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LedBank } from '../build/LedBank';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { column, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
+import { column, ibeam, vent, wall, weaponRack, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, WALL } from '../plan';
@@ -51,7 +51,7 @@ const ROWS: Array<[number, number, number, string]> = [
   [2.62, 20.7, 7, 'J'],
 ];
 
-export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild {
+export function buildHall(assets: Assets, materials: MaterialLibrary, stations?: Fixtures): AreaBuild {
   const b = new LevelBuilder(assets, materials);
   const atlas = new SignAtlas(2048, 2048);
   const leds = new LedBank();
@@ -199,7 +199,9 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   // ---- The uplink station, in the open corner by the core door
   const ux = 5.6;
   const uz = z1 - 0.55;
-  b.box('steelPlate', [ux - 1.5, 0, uz - 0.35], [ux + 1.5, 0.95, uz + 0.35]);
+  b.box('steelPlate', [ux - 1.5, 0, uz - 0.35], [ux + 1.5, 0.95, uz + 0.35], { collide: false });
+  // (Solid to the top of its screens: its desk is low enough to jump, and nobody should be standing in them.)
+  b.blocker([ux - 1.5, 0, uz - 0.35], [ux + 1.5, 2.3, uz + 0.35]);
   b.box('darkSteel', [ux - 1.56, 0.95, uz - 0.42], [ux + 1.56, 1.0, uz + 0.4], { collide: false });
   b.box('rackSteel', [ux - 1.3, 1.0, uz + 0.05], [ux + 1.3, 2.3, uz + 0.4], { collide: false });
   const feeds = ['eye', 'log', 'lockdown'] as const;
@@ -337,6 +339,7 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   const dockFixture = b.prop('industrial_wall_lamp', { at: dockLamp, rotY: HALF_PI, collide: false, cast: false, unique: true });
   lights.push({ name: 'dockLamp', area: 'hall', kind: 'point', color: RED, intensity: 6, position: [dockLamp[0] + 0.35, dockLamp[1], dockLamp[2]], distance: 6, flicker: 'beacon', glow: { materials: dockFixture, color: RED, intensity: 9 } });
 
+  stations?.(b);
   const built = b.build();
   return {
     id: 'hall',

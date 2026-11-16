@@ -117,7 +117,7 @@ function buildVestibule(b: LevelBuilder): void {
   b.prop('concrete_road_barrier', { at: [1.25, 0, -10.6], rotY: 1.15, kind: 'concrete' });
   b.prop('concrete_road_barrier', { at: [-3.4, 0, -15.2], rotY: 0.3, kind: 'concrete' });
   b.prop('concrete_road_barrier', { at: [1.5, 0, -17.3], rotY: -0.5, kind: 'concrete' });
-  b.prop('Barrel_01', { at: [-2.2, 0.29, -9.1], rot: [HALF_PI, 0.7, 0] });
+  b.prop('Barrel_01', { at: [-1.5, 0.29, -9.9], rot: [HALF_PI, 0.7, 0] });
 }
 
 /** West windows: steel frame, security bars and a roller shutter each. */

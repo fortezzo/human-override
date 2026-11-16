@@ -55,6 +55,7 @@
 import fs from 'node:fs';
 import sharp from 'sharp';
 import { gpuName, launch } from './lib/browser.mjs';
+import { HOP_SITES, hopTrial, jumpTrials } from './lib/jumping.mjs';
 import { serve } from './lib/static-server.mjs';
 
 if (!fs.existsSync('dist/index.html')) {
@@ -146,6 +147,8 @@ try {
   await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
   // (Destroyed robots sometimes leave a pickup, by chance. Every check here must come out the same each time, so that is off except where a check is about it.)
   await page.evaluate(() => window.__HO.randomDrops(false));
+  // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+  await page.evaluate(() => window.__HO.hints?.(false));
   const loadSeconds = (Date.now() - started) / 1000;
   console.log(`GPU: ${await gpuName(page)}`);
   check('loads from a sub-folder address', true, `${loadSeconds.toFixed(1)} s to title screen`);
@@ -481,21 +484,24 @@ try {
   // ------------------------------------------------------ the edge of the map
   // The player may step out into the yard the robots arrive across, but not
   // past the barriers around it.
-  const sprintFrom = (x, z, yaw, frames) =>
+  const sprintFrom = (x, z, yaw, frames, jumping = false) =>
     ev(
-      ([x, z, yaw, frames]) => {
+      ([x, z, yaw, frames, jumping]) => {
         const ho = window.__HO;
         ho.place(x, z, yaw);
         ho.press('forward', true);
         ho.press('sprint', true);
-        ho.step(1 / 60, frames);
+        for (let frame = 0; frame < frames; frame++) {
+          if (jumping && frame % 9 === 0) ho.tap('jump');
+          ho.step(1 / 60, 1);
+        }
         ho.press('forward', false);
         ho.press('sprint', false);
-        ho.step(1 / 60, 2);
+        ho.step(1 / 60, 40);
         const p = ho.game.player.position;
         return [p.x, p.z];
       },
-      [x, z, yaw, frames],
+      [x, z, yaw, frames, jumping],
     );
   // Walking and sprinting reach the speeds set for them (4.3 and 6.4 metres
   // a second). Sprinting once changed the view and nothing else.
@@ -663,9 +669,11 @@ try {
   const pushes = [];
   for (const [x, z, yaw] of [[4.5, -18.5, -90], [-4.5, -18.5, 90], [0, -18.5, 0], [5.2, -19, -45], [-5.2, -19, 45], [5.4, -13.2, -90], [-5.4, -13.2, 90], [5.3, -13.4, 180], [-5.3, -13.4, 180]]) {
     pushes.push(await sprintFrom(x, z, yaw, 240));
+    // (And jumping all the way: the barriers are low enough to get onto, and what is behind them is not.)
+    pushes.push(await sprintFrom(x, z, yaw, 240, true));
   }
   const farthest = pushes.reduce((worst, [x, z]) => Math.max(worst, Math.abs(x) - 6, -20 - z, z > -12.6 && Math.abs(x) > 2.7 ? 1 : -9), -9);
-  check('the barriers around the yard cannot be passed', farthest < 0, `sprinting at them from nine places, the closest the player came to the edge was ${(-farthest).toFixed(2)} m inside it`);
+  check('the barriers around the yard cannot be passed, at a sprint or by jumping', farthest < 0, `sprinting at them from nine places, and again jumping all the way, the closest the player came to the edge was ${(-farthest).toFixed(2)} m inside it`);
   await ev(() => window.__HO.place(0, 3, 0));
 
   // ------------------------------------------- changing quality in mid-game
@@ -2348,26 +2356,53 @@ try {
   });
   check("with the loading dock still shut, ARGUS's Proxy comes in through the front yard instead", fallback.entry === 'yard' && fallback.dockOpen === false, `came in at the ${fallback.entry}`);
 
-  // ---- Nowhere to hide. A real player found a corner behind some barrels
+  // ---- Nowhere to hide. A real player found a corner behind some drums
   // where nothing could hit them, and stood in it to finish the mission. The
   // floor-plan check further up never saw it, because it was not on the
-  // floor plan: a jump got them there. So this asks the same question by
-  // standing everywhere the game's rules of movement allow, on the floor and
-  // on top of whatever can be stood on; and then sends real robots.
+  // floor plan: a jump got them there. For a while the answer was that
+  // nothing could be jumped; now anything up to about waist height can be,
+  // and the answer is this check. It stands the player everywhere the rules
+  // of movement allow (the floor, the top of every low thing, the floor
+  // inside the fence round the lab's assembly cell) and measures how far a
+  // robot would be; and then it sends real robots.
   const hiding = await ev(() => {
     const ho = window.__HO;
-    return { now: ho.outOfReach(), jumping: ho.outOfReach(1.15) };
+    return { now: ho.outOfReach(), climbing: ho.outOfReach(2.2), climb: ho.economy().rules.climb };
   });
   check(
-    'standing everywhere the player can get to (a place every 10 cm, across the whole map), a robot can always get within striking distance',
-    hiding.now.patches.length === 0 && hiding.now.stoodOn > 120000,
-    hiding.now.patches.length ? hiding.now.patches.map((p) => `${p.squares} places around (${p.x.toFixed(1)}, ${p.z.toFixed(1)}), ${p.deepest.toFixed(2)} m out of reach`).join('; ') : `stood in ${hiding.now.stoodOn} places; none out of reach`,
+    'standing everywhere a jump can put the player (a place every 10 cm across the whole map, on the floor and on top of everything up to waist height), a robot can always get within striking distance',
+    hiding.now.patches.length === 0 && hiding.now.stoodOn > 140000,
+    hiding.now.patches.length ? hiding.now.patches.map((p) => `${p.squares} places around (${p.x.toFixed(1)}, ${p.z.toFixed(1)}), ${p.deepest.toFixed(2)} m out of reach`).join('; ') : `stood in ${hiding.now.stoodOn} places, on anything up to ${hiding.climb.toFixed(1)} m high; none out of reach`,
   );
-  const corner = hiding.jumping.patches.find((p) => Math.hypot(p.x + 8, p.z + 6.3) < 1.2);
+  // (A generator is two metres tall and nearly two across: the middle of its top is further from the floor than a robot reaches.)
+  const generatorTop = hiding.climbing.patches.find((p) => Math.hypot(p.x - 13.6, p.z - 0.4) < 1.6 || Math.hypot(p.x - 18.2, p.z - 0.4) < 1.6);
   check(
-    'and that check would have caught the corner behind the lobby barrels: told the player can still jump onto things, it finds it',
-    corner !== undefined && hiding.jumping.patches.length > hiding.now.patches.length,
-    corner ? `${hiding.jumping.patches.length} places out of reach with jumping allowed; the barrel corner at (${corner.x.toFixed(1)}, ${corner.z.toFixed(1)}) is ${corner.deepest.toFixed(2)} m from the nearest robot` : `found ${hiding.jumping.patches.map((p) => `(${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(' ')}`,
+    'and that check finds what it is looking for: told the player could climb onto anything up to 2.2 m, it reports the top of a generator in the power room as out of reach',
+    generatorTop !== undefined && hiding.climbing.stoodOn > hiding.now.stoodOn,
+    generatorTop ? `${hiding.climbing.patches.length} patches out of reach if the player could climb that high; one on a generator at (${generatorTop.x.toFixed(1)}, ${generatorTop.z.toFixed(1)}), ${generatorTop.deepest.toFixed(2)} m from the nearest robot` : `found ${hiding.climbing.patches.map((p) => `(${p.x.toFixed(1)}, ${p.z.toFixed(1)})`).join(' ')}`,
+  );
+
+  // ---- What a jump gets the player over, tried in the game itself.
+  const jumps = await ev(jumpTrials);
+  const vaulted = jumps.barrier.filter((t) => t.z < -4.2 && t.y < 0.05).length;
+  check(
+    'a jump takes the player over a concrete barrier and down on the far side: from a standstill pressed against it, and from every run-up, walking or sprinting. Without the jump it stops them',
+    vaulted === jumps.barrier.length && jumps.barrier.length === 11 && jumps.noJump.z > -2.9,
+    `${vaulted} of ${jumps.barrier.length} jumps ended on the far side; walking at it without jumping stopped at z ${jumps.noJump.z.toFixed(2)}`,
+  );
+  const mounted = jumps.drum.filter((t) => t.y > 0.8 && t.y < 0.95).length;
+  check('a jump at a drum against a wall puts the player on top of it', mounted === jumps.drum.length && jumps.drum.length === 3, `${mounted} of ${jumps.drum.length} ended standing ${jumps.drum[0].y.toFixed(2)} m up`);
+  const hoppedIn = jumps.fenceIn.filter((t) => t.z > 19.6 && t.y < 0.05).length;
+  check(
+    "a jump takes the player over the fence round the lab's assembly cell, in and out again",
+    hoppedIn === jumps.fenceIn.length && jumps.fenceIn.length === 9 && jumps.fenceOut.z < 18.7,
+    `${hoppedIn} of ${jumps.fenceIn.length} jumps ended inside the fence; from inside, a jump ended outside at z ${jumps.fenceOut.z.toFixed(1)}`,
+  );
+  const climbed = Object.entries(jumps.tall).filter(([, stood]) => stood > 0.99);
+  check(
+    'nothing taller than waist height can be got onto: not a server rack, a container, the truck, a wall cabinet, the uplink console, the Overclock Bench or the stacked drums; nor the cart from the top of the crates beside it. In all of those jumps the player never stood higher than a metre',
+    climbed.length === 0 && Object.keys(jumps.tall).length === 8 && jumps.fromCrate.startedAt > 0.9 && jumps.fromCrate.high <= jumps.climb + 0.001 && jumps.highest <= jumps.climb + 0.001,
+    climbed.length ? `stood on ${climbed.map(([name, stood]) => `${name} (${stood.toFixed(2)} m)`).join(', ')}` : `four tries at each of ${Object.keys(jumps.tall).length} tall things; the highest the player stood anywhere was ${jumps.highest.toFixed(2)} m`,
   );
   const mounts = await ev(() => {
     const ho = window.__HO;
@@ -2377,12 +2412,12 @@ try {
     ho.holdRounds(true);
     ho.clearRobots();
     ho.god(true);
-    const target = [-7.9, -6.4];
+    const target = [-8.3, -6.3];
     const out = { runs: 0, jumped: 0, stoodHigh: 0, worstGap: 0 };
     // Run at the corner from five sides, jumping all the way, at two tempos.
     for (let k = 0; k < 5; k++) {
       const angle = ((-10 + k * 28) * Math.PI) / 180;
-      const from = [target[0] + Math.cos(angle) * 3.2, target[1] + Math.sin(angle) * 3.2];
+      const from = [target[0] + Math.cos(angle) * 3.6, target[1] + Math.sin(angle) * 3.6];
       for (const every of [18, 31]) {
         ho.place(from[0], from[1], (Math.atan2(-(target[0] - from[0]), -(target[1] - from[1])) * 180) / Math.PI, 0);
         ho.step(1 / 60, 3);
@@ -2407,9 +2442,9 @@ try {
     return out;
   });
   check(
-    'running and jumping at the barrels in the lobby corner from every side never puts the player on top of them, or behind them',
-    mounts.runs === 10 && mounts.jumped > 0.6 && mounts.stoodHigh < 0.33 && mounts.worstGap < 1.3,
-    `${mounts.runs} runs: the jumps reached ${mounts.jumped.toFixed(2)} m, the player never stood higher than ${mounts.stoodHigh.toFixed(2)} m, and was never more than ${mounts.worstGap.toFixed(2)} m from where a robot can stand (a robot strikes from 1.45)`,
+    'running and jumping at the drums in the lobby corner from every side (the corner a player once hid in) gets the player onto the front ones and no further: never onto the stacked pair behind, and never out of a robot’s reach',
+    mounts.runs === 10 && mounts.stoodHigh > 0.6 && mounts.stoodHigh < 1.0 && mounts.worstGap < 1.35,
+    `${mounts.runs} runs: the player stood as high as ${mounts.stoodHigh.toFixed(2)} m, and was never more than ${mounts.worstGap.toFixed(2)} m from where a robot can stand (a robot strikes from 1.45)`,
   );
   const blows = await ev(() => {
     const ho = window.__HO;
@@ -2417,33 +2452,79 @@ try {
     for (const door of game.world.doors) ho.openDoor(door.plan.id);
     ho.step(1 / 60, 90);
     const out = [];
-    for (const spot of ho.outOfReach().hardest) {
+    const strike = (spot, from, traits = {}) => {
       ho.clearRobots();
       ho.god(false);
       game.player.health = 100;
-      ho.place(spot.x, spot.z, 0, 0);
+      ho.place(spot[0], spot[2], 0, 0, spot[1]);
       ho.step(1 / 60, 6);
-      ho.spawnKind(spot.from[0], spot.from[1], 0, {});
+      const stoodAt = game.player.position.y;
+      ho.spawnKind(from[0], from[1], 0, traits);
       let seconds = -1;
-      for (let frame = 0; frame < 60 * 15; frame++) {
+      for (let frame = 0; frame < 60 * 20; frame++) {
         ho.step(1 / 60, 1);
         if (game.player.health < 100) {
           seconds = frame / 60;
           break;
         }
       }
-      out.push({ x: spot.x, z: spot.z, gap: spot.gap, seconds });
+      const health = game.player.health;
+      ho.god(true);
+      return { x: spot[0], y: spot[1], z: spot[2], stoodAt, seconds, health };
+    };
+    const hardest = ho.outOfReach().hardest.map((spot) => ({ ...strike([spot.x, spot.y, spot.z], spot.from), gap: spot.gap }));
+    // Inside the fence round the lab's assembly cell (the last of the four is on the trolley in its corner), a robot from each side of it.
+    const cell = [];
+    for (const inside of [[15.8, 0, 20.2], [14.3, 0, 23.6], [16.9, 0, 21.8], [17.74, 0.56, 23.5]]) {
+      for (const from of [[15.8, 17.6], [15.8, 26.0], [11.6, 21.8], [20.6, 21.8]]) cell.push(strike(inside, from));
     }
-    ho.god(true);
+    // A bomber, with the player up on something or fenced in.
+    const bombs = [
+      { name: 'on the desk in the lobby', ...strike([6.9, 0.79, -4.6], [4.2, -2.6], { kind: 'bomber' }) },
+      { name: 'on a drum in the corner of the dock', ...strike([-33.08, 0.93, 24.86], [-30.4, 22.2], { kind: 'bomber' }) },
+      { name: 'inside the fence, the bomber outside it', ...strike([15.8, 0, 20.2], [15.8, 17.4], { kind: 'bomber' }) },
+      { name: 'on the trolley inside the fence', ...strike([17.74, 0.56, 23.5], [17.7, 26.6], { kind: 'bomber' }) },
+    ];
     ho.clearRobots();
-    return out;
+    return { hardest, cell, bombs };
   });
-  const missed = blows.filter((b) => b.seconds < 0);
+  const missed = blows.hardest.filter((b) => b.seconds < 0);
+  const perched = blows.hardest.filter((b) => b.stoodAt > 0.3).length;
   check(
-    'a robot sent from five metres off to each of the sixteen most awkward places to stand on the map lands a blow there',
-    blows.length === 16 && missed.length === 0,
-    missed.length ? `never struck at ${missed.map((b) => `(${b.x.toFixed(1)}, ${b.z.toFixed(1)})`).join(' ')}` : `${blows.length} places, up to ${Math.max(...blows.map((b) => b.gap)).toFixed(2)} m from the nearest floor a robot fits on; struck within ${Math.max(...blows.map((b) => b.seconds)).toFixed(1)} s at every one`,
+    'a robot sent from five metres off to each of the sixteen most awkward places to stand on the map lands a blow there (most of them are on top of something)',
+    blows.hardest.length === 16 && missed.length === 0 && perched >= 6,
+    missed.length ? `never struck at ${missed.map((b) => `(${b.x.toFixed(1)}, ${b.z.toFixed(1)}) ${b.y.toFixed(2)} m up`).join(' ')}` : `${blows.hardest.length} places, ${perched} of them up on something, up to ${Math.max(...blows.hardest.map((b) => b.gap)).toFixed(2)} m from the nearest floor a robot fits on; struck within ${Math.max(...blows.hardest.map((b) => b.seconds)).toFixed(1)} s at every one`,
   );
+  const unfenced = blows.cell.filter((b) => b.seconds < 0);
+  check(
+    "a robot reaches a player who has hopped into the lab's fenced cell, from whichever side of it the robot starts: it comes round to a gateway and in",
+    blows.cell.length === 16 && unfenced.length === 0,
+    unfenced.length ? `never struck at ${unfenced.map((b) => `(${b.x.toFixed(1)}, ${b.z.toFixed(1)})`).join(' ')}` : `four places inside the fence, a robot from each of its four sides: struck within ${Math.max(...blows.cell.map((b) => b.seconds)).toFixed(1)} s every time`,
+  );
+  const unhurt = blows.bombs.filter((b) => b.seconds < 0 || b.health > 85);
+  check(
+    "a bomber's blast reaches a player who is standing on something low, or inside the fence",
+    blows.bombs.length === 4 && unhurt.length === 0,
+    blows.bombs.map((b) => `${b.name}: health ${b.health.toFixed(0)}`).join('; '),
+  );
+  // ---- And hopping back and forth over something does not keep the horde off for ever.
+  const hopping = [];
+  for (const place of HOP_SITES.slice(0, 2)) hopping.push({ name: place.name, ...(await ev(hopTrial, { place, policy: 'hop', round: 8, cap: 180 })) });
+  check(
+    'a player who does nothing but hop back and forth over a barrier, or in and out over the fence, is still caught by a round-8 horde',
+    hopping.every((trial) => trial.down && trial.seconds > 0 && trial.hops > 0),
+    hopping.map((trial) => `${trial.name}: down after ${trial.seconds.toFixed(0)} s and ${trial.hops} hops`).join('; '),
+  );
+  await ev(() => {
+    const ho = window.__HO;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
+    ho.step(1 / 60, 90);
+  });
   // A bomber's blast is stopped by a wall, and by nothing lower than a person.
   const cover = await ev(() => {
     const ho = window.__HO;
@@ -3254,7 +3335,39 @@ try {
     ho.scrap(500);
     return ho.economy().shutters;
   });
-  check('a run begins with all five shutters down and sound', fresh.length === 5 && fresh.every((s) => s.shut && s.strength === rules.shutters.strength), fresh.map((s) => `${s.id} ${s.strength}`).join(', '));
+  check(
+    'a run begins with all five shutters down: four of them sound, and the main entrance already battered, one blow from giving',
+    fresh.length === 5 && fresh.every((s) => s.shut && s.strength === (s.id === 'yard' ? rules.shutters.entranceStart : rules.shutters.strength)) && rules.shutters.entranceStart === 1,
+    fresh.map((s) => `${s.id} ${s.strength}`).join(', '),
+  );
+  // The opening of a run, left to itself: the first robot is through the entrance and into the lobby about eight seconds in.
+  const opening = await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    let forced = -1;
+    let indoors = -1;
+    for (let frame = 0; frame < 60 * 30 && indoors < 0; frame++) {
+      ho.step(1 / 60, 1);
+      if (forced < 0 && !ho.economy().shutters.find((s) => s.id === 'yard').shut) forced = frame / 60;
+      if (ho.run().robots.some((r) => r.alive && r.z > -7 && Math.abs(r.x) < 9)) indoors = frame / 60;
+    }
+    const round = ho.run().round;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.scrap(500);
+    // (Sound again for the checks that follow, which count a sound shutter's blows.)
+    ho.setShutter(true, 'yard');
+    return { forced, indoors, round };
+  });
+  check(
+    'in round 1 the entrance is forced with the first blow, and the first robot is inside the lobby about eight seconds after the run begins',
+    opening.round === 1 && opening.forced > 5 && opening.indoors > 7 && opening.indoors < 9.8,
+    `forced at ${opening.forced.toFixed(1)} s, the first robot indoors at ${opening.indoors.toFixed(1)} s`,
+  );
   const battered = await ev(() => {
     const ho = window.__HO;
     ho.place(0, 2, 0, 0);
@@ -3647,6 +3760,8 @@ try {
   await real.goto(`${site.url}?debug=1`);
   await real.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
   await real.evaluate(() => window.__HO.randomDrops(false));
+  // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+  await real.evaluate(() => window.__HO.hints?.(false));
   const at = () => real.evaluate(() => ({ ...window.__HO.run(), quality: window.__HO.stats().quality, ammo: window.__HO.stats().ammo, locked: document.pointerLockElement !== null }));
   const until = (state) => real.waitForFunction((state) => window.__HO.stats().state === state, state, { timeout: 8000 }).catch(() => {});
   /** What the browser does when the player presses Esc: it takes the mouse back. */

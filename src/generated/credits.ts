@@ -233,6 +233,16 @@ export const CREDITS: CreditGroup[] = [
         "title": "School Chair 01",
         "author": "Ethan Place",
         "license": "CC0"
+      },
+      {
+        "title": "Old Tyre",
+        "author": "MP",
+        "license": "CC0"
+      },
+      {
+        "title": "Exterior Aircon Unit",
+        "author": "Monsta3D",
+        "license": "CC0"
       }
     ]
   },

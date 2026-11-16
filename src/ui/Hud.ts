@@ -7,6 +7,7 @@
 import type { QualityLevel } from '../config';
 import { ARGUS, QUALITY } from '../config';
 import { settings } from '../core/settings';
+import type { HintId } from '../sim/coach';
 import { RoundAnnouncer } from './RoundAnnouncer';
 
 function el(tag: string, className: string, parent: HTMLElement, text = ''): HTMLElement {
@@ -73,7 +74,19 @@ export interface HudState {
   quality: QualityLevel;
   /** Lines for the debug overlay, or null when debug mode is off. */
   debug: string[] | null;
+  /** The first-minute hint to show, and whether the player has just done it; null for none. */
+  coach: { hint: HintId; done: boolean } | null;
 }
+
+/** The first-minute hints as they are shown: the key or keys, and what they do, in as few words as will do. */
+const COACH_TEXT: Record<HintId, { keys: string[]; text: string }> = {
+  move: { keys: ['W', 'A', 'S', 'D'], text: 'MOVE' },
+  fire: { keys: ['LEFT CLICK'], text: 'FIRE' },
+  aim: { keys: ['HOLD RIGHT CLICK'], text: 'AIM' },
+  jump: { keys: ['SPACE'], text: 'JUMP OVER LOW THINGS' },
+  marker: { keys: ['\u25c6'], text: 'FOLLOW THE MARKER TO YOUR OBJECTIVE' },
+  buy: { keys: ['F'], text: 'BUY: WALK UP TO A WEAPON ON THE WALL' },
+};
 
 /** What ARGUS's banner shows: the round the counters are for, and what it saw and is doing about it. */
 export interface HudAnalysis {
@@ -139,6 +152,15 @@ export class Hud {
   /** What each of those markers is showing, so the page is only written to when something changes. */
   private readonly shownMarkers: Array<{ look: string; at: string; distance: string }> = [];
   private readonly fps: HTMLElement;
+  private readonly failsafePanel: HTMLElement;
+  private readonly failsafeTitle: HTMLElement;
+  private readonly failsafeSub: HTMLElement;
+  /** When the fail-safe's words come down again (real time, in milliseconds; 0 = they are not up). */
+  private failsafeUntil = 0;
+  private readonly coach: HTMLElement;
+  private readonly coachKeys: HTMLElement;
+  private readonly coachText: HTMLElement;
+  private coachShown = '';
   private readonly debug: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly toast: HTMLElement;
@@ -262,8 +284,22 @@ export class Hud {
 
     this.hint = el('div', 'hud-hint', this.root);
     this.hint.innerHTML =
-      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>G</b> grenade <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
+      '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>SPACE</b> jump <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>G</b> grenade <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
+    // The first-minute hints: one at a time, larger, above where a price appears.
+    this.coach = el('div', 'hud-coach', this.root);
+    this.coachKeys = el('span', 'hud-coach-keys', this.coach);
+    this.coachText = el('span', 'hud-coach-text', this.coach);
+    el('span', 'hud-coach-tick', this.coach, '\u2713');
     this.toast = el('div', 'hud-toast', this.root);
+
+    // The fail-safe's moment, across the middle of the view: a pulse line
+    // that goes flat when the player goes down and beats again when it
+    // brings them back, with the word for each over it.
+    this.failsafePanel = el('div', 'hud-failsafe', this.root);
+    this.failsafePanel.innerHTML =
+      '<svg class="fs-pulse" viewBox="0 0 1000 100" preserveAspectRatio="none"><path d="M0 50 L392 50 L412 44 L430 50 L446 18 L470 88 L494 6 L516 72 L532 50 L552 44 L570 50 L1000 50" /></svg><div class="fs-title"></div><div class="fs-sub"></div>';
+    this.failsafeTitle = this.failsafePanel.querySelector('.fs-title') as HTMLElement;
+    this.failsafeSub = this.failsafePanel.querySelector('.fs-sub') as HTMLElement;
 
     // Under the crosshair: why a hit did less than it might have.
     this.hitNote = el('div', 'hit-note', this.root);
@@ -343,6 +379,10 @@ export class Hud {
   reset(): void {
     this.hintTimer = 16;
     this.hint.classList.remove('faded');
+    this.coach.classList.remove('show', 'done');
+    this.coachShown = '';
+    this.failsafeUntil = 0;
+    this.failsafePanel.className = 'hud-failsafe';
     this.announcer.reset();
     this.scrapPops.textContent = '';
     this.shownScrap = -1;
@@ -539,6 +579,17 @@ export class Hud {
     else this.announcer.notice(title, detail);
   }
 
+  /**
+   * The fail-safe's moment: 'down' when the blow lands (it stays up until
+   * the fail-safe fires), 'up' when it does (and then clears by itself).
+   */
+  failsafe(phase: 'down' | 'up'): void {
+    this.failsafePanel.className = `hud-failsafe show ${phase}`;
+    this.failsafeTitle.textContent = phase === 'down' ? 'DOWN' : 'FAILSAFE ENGAGED';
+    this.failsafeSub.textContent = phase === 'down' ? 'VITAL SIGNS LOST' : 'BACK ON YOUR FEET';
+    this.failsafeUntil = phase === 'up' ? performance.now() + 1900 : 0;
+  }
+
   showToast(text: string, seconds = 4): void {
     this.toast.textContent = text;
     this.toast.classList.add('show');
@@ -555,7 +606,8 @@ export class Hud {
     // Crosshair gap follows the real cone of fire.
     const pixels = (Math.tan(state.spread) / Math.tan((state.fov * Math.PI) / 360)) * (window.innerHeight / 2);
     this.crosshair.style.setProperty('--gap', `${Math.max(3, pixels).toFixed(1)}px`);
-    this.crosshair.style.opacity = String(Math.max(0, 1 - state.aim * 1.6) * (state.sprinting || state.reloading ? 0.35 : 1));
+    // (Not under the fail-safe's words, which are where it is.)
+    this.crosshair.style.opacity = this.failsafePanel.classList.contains('show') ? '0' : String(Math.max(0, 1 - state.aim * 1.6) * (state.sprinting || state.reloading ? 0.35 : 1));
 
     if (this.hitTimer > 0) {
       this.hitTimer -= dt;
@@ -729,8 +781,21 @@ export class Hud {
         this.promptNote.textContent = short ? `Not enough scrap: ${(prompt.cost! - state.scrap).toLocaleString('en-US')} more needed` : prompt.note;
       }
     }
-    // The control reminder gives way to a prompt.
-    this.hint.classList.toggle('faded', this.hintTimer <= 0 || !!prompt);
+    // The first-minute hint, if there is one.
+    const coachKey = state.coach ? `${state.coach.hint}|${state.coach.done}` : '';
+    if (coachKey !== this.coachShown) {
+      if (state.coach && state.coach.hint !== this.coachShown.split('|')[0]) {
+        const words = COACH_TEXT[state.coach.hint];
+        this.coachKeys.textContent = '';
+        for (const key of words.keys) el('kbd', state.coach.hint === 'marker' ? 'mark' : '', this.coachKeys, key);
+        this.coachText.textContent = words.text;
+      }
+      this.coachShown = coachKey;
+      this.coach.classList.toggle('show', !!state.coach);
+      this.coach.classList.toggle('done', !!state.coach?.done);
+    }
+    // The control reminder gives way to a prompt, and waits its turn behind the hints.
+    this.hint.classList.toggle('faded', this.hintTimer <= 0 || !!prompt || !!state.coach);
 
     // Markers on the last few robots (placed the same way as the objective's marker).
     for (let i = 0; i < MAX_MARKERS; i++) {
@@ -767,8 +832,12 @@ export class Hud {
       this.debug.textContent = debugText;
     }
 
-    if (this.hintTimer > 0) this.hintTimer -= dt;
+    if (this.hintTimer > 0 && !state.coach) this.hintTimer -= dt;
     const now = performance.now();
+    if (this.failsafeUntil && now >= this.failsafeUntil) {
+      this.failsafeUntil = 0;
+      this.failsafePanel.classList.remove('show');
+    }
     if (this.hitNoteUntil && now >= this.hitNoteUntil) {
       this.hitNoteUntil = 0;
       this.hitNote.classList.remove('show');

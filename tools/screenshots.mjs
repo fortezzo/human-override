@@ -36,6 +36,8 @@ await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
 await page.evaluate(() => window.__HO.randomDrops(false));
+// (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
+await page.evaluate(() => window.__HO.hints?.(false));
 console.log(`Rendering on: ${await gpuName(page)}`);
 
 const run = (fn, arg) => page.evaluate(fn, arg);
@@ -49,7 +51,11 @@ const shoot = async (name) => {
   console.log(`  ${name}.jpg`);
 };
 /** Hide or show the debug overlay, which has no place in a portfolio picture. */
-const overlay = (show) => run((show) => document.querySelector('.hud-debug')?.style.setProperty('visibility', show ? 'visible' : 'hidden'), show);
+// (Nor has the frame-rate counter, which a visitor does not see unless they ask for it: debug mode, which this tool runs in, always shows it.)
+const overlay = (show) =>
+  run((show) => {
+    for (const part of ['.hud-debug', '.hud-fps']) document.querySelector(part)?.style.setProperty('visibility', show ? 'visible' : 'hidden');
+  }, show);
 
 // ---- 1. Title screen, as a visitor first sees it
 await run(() => {

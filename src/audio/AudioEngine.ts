@@ -25,14 +25,23 @@ export interface PlayOptions {
 
 export interface LoopHandle {
   setGain(gain: number, seconds?: number): void;
+  /** How open its tone is: 1 = all of it, 0 = muffled down to a low rumble. */
+  setTone(amount: number, seconds?: number): void;
   stop(): void;
 }
 
 const BUSES: Bus[] = ['weapons', 'impacts', 'robots', 'player', 'ambience', 'music', 'ui'];
 
+/** The muffling filter's cut-off, wide open and shut (Hz). */
+const OPEN = 20000;
+const MUFFLED = 420;
+/** A loop's own tone filter at its most closed (Hz). */
+const DULL = 500;
+
 export class AudioEngine {
   readonly context: AudioContext;
   private readonly master: GainNode;
+  private readonly muffler: BiquadFilterNode;
   private readonly buses = new Map<Bus, GainNode>();
   private readonly reverbSend: GainNode;
   private readonly voices = new Map<SoundId, number>();
@@ -56,8 +65,15 @@ export class AudioEngine {
     limiter.release.value = 0.12;
     limiter.connect(ctx.destination);
 
+    // (Everything passes through one filter on the way: wide open, except
+    // while the player is down, when it shuts until only the low end is left.)
+    this.muffler = ctx.createBiquadFilter();
+    this.muffler.type = 'lowpass';
+    this.muffler.frequency.value = OPEN;
+    this.muffler.Q.value = 0.7;
+    this.muffler.connect(limiter);
     this.master = ctx.createGain();
-    this.master.connect(limiter);
+    this.master.connect(this.muffler);
 
     for (const name of BUSES) {
       const bus = ctx.createGain();
@@ -108,6 +124,15 @@ export class AudioEngine {
   private applyVolume(): void {
     const target = this.muted ? 0 : this.volume * AUDIO.master;
     this.master.gain.setTargetAtTime(target, this.context.currentTime, 0.03);
+  }
+
+  /**
+   * Muffle everything (1), or let it ring clear again (0), over `seconds`:
+   * what the world sounds like to someone who has just been put on the floor.
+   */
+  muffle(amount: number, seconds = 0.2): void {
+    const target = OPEN * Math.pow(MUFFLED / OPEN, Math.min(1, Math.max(0, amount)));
+    this.muffler.frequency.setTargetAtTime(target, this.context.currentTime, Math.max(0.01, seconds / 3));
   }
 
   /** Move the "ears" to the camera. Call once per frame. */
@@ -196,7 +221,12 @@ export class AudioEngine {
     const def = SOUNDS[id];
     const out = ctx.createGain();
     out.gain.value = def.gain * gain;
-    out.connect(this.buses.get(def.bus)!);
+    // (Through a filter of its own, wide open unless the loop is told otherwise: see setTone.)
+    const tone = ctx.createBiquadFilter();
+    tone.type = 'lowpass';
+    tone.frequency.value = OPEN;
+    tone.Q.value = 0.5;
+    out.connect(tone).connect(this.buses.get(def.bus)!);
 
     let stopped = false;
     let timer = 0;
@@ -224,11 +254,12 @@ export class AudioEngine {
 
     return {
       setGain: (value, seconds = 0.5) => out.gain.setTargetAtTime(def.gain * value, ctx.currentTime, seconds / 3),
+      setTone: (amount, seconds = 0.5) => tone.frequency.setTargetAtTime(DULL * Math.pow(OPEN / DULL, Math.min(1, Math.max(0, amount))), ctx.currentTime, seconds / 3),
       stop: () => {
         stopped = true;
         window.clearTimeout(timer);
         for (const source of sources) source.stop();
-        out.disconnect();
+        tone.disconnect();
       },
     };
   }

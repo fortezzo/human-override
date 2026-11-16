@@ -96,16 +96,17 @@ export function groupSafeSpots(spots: readonly SafeSpot[], cell: number): Array<
  * rules of movement, from which no robot can be within striking distance.
  *
  * The check above looks at the floor only. It missed the one spot a player
- * actually found, because that spot was not on the floor: a jump used to
- * put the player on top of anything low, and a cluster of barrels in a
- * corner is wider than a robot's reach. This one samples positions every
- * `step` metres across the whole map, at floor level and on top of
- * everything that can be stood on, starting from where the player starts
- * and going wherever the rules allow: on the level, down any drop, and up
- * onto anything no more than `climb` above where they are standing. (The
- * game's rule is that `climb` is one step. Give it the height of a jump
- * instead and it reports what the map would have again if jumping onto
- * things came back.)
+ * actually found, because that spot was not on the floor: a jump put the
+ * player on top of a barrel, and a cluster of barrels in a corner is wider
+ * than a robot's reach. This one samples positions every `step` metres
+ * across the whole map, at floor level and on top of everything that can
+ * be stood on, starting from where the player starts and going wherever
+ * the rules of movement allow: on the level, down any drop, and up onto
+ * anything whose top is no higher than `climb` above the floor (the
+ * game's own rule: see resolveCircle in collision.ts). That takes in the
+ * top of every low thing, and any floor fenced off by low things, which is
+ * everywhere a jump can put the player. (Give it one step for `climb` and
+ * it reports the map as it is for someone who cannot jump.)
  *
  * `robots` is the game's own map of where a robot can stand. Returns how
  * many places were stood on, those out of reach, and the `count` most
@@ -127,14 +128,14 @@ export function findStandableOutOfReach(
   const cols = Math.ceil((bounds.x1 - bounds.x0) / step);
   const rows = Math.ceil((bounds.z1 - bounds.z0) / step);
   const body: CircleBody = { x: 0, z: 0, radius: player.radius, feet: 0, head: 0 };
-  const tops = colliders.filter((c) => c.y1 > 0.02 && c.y1 < 4);
+  const tops = colliders.filter((c) => c.y1 > 0.02 && c.y1 <= player.climb);
   /** Whether someone standing with their feet at this height here is clear of everything solid. */
   const fits = (x: number, y: number, z: number): boolean => {
     body.x = x;
     body.z = z;
     body.feet = y;
     body.head = y + player.height;
-    return !resolveCircle(body, colliders, player.stepHeight);
+    return !resolveCircle(body, colliders, player.stepHeight, player.climb);
   };
   /** The heights that can be stood at over each sample point: the floor, and the top of anything under the feet there. */
   const levels = new Map<number, number[]>();
@@ -177,14 +178,16 @@ export function findStandableOutOfReach(
     const gap = nearest < 0 ? Infinity : Math.hypot(cellCentre(robots, nearest).x - x, cellCentre(robots, nearest).z - z);
     if (gap > reach) spots.push({ x, z, gap });
     else if (gap > robots.cell) awkward.push({ x, z, y, gap });
-    // To the samples next to this one: on the level, up as far as the
-    // player can climb, or down. And to those a little further off (within
-    // `dropReach`) when the difference in height is more than a step:
-    // there is a band round anything tall where a body can stand neither
-    // on the floor (too near its side) nor on top (not yet over it), and
-    // someone who drops off it, or gets up onto it, crosses that band.
-    // (Never far enough to cross a wall: the two sides of the thinnest wall
-    // are further apart than that for a body this wide.)
+    // To the samples next to this one, at whatever height can be stood at
+    // there: on the level, down, or up (everything that can be stood on is
+    // low enough to jump onto from the floor). And to those a little
+    // further off (within `dropReach`) when the difference in height is
+    // more than a step: there is a band round anything raised where a body
+    // can stand neither on the floor (too near its side) nor on top (not
+    // yet over it), and someone who drops off it, or jumps up onto it,
+    // crosses that band. (Never far enough to cross a wall: the two sides
+    // of the thinnest wall are further apart than that for a body this
+    // wide.)
     for (let dr = -dropCells; dr <= dropCells; dr++) {
       for (let dc = -dropCells; dc <= dropCells; dc++) {
         if (dr === 0 && dc === 0) continue;
@@ -194,7 +197,6 @@ export function findStandableOutOfReach(
         const beside = Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
         if (!beside && (dr * dr + dc * dc) * step * step > dropReach * dropReach) continue;
         for (const next of levelsAt(c, r)) {
-          if (next > y + player.climb + 1e-6) continue;
           if (beside || next < y - player.stepHeight || next > y + player.stepHeight + 1e-6) visit(c, r, next);
         }
       }

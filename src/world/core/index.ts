@@ -10,7 +10,7 @@ import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LedBank } from '../build/LedBank';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { drum, vent, wall, type AreaBuild, type Haze } from '../build/room';
+import { drum, vent, wall, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { CORE, DOOR_PLANS, ENTRY_PLANS, HALL, WALL } from '../plan';
@@ -76,7 +76,7 @@ function buildEye(centre: Vec3): { object: THREE.Group; iris: THREE.Group; mater
   return { object, iris, material, halo: halo.material, hot };
 }
 
-export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild {
+export function buildCore(assets: Assets, materials: MaterialLibrary, stations?: Fixtures): AreaBuild {
   const b = new LevelBuilder(assets, materials);
   const atlas = new SignAtlas(1024, 1024);
   const leds = new LedBank();
@@ -193,6 +193,7 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'coreAfterEast', area: 'core', kind: 'point', color: 0xcfe0ff, intensity: 30, position: [x1 - 3.0, 4.2, 34.0], distance: 13, when: 'argusOff' });
   lights.push({ name: 'coreConsole', area: 'core', kind: 'point', color: 0xffb060, intensity: 2.5, position: [cx, 1.5, cz - 0.6], distance: 4 });
 
+  stations?.(b);
   const built = b.build();
   // How awake ARGUS is, 1 to 0: the mission brings this down when the kill
   // switch is pulled, and the eye on the wall goes out with it.

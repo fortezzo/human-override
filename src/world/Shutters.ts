@@ -182,10 +182,10 @@ export class ShutterSet {
     return false;
   }
 
-  /** Every shutter down and sound (a new run). */
+  /** Every shutter down (a new run): sound, but for the main entrance, which has been at it already. */
   reset(): void {
     for (const gate of this.gates) {
-      gate.state.strength = SHUTTERS.strength;
+      gate.state.strength = gate.plan.id === 'yard' ? SHUTTERS.entranceStart : SHUTTERS.strength;
       gate.snap();
     }
   }
