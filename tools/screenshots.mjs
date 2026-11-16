@@ -1,6 +1,6 @@
 // Takes the project's screenshots from the production build.
 //
-//   npm run build && npm run shots              -> media/stage-3
+//   npm run build && npm run shots              -> media/stage-4
 //   npm run shots -- media/some-other-folder
 //
 // Every shot is staged through the debug tools with time stepped by hand
@@ -13,7 +13,7 @@ import path from 'node:path';
 import { gpuName, launch } from './lib/browser.mjs';
 import { serve } from './lib/static-server.mjs';
 
-const outDir = process.argv[2] ?? 'media/stage-3';
+const outDir = process.argv[2] ?? 'media/stage-4';
 if (!fs.existsSync('dist/index.html')) {
   console.error('No production build found. Run "npm run build" first.');
   process.exit(1);
@@ -65,7 +65,8 @@ await run(() => {
   ho.god(true);
 });
 await overlay(false);
-await step(60 * 9);
+// (They have a shutter to batter down first.)
+await step(60 * 13);
 await run(() => {
   window.__HO.aimAtRobot('chest');
   window.__HO.step(1 / 60, 2);
@@ -862,6 +863,219 @@ await shoot(ended === 'saved' ? '36-run-ends-humanity-saved' : '36-run-ends-game
 await page.click(`.screen.${ended === 'saved' ? 'saved' : 'over'} [data-action="profile"]`);
 await shoot('37-argus-profile');
 await page.click('.screen.profile [data-action="profile-back"]');
+
+// ---- Stage 4: the full economy. Stations, shutters, pickups, grenades, a swarm, the crate's special weapon, and the new screens.
+{
+  const facing = (from, to) => (Math.atan2(-(to[0] - from[0]), -(to[1] - from[1])) * 180) / Math.PI;
+  const quiet = (power) =>
+    run((power) => {
+      const ho = window.__HO;
+      ho.autopilot(false);
+      ho.restart();
+      ho.step(1 / 60, 3);
+      if (power) ho.missionJump('keys');
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.steadyLights(true);
+      for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
+      ho.scrap(6000);
+      ho.step(1 / 60, 150);
+      ho.announcement.clear();
+    }, power);
+  /** Stand in front of a station, a little way back, looking at it. */
+  const standAt = async (id, back = 0.75, side = 0, pitch = 5) => {
+    const station = await run((id) => window.__HO.economy().stations.find((s) => s.id === id), id);
+    const [sx, sz] = station.stand;
+    const [lx, lz] = station.look;
+    const length = Math.hypot(sx - lx, sz - lz) || 1;
+    const ux = (sx - lx) / length;
+    const uz = (sz - lz) / length;
+    const from = [sx + ux * back - uz * side, sz + uz * back + ux * side];
+    await run(([x, z, yaw, pitch]) => {
+      const ho = window.__HO;
+      ho.place(x, z, yaw, pitch);
+      ho.step(1 / 60, 30);
+    }, [from[0], from[1], facing(from, [lx, lz]), pitch]);
+  };
+
+  // 47. Before the power is on: a Boost Station is dark, and says why.
+  await quiet(false);
+  await standAt('failsafe', 0.6, 0.3, 6);
+  await shoot('47-boost-station-no-power');
+
+  // 48 to 50. With the power on: the health boost beside the breaker, the reload boost in the hall, the fire-rate boost in the core.
+  await quiet(true);
+  await page.waitForTimeout(2800);
+  await standAt('carapace', 0.6, -0.25, 6);
+  await shoot('48-boost-station-carapace');
+  await standAt('autoloader', 0.6, 0.25, 6);
+  await shoot('49-boost-station-autoloader');
+  await standAt('hairTrigger', 0.6, 0.25, 6);
+  await shoot('50-boost-station-hair-trigger');
+
+  // 51. The fail-safe, bought: its charge is gone from the station, and it is on the HUD.
+  await standAt('failsafe', 0.6, 0.3, 6);
+  await run(() => {
+    const ho = window.__HO;
+    ho.tap('interact');
+    ho.step(1 / 60, 30);
+  });
+  await page.waitForTimeout(2600);
+  await shoot('51-boost-station-failsafe-bought');
+
+  // 52. The Overclock Bench, with the carbine in hand.
+  await run(() => window.__HO.giveWeapon('carbine'));
+  await step(40);
+  await standAt('bench', 0.7, 0.3, 2);
+  await shoot('52-overclock-bench');
+  // 53. And at work.
+  await run(() => {
+    const ho = window.__HO;
+    ho.tap('interact');
+    ho.step(1 / 60, 22);
+  });
+  await shoot('53-overclock-bench-at-work');
+
+  // 54. The Prototype Crate, holding out what it chose: the weapon found nowhere else.
+  await standAt('crate', 0.7, 0.4, -6);
+  await run(() => {
+    const ho = window.__HO;
+    ho.step(1 / 60, 60);
+    ho.crateDice([0]);
+    ho.tap('interact');
+    ho.step(1 / 60, Math.round(ho.economy().rules.crate.cycleSeconds * 60) + 40);
+  });
+  await shoot('54-prototype-crate');
+
+  // 55. The Turncoat in hand, and a robot it has just turned.
+  await run(() => {
+    const ho = window.__HO;
+    ho.tap('interact');
+    ho.step(1 / 60, 50);
+    ho.place(0.4, 3.2, 0, 0);
+    ho.spawnKind(-0.6, -1.6, 180, {});
+    ho.spawnKind(1.4, -3.2, 180, {});
+    ho.spawnKind(-2.2, -4.0, 180, {});
+    ho.step(1 / 60, 30);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+    ho.tap('fire');
+    ho.step(1 / 60, 2);
+  });
+  await shoot('55-turncoat-beam');
+  await step(26);
+  await page.waitForTimeout(1200);
+  await shoot('56-turned-robot');
+
+  // 57. Timed pickups on the floor, and the HUD with the boosts and the timers of two that have been taken.
+  await quiet(true);
+  await run(() => {
+    const ho = window.__HO;
+    for (const id of ['carapace', 'autoloader', 'failsafe']) ho.setBoost(id, true);
+    ho.place(0, 4.6, 0, -5);
+    ho.step(1 / 60, 10);
+    ho.dropPickup('overload', 0, 4.6);
+    ho.dropPickup('doubleScrap', 0, 4.6);
+    ho.step(1 / 60, 20);
+    ['resupply', 'emp', 'lockdown', 'overload', 'doubleScrap'].forEach((id, i) => ho.dropPickup(id, -3.2 + i * 1.6, 0.4 - Math.abs(i - 2) * 0.5));
+    ho.step(1 / 60, 40);
+    ho.announcement.clear();
+  });
+  await shoot('57-pickups-and-timers');
+
+  // 58. A shutter being battered from outside, and 59, the prompt to repair one that has been forced.
+  await run(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.steadyLights(true);
+    ho.scrap(400);
+    ho.place(0.5, -1.2, 4, 3);
+    for (const x of [-1.1, 0, 1.1]) ho.spawnRobot(x, -9.4, 180, false, 3.0, 300);
+    // Until the blow before the one that forces it.
+    for (let frames = 0; frames < 60 * 30 && ho.economy().shutters.find((s) => s.id === 'yard').strength > 1; frames++) ho.step(1 / 60, 1);
+    ho.step(1 / 60, 3);
+    ho.announcement.clear();
+  });
+  await shoot('58-shutter-under-attack');
+  await run(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.setShutter(false, 'yard');
+    ho.place(0.3, -4.9, 0, 6);
+    ho.step(1 / 60, 30);
+  });
+  await shoot('59-shutter-repair-prompt');
+
+  // 60. A grenade going off in a pack.
+  await run(() => {
+    const ho = window.__HO;
+    ho.place(0, 4.4, 0, 0);
+    for (const [x, z] of [[0, -3.6], [1.0, -4.3], [-1.0, -4.3], [0.2, -5.2], [-1.6, -3.2]]) ho.spawnKind(x, z, 180, {});
+    ho.step(1 / 60, 20);
+    ho.tap('grenade');
+    ho.step(1 / 60, Math.round(ho.economy().rules.grenade.fuse * 60) + 4);
+  });
+  await shoot('60-grenade');
+
+  // 61. A swarm round: its announcement, and the drones.
+  await run(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.step(1 / 60, 3);
+    ho.god(true);
+    ho.steadyLights(true);
+    ho.setShutter(false);
+    ho.openDoor('lobbyHall');
+    ho.place(0, 4.6, 0, 4);
+    for (let frames = 0; frames < 60 * 600 && ho.run().round < 5; frames++) {
+      ho.step(1 / 60, 1);
+      if (ho.run().phase === 'active' && ho.run().round < 5) ho.skipRound();
+      if (ho.run().phase === 'waiting' && frames % 30 === 0) ho.skipRound();
+    }
+    ho.announcement.freezeAt(1.1);
+    ho.step(1 / 60, 60 * 7);
+    ho.aimAtRobot('chest');
+    ho.step(1 / 60, 2);
+  });
+  await shoot('61-swarm-round');
+  await run(() => {
+    const ho = window.__HO;
+    ho.announcement.freezeAt(null);
+    ho.announcement.clear();
+  });
+
+  // 62 and 63. The screens: how to play, and settings from the start screen.
+  await run(() => window.__HO.game.toTitle());
+  await page.waitForTimeout(400);
+  await page.click('.screen.title [data-action="howto"]');
+  await shoot('62-how-to-play');
+  await page.click('.screen.howto [data-action="back"]');
+  await page.click('.screen.title [data-action="settings"]');
+  await shoot('63-settings');
+  await page.click('.screen.settings [data-action="back"]');
+}
+
+// 64. A phone: the title scene and a friendly note.
+{
+  const phone = await browser.newContext({ viewport: { width: 414, height: 896 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const phonePage = await phone.newPage();
+  await phonePage.goto(`${site.url}?debug=1`);
+  await phonePage.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await phonePage.evaluate(() => {
+    window.__HO.freeze(true);
+    window.__HO.steadyLights(true);
+    window.__HO.step(1 / 60, 120);
+  });
+  await phonePage.waitForTimeout(800);
+  await phonePage.screenshot({ path: path.join(outDir, '64-phone-message.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  64-phone-message.jpg');
+  await phone.close();
+}
 
 const errors = [...new Set(problems)].filter((p) => !/X3595|gradient instruction/.test(p));
 if (errors.length) console.log('Console errors:\n' + errors.join('\n'));

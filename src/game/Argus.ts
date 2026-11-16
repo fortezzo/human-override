@@ -216,6 +216,8 @@ export class Argus {
   shutDown(): void {
     this.offline = true;
     this.pending = null;
+    // Nothing of its is in force any more. (What it used is still in its history, for the profile.)
+    this.state.active = [];
     this.director.counters = [];
   }
 

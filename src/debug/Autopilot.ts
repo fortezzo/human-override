@@ -705,7 +705,8 @@ export class Autopilot {
     let best: { x: number; z: number; label: string } | null = null;
     let nearest = Infinity;
     for (const robot of robots) {
-      if (!robot.alive) continue;
+      // (One that is still outside a shutter that is down will come to it: nobody walks up to the shutter to meet it.)
+      if (!robot.alive || this.game.world.shutters.shutOut(robot.position.x, robot.position.z)) continue;
       const distance = Math.hypot(robot.position.x - player.position.x, robot.position.z - player.position.z);
       if (distance < nearest) {
         nearest = distance;
@@ -756,6 +757,8 @@ export class Autopilot {
         const c = Math.floor((x - nav.x0) / nav.cell);
         const r = Math.floor((z - nav.z0) / nav.cell);
         if (c < 3 || r < 3 || c >= nav.cols - 3 || r >= nav.rows - 3 || !nav.reach[r * nav.cols + c]) continue;
+        // (Not through a shutter that is down.)
+        if (world.shutters.shutOut(x, z)) continue;
         // Indoors: nobody who knows the building falls back into the
         // yards and truck bays the robots walk in from. They are dead ends,
         // and where the next robot appears. (The beginner does not know

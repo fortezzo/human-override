@@ -314,6 +314,49 @@ await paced(3840, 2160);
     });
   }, 2400);
   await first('the analysis shrinking into its corner', () => window.__HO.analysisBanner.hold('corner'));
+  // Stage 4: the things the economy puts on screen for the first time.
+  await first('a timed pickup lying on the floor', () => {
+    const ho = window.__HO;
+    ho.analysisBanner.hold(null);
+    ho.announcement.clear();
+    ho.clearRobots();
+    ho.setShutter(false);
+    ho.place(0, 4.4, 0, -6);
+    ho.dropPickup('overload', 0, 1.5);
+  });
+  await first('a pickup taken: its notice, and its timer on the HUD', () => window.__HO.dropPickup('doubleScrap', 0, 4.4));
+  await first('a boost on the HUD', () => window.__HO.setBoost('carapace', true));
+  await first('a grenade thrown, and going off', () => window.__HO.tap('grenade'), 2800);
+  await first('an EMP Blast taking three robots', () => {
+    const ho = window.__HO;
+    for (const x of [-2, 0, 2]) ho.spawnKind(x, -1.6, 0, { hold: true });
+    ho.dropPickup('emp', 0, 4.4);
+  });
+  await first(
+    'the Turncoat fired, and a robot turned',
+    (face) => {
+      const ho = window.__HO;
+      ho.giveWeapon('turncoat');
+      ho.spawnKind(0, -1.6, 0, { hold: true, health: 5000 });
+      setTimeout(() => {
+        face(ho.game.robots.find((robot) => robot.alive));
+        ho.tap('fire');
+      }, 700);
+    },
+    2300,
+  );
+  await first(
+    'a shutter battered, and forced up',
+    () => {
+      const ho = window.__HO;
+      ho.clearRobots();
+      ho.place(0, 4.4, 0, 0);
+      ho.setShutter(true, 'yard');
+      // (ARGUS's Proxy forces a shutter with one blow.)
+      ho.spawnRobot(0, -9.2, 180, false, 3.0, 4000, 'proxy');
+    },
+    5000,
+  );
   const { frames, marks } = await fresh.page.evaluate(() => ({ frames: window.__frames, marks: window.__marks }));
   const ordered = frames.map((frame) => frame[1]).sort((a, b) => a - b);
   console.log(`\nFirst appearances at 1920 x 1080 on High, frame rate limited to the screen's (usual frame ${ordered[Math.floor(ordered.length / 2)].toFixed(1)} ms)`);

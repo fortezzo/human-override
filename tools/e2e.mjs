@@ -2528,7 +2528,9 @@ try {
       makeup.rounds[6]?.bomber >= 1 &&
       makeup.rounds[6]?.heavy === 0 &&
       makeup.rounds[8]?.heavy >= 1 &&
-      [4, 5, 6, 7, 8, 9].every((n) => makeup.rounds[n].drudge >= makeup.rounds[n].total * 0.6),
+      // (Round 5 is a swarm: every one of it a drone. That has a check of its own further down.)
+      makeup.rounds[5]?.drone === makeup.rounds[5]?.total &&
+      [4, 6, 7, 8, 9].every((n) => makeup.rounds[n].drudge >= makeup.rounds[n].total * 0.6),
     `round 4: ${specialsBy(4)}; round 6: ${specialsBy(6)}; round 8: ${specialsBy(8)} (of ${makeup.rounds[8]?.total})`,
   );
   check('ARGUS only watches for the first two rounds, and with nothing to go on it adapts nothing', makeup.analyses >= 6 && makeup.active === 0, `${makeup.analyses} analyses from round 3 on, no counters in force`);
@@ -2564,6 +2566,9 @@ try {
       }
       return { round: game.stats.round, made, seen, arrived: counted.size, count: plain.count };
     }, counters);
+  // (The next round is the tenth, a swarm: drones carry none of ARGUS's counters, whatever is in force.)
+  const tenth = await roundWith([{ counter: 'shielding', weapon: 'carbine' }, { counter: 'guard' }]);
+  check('a swarm round carries none of ARGUS\'s counters, whatever it has in force', tenth.round === 10 && tenth.made.drone === tenth.made.total && tenth.made.shielded === 0 && tenth.made.guarded === 0 && tenth.seen.shield === 0 && tenth.seen.guard === 0, `round ${tenth.round}: ${tenth.made.drone} drones of ${tenth.made.total}, none shielded or plated`);
   const base = await roundWith([]);
   const plating = await roundWith([{ counter: 'shielding', weapon: 'carbine' }, { counter: 'guard' }]);
   const flushing = await roundWith([{ counter: 'flush' }, { counter: 'intercept' }]);

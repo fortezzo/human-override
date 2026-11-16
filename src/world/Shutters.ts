@@ -107,6 +107,8 @@ export class ShutterGate {
     this.lift = this.shut ? 0 : 1;
     this.shake = 0;
     this.place();
+    // (So that anything that looks for it before the next frame is drawn finds it where it now is.)
+    this.object.updateMatrixWorld(true);
   }
 
   update(dt: number): void {
@@ -168,6 +170,16 @@ export class ShutterSet {
       if (inside < 0.25 && inside > -3.2 && Math.abs(along) < half + 0.9) return gate;
     }
     return null;
+  }
+
+  /** Is (x, z) outdoors behind a shutter that is down: somewhere nobody indoors can walk to for now? */
+  shutOut(x: number, z: number): boolean {
+    for (const gate of this.gates) {
+      if (!gate.shut) continue;
+      const { inside, along } = gate.where(x, z);
+      if (inside < 0.2 && inside > -16 && Math.abs(along) < (gate.plan.to - gate.plan.from) / 2 + 5) return true;
+    }
+    return false;
   }
 
   /** Every shutter down and sound (a new run). */
