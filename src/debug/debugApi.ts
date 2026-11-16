@@ -7,12 +7,15 @@
 
 import * as THREE from 'three';
 import type { QualityLevel, WeaponId } from '../config';
-import { MISSION, PLAYER, QUALITY, ROBOT, WEAPONS } from '../config';
+import { MISSION, PLAYER, QUALITY, ROBOT, SPECIALS, WEAPONS } from '../config';
 import type { Action } from '../core/input';
 import { setEdgeLight } from '../entities/robot/robotMaterial';
+import type { ArgusReport } from '../game/Argus';
 import type { Game } from '../game/Game';
 import type { MissionStep } from '../game/Mission';
 import type { SurfaceKind } from '../render/materials';
+import type { Adaptation, Notes, RemarkCue } from '../sim/argus';
+import type { RobotKind } from '../sim/horde';
 import { remaining } from '../sim/rounds';
 import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
 import { cellAt, createNavGrid, floodFrom } from '../sim/navGrid';
@@ -38,7 +41,7 @@ export interface DebugState {
   prompt: { text: string; cost: number | null; usable: boolean } | null;
   health: number;
   kills: number;
-  robots: Array<{ x: number; z: number; alive: boolean; entry: string; area: string }>;
+  robots: Array<{ x: number; z: number; alive: boolean; entry: string; area: string; kind: string; shield: string | null; guard: number }>;
   position: { x: number; z: number };
   lights: string[];
   autopilot: string;
@@ -91,6 +94,33 @@ export interface DebugApi {
   openDoor(id: DoorPlan['id']): void;
   /** Send every robot in through one entry point (its id), or null for the usual rules. */
   forceEntry(id: string | null): void;
+  /**
+   * Put one robot of any kind on the map: a special (`kind`), one carrying
+   * ARGUS's shielding against a weapon, or one with a plate over its weak
+   * point (`guard` is the damage the plate takes). Returns its place in
+   * the game's list of robots.
+   */
+  spawnKind(x: number, z: number, headingDeg: number, traits?: { kind?: RobotKind; shield?: string; guard?: number; hold?: boolean; health?: number; speed?: number }): number;
+  /** Rounds of ordinary robots only: no specials and none of ARGUS's counters (for checks that count on a plain horde). */
+  plainRounds(on: boolean): void;
+  /** What the round being played is made of. */
+  composition(): { total: number; drudge: number; drone: number; bomber: number; heavy: number; shielded: number; guarded: number; behind: number; ahead: number };
+  /** The entry ARGUS would use right now for a robot routed 'behind' the player or 'ahead' of them (its id and where it is), or null. */
+  entryFor(route: 'behind' | 'ahead'): { id: string; area: string; x: number; z: number } | null;
+  /** Set ARGUS's counters for the next round to start, as if it had chosen them (null leaves them to it). */
+  forceCounters(counters: Adaptation[]): void;
+  /** What ARGUS has made of the player so far. */
+  argus(): {
+    offline: boolean;
+    active: Adaptation[];
+    /** Every analysis so far: the round it was for and what the banner said. */
+    history: Array<{ round: number; lines: Array<{ observed: string; adapting: string }>; adaptations: Adaptation[]; withdrawn: Adaptation[] }>;
+    /** Its notes on the round being played. */
+    notes: Notes;
+    report: ArgusReport;
+  };
+  /** Have ARGUS pass a remark, if it has one to make and has not spoken too recently. Returns whether it did. */
+  argusSay(cue: RemarkCue): boolean;
   /** Stop the rounds from sending robots (for staged screenshots). */
   holdRounds(on: boolean): void;
   /**
@@ -405,6 +435,46 @@ export function installDebugApi(game: Game): DebugTools {
     },
     forceEntry(id) {
       game.director.forceEntry = id;
+    },
+    spawnKind(x, z, headingDeg, traits = {}) {
+      const plan = game.director.rounds.plan;
+      const robot = game.addRobot(x, z, THREE.MathUtils.degToRad(headingDeg), {
+        health: traits.health ?? plan.health * (traits.kind === 'drone' ? SPECIALS.drone.health : traits.kind === 'bomber' ? SPECIALS.bomber.health : traits.kind === 'heavy' ? SPECIALS.heavy.health : 1),
+        speed: traits.speed ?? (traits.kind === 'drone' ? SPECIALS.drone.speed : traits.kind === 'bomber' ? SPECIALS.bomber.speed : traits.kind === 'heavy' ? SPECIALS.heavy.speed : plan.walkSpeed),
+        ...(traits.kind ? { kind: traits.kind } : {}),
+        ...(traits.kind === 'bomber' ? { attackDamage: 0 } : traits.kind === 'drone' ? { attackDamage: SPECIALS.drone.damage } : traits.kind === 'heavy' ? { attackDamage: SPECIALS.heavy.damage } : {}),
+        ...(traits.shield ? { shield: traits.shield } : {}),
+        ...(traits.guard ? { guard: traits.guard } : {}),
+      });
+      robot.hold = traits.hold ?? false;
+      robot.root.rotation.y = THREE.MathUtils.degToRad(headingDeg);
+      return game.robots.indexOf(robot);
+    },
+    plainRounds(on) {
+      game.director.plain = on;
+    },
+    composition() {
+      return game.director.composition;
+    },
+    entryFor(route) {
+      const entry = game.director.entryFor(route);
+      return entry ? { id: entry.id, area: entry.area, x: entry.at[0], z: entry.at[1] } : null;
+    },
+    forceCounters(counters) {
+      game.director.counters = counters;
+    },
+    argus() {
+      const { argus } = game;
+      return {
+        offline: argus.offline,
+        active: argus.active.map((a) => ({ ...a })),
+        history: argus.history.map((analysis) => ({ round: analysis.round, lines: analysis.lines.map((line) => ({ ...line })), adaptations: analysis.adaptations.map((a) => ({ ...a })), withdrawn: analysis.withdrawn.map((a) => ({ ...a })) })),
+        notes: { ...argus.roundNotes, damage: { ...argus.roundNotes.damage } },
+        report: argus.report(),
+      };
+    },
+    argusSay(cue) {
+      return game.argus.say(cue);
     },
     holdRounds(on) {
       game.director.paused = on;
@@ -746,7 +816,16 @@ export function installDebugApi(game: Game): DebugTools {
         prompt: prompt ? { text: prompt.text, cost: prompt.cost, usable: prompt.usable } : null,
         health: Math.round(player.health),
         kills: stats.kills,
-        robots: game.robots.map((robot) => ({ x: robot.position.x, z: robot.position.z, alive: robot.alive, entry: robot.entry, area: world.areaOf(robot.position.x, robot.position.z) })),
+        robots: game.robots.map((robot) => ({
+          x: robot.position.x,
+          z: robot.position.z,
+          alive: robot.alive,
+          entry: robot.entry,
+          area: world.areaOf(robot.position.x, robot.position.z),
+          kind: robot.kind,
+          shield: robot.armour.shield,
+          guard: robot.armour.guard,
+        })),
         position: { x: player.position.x, z: player.position.z },
         lights: game.lights.liveNames,
         autopilot: game.autopilot ? pilot.status : 'off',

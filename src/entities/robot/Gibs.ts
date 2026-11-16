@@ -53,7 +53,7 @@ export class Gibs {
   constructor(model: RobotModel) {
     this.group.name = 'gibs';
     for (let i = 0; i < FX.maxGibs; i++) {
-      const mesh = new THREE.Mesh(model.chunks[0]!.geometry, model.material);
+      const mesh = new THREE.Mesh(model.chunks[0]!.geometry, model.chunkMaterial);
       mesh.visible = false;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -92,7 +92,7 @@ export class Gibs {
 
       bone.matrixWorld.decompose(_position, _quaternion, _scale);
       gib.mesh.geometry = chunk.geometry;
-      gib.mesh.material = model.material;
+      gib.mesh.material = model.chunkMaterial;
       gib.mesh.position.copy(chunk.offset).applyMatrix4(bone.matrixWorld);
       gib.mesh.quaternion.copy(_quaternion);
       gib.mesh.scale.copy(_scale);

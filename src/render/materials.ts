@@ -218,3 +218,28 @@ function addWallWeathering(material: THREE.MeshStandardMaterial, rail: number, c
   };
   material.customProgramCacheKey = () => `wall-weathering-${rail}-${ceiling}`;
 }
+
+/**
+ * Three.js draws a see-through, two-sided surface in two goes (its backs,
+ * then its fronts), and marks the material as changed for each. A changed
+ * material has its shader chosen afresh and every light handed to the
+ * graphics card again, so a dozen small panes of glass in view cost a
+ * megabyte of throw-away memory a frame, and the pauses to clear it up.
+ * For glass on a lamp, and for anything that only adds light, one go
+ * looks the same. Call this on everything built, before the shaders are.
+ * Returns how many materials it set.
+ */
+export function drawSeeThroughOnce(root: THREE.Object3D): number {
+  let set = 0;
+  root.traverse((node) => {
+    const material = (node as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+    if (!material) return;
+    for (const one of Array.isArray(material) ? material : [material]) {
+      if (one.transparent && one.side === THREE.DoubleSide && !one.forceSinglePass) {
+        one.forceSinglePass = true;
+        set++;
+      }
+    }
+  });
+  return set;
+}

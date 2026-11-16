@@ -10,7 +10,7 @@ import { accuracy, readBest, type RunStats } from './game/RunStats';
 import { KEY_IDS } from './sim/mission';
 import { AREA_NAMES } from './world/plan';
 import { Hud } from './ui/Hud';
-import { Screens } from './ui/Screens';
+import { Screens, type ProfileCard } from './ui/Screens';
 
 async function boot(): Promise<void> {
   const app = document.getElementById('app')!;
@@ -33,7 +33,10 @@ async function boot(): Promise<void> {
   let tools: DebugTools | null = null;
   if (debug) {
     tools = installDebugApi(game);
-    window.__HO!.announcement = { clear: () => hud.announcer.dismiss(), freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
+    window.__HO!.announcement = { clear: () => {
+        hud.announcer.dismiss();
+        hud.dismissArgus();
+      }, freezeAt: (seconds) => hud.announcer.freezeAt(seconds), status: () => hud.announcer.status };
   }
 
   // Phones and tablets get the scene and a friendly note instead of a game
@@ -56,9 +59,11 @@ async function boot(): Promise<void> {
     if (automatic) hud.showToast(`Graphics lowered to ${QUALITY[level].label} to keep the game smooth`);
   };
   game.onHit = (hit) => {
-    hud.hit(hit.weakPoint, hit.killed);
+    hud.hit(hit.weakPoint, hit.killed, hit.guardBroke ? 'guardBroke' : hit.resisted ? 'resisted' : hit.guarded ? 'guarded' : hit.plated ? 'plated' : null);
     hud.scrapChange(hit.scrap);
   };
+  game.onAnalysis = (analysis) => hud.analysis(analysis);
+  game.onRemark = (line) => hud.remark(line);
   game.onPlayerHurt = (angle) => hud.damage(angle);
   game.onRound = (event, round, amount) => {
     if (event === 'start') hud.roundStarted(round, amount);
@@ -81,8 +86,33 @@ async function boot(): Promise<void> {
     bestRound: readBest().round,
     bestMissionTime: readBest().missionTime,
   });
-  game.onGameOver = (stats, best) => screens.setSummary(summary(stats, best));
-  game.onSaved = (stats, best) => screens.setSaved(summary(stats, best));
+  /** The end-of-run card: ARGUS's profile of the player, with this page's address on it. */
+  const profileCard = (stats: RunStats): ProfileCard => {
+    const report = game.argus.report();
+    return {
+      label: report.profile.label,
+      verdict: report.profile.verdict,
+      round: Math.max(1, stats.round),
+      saved: stats.missionTime !== null,
+      favourite: report.favourite,
+      weakShare: report.weakShare,
+      accuracy: accuracy(stats),
+      heldShare: report.heldShare,
+      kills: stats.kills,
+      laps: report.laps,
+      adaptations: report.adaptations,
+      // (Without "https://" and any "index.html", so that it is short enough to read off a screenshot and type.)
+      url: (location.host + location.pathname).replace(/index\.html$/, ''),
+    };
+  };
+  game.onGameOver = (stats, best) => {
+    screens.setSummary(summary(stats, best));
+    screens.setProfile(profileCard(stats));
+  };
+  game.onSaved = (stats, best) => {
+    screens.setSaved(summary(stats, best));
+    screens.setProfile(profileCard(stats));
+  };
   game.onNotice = (title, detail) => hud.notice(title, detail);
 
   // ---- Interface -> game

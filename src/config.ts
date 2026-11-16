@@ -321,7 +321,7 @@ export const MISSION = {
    * is a smaller fight than one started in round 9 with everything.)
    */
   uplinkWaveInterval: 5,
-  uplinkWaveBase: 1,
+  uplinkWaveBase: 0,
   uplinkWaveRounds: 3,
   uplinkWaveMax: 4,
   /** Seconds the kill switch takes to arm, and how far into that ARGUS's own unit arrives. */

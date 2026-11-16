@@ -1,6 +1,7 @@
 // The full-screen overlays: loading, the start screen, pause with its
-// settings, game over, HUMANITY SAVED, the credits list, and the "use a
-// computer" notice for phones.
+// settings, game over, HUMANITY SAVED, the end-of-run card ("ARGUS's
+// profile of you"), the credits list, and the "use a computer" notice for
+// phones.
 
 import { BRIGHTNESS, QUALITY, QUALITY_ORDER, type QualityLevel } from '../config';
 import { settings } from '../core/settings';
@@ -49,7 +50,42 @@ export interface RunSummary {
   bestMissionTime: number | null;
 }
 
+/** What goes on "ARGUS's profile of you", the card at the end of a run. */
+export interface ProfileCard {
+  /** The play style ARGUS settled on, and its one-line verdict. */
+  label: string;
+  verdict: string;
+  round: number;
+  /** The kill switch was pulled. */
+  saved: boolean;
+  /** The weapon that did most of the damage, and its share of it (0..1); null if no damage was done. */
+  favourite: { name: string; share: number } | null;
+  /** Shares, 0..1: hits on weak points, shots that hit, the fighting spent holding one spot. */
+  weakShare: number;
+  accuracy: number;
+  heldShare: number;
+  kills: number;
+  laps: number;
+  /** Every counter ARGUS used, with the rounds it was in force. */
+  adaptations: Array<{ name: string; rounds: number[] }>;
+  /** The page's own address, printed on the card so that a screenshot of it carries the link. */
+  url: string;
+}
+
 const clock = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
+const percent = (share: number): string => `${Math.round(share * 100)}%`;
+
+/** "3, 4, 5, 8" as "ROUNDS 3–5, 8". */
+function roundsList(rounds: number[]): string {
+  const runs: string[] = [];
+  for (let i = 0; i < rounds.length; i++) {
+    let j = i;
+    while (j + 1 < rounds.length && rounds[j + 1] === rounds[j]! + 1) j++;
+    runs.push(j > i ? `${rounds[i]}–${rounds[j]}` : String(rounds[i]));
+    i = j;
+  }
+  return `${rounds.length > 1 ? 'ROUNDS' : 'ROUND'} ${runs.join(', ')}`;
+}
 
 export class Screens {
   onStart: Handler = () => {};
@@ -70,6 +106,9 @@ export class Screens {
   private readonly pause: HTMLElement;
   private readonly over: HTMLElement;
   private readonly saved: HTMLElement;
+  private readonly profile: HTMLElement;
+  /** The screen the profile card was opened from, to go back to. */
+  private profileFrom: 'over' | 'saved' = 'over';
   private readonly credits: HTMLElement;
   private readonly touch: HTMLElement;
   private readonly qualityButtons = new Map<string, HTMLElement>();
@@ -113,6 +152,10 @@ export class Screens {
     // ---- HUMANITY SAVED
     this.saved = h('div', 'screen saved hidden');
     parent.appendChild(this.saved);
+
+    // ---- ARGUS's profile of the player
+    this.profile = h('div', 'screen profile hidden');
+    parent.appendChild(this.profile);
 
     // ---- Pause and settings
     this.pause = h('div', 'screen pause hidden');
@@ -182,6 +225,8 @@ export class Screens {
       else if (action === 'resume') this.onResume();
       else if (action === 'restart') this.onRestart();
       else if (action === 'quit') this.onQuit();
+      else if (action === 'profile') this.show('profile');
+      else if (action === 'profile-back') this.show(this.profileFrom);
       else if (action === 'credits') this.show('credits');
       else if (action === 'credits-back') this.show('pause');
       else if (target.dataset.quality) {
@@ -202,8 +247,10 @@ export class Screens {
   }
 
   /** Show one overlay, or none. */
-  show(which: 'loading' | 'title' | 'pause' | 'over' | 'saved' | 'credits' | 'touch' | 'none'): void {
+  show(which: 'loading' | 'title' | 'pause' | 'over' | 'saved' | 'profile' | 'credits' | 'touch' | 'none'): void {
+    if (which === 'over' || which === 'saved') this.profileFrom = which;
     this.saved.classList.toggle('hidden', which !== 'saved');
+    this.profile.classList.toggle('hidden', which !== 'profile');
     this.loading.classList.toggle('hidden', which !== 'loading');
     this.title.classList.toggle('hidden', which !== 'title');
     this.pause.classList.toggle('hidden', which !== 'pause');
@@ -238,8 +285,47 @@ export class Screens {
         <div class="over-best">${record}</div>
         <div class="over-stats">${rows.map(([label, value]) => `<div class="over-stat"><span>${label}</span><b>${value}</b></div>`).join('')}</div>
         <div class="saved-note">The switch is pulled and every machine it ran has stopped. The ones still outside have not heard. Fight on for a higher round, or end the run here.</div>
-        <div class="panel-actions"><button class="button primary" data-action="resume">KEEP FIGHTING</button><button class="button" data-action="quit">END RUN</button></div>
+        <div class="panel-actions"><button class="button primary" data-action="resume">KEEP FIGHTING</button><button class="button" data-action="profile">ARGUS'S PROFILE OF YOU</button><button class="button" data-action="quit">END RUN</button></div>
       </div>`;
+  }
+
+  /**
+   * Fill in the end-of-run card: what ARGUS made of the player. It is laid
+   * out to be screenshotted, with the page's own address on it.
+   */
+  setProfile(card: ProfileCard): void {
+    const capital = (text: string): string => text.charAt(0).toUpperCase() + text.slice(1);
+    const stats: Array<[string, string, string]> = [
+      ['FAVOURITE WEAPON', card.favourite ? card.favourite.name.toUpperCase() : 'NONE', card.favourite ? `${percent(card.favourite.share)} of damage` : ''],
+      ['WEAK-POINT HITS', percent(card.weakShare), 'of hits'],
+      ['ACCURACY', percent(card.accuracy), 'of shots'],
+      ['ROBOTS DESTROYED', card.kills.toLocaleString('en-US'), ''],
+      ['HELD ONE POSITION', percent(card.heldShare), 'of the fighting'],
+      ['LAPS RUN', String(card.laps), ''],
+    ];
+    const adaptations = card.adaptations.length
+      ? `<ul>${card.adaptations.map((used) => `<li><span>${capital(used.name)}</span><i>${roundsList(used.rounds)}</i></li>`).join('')}</ul>`
+      : `<div class="profile-none">None. ${card.round < 3 ? 'It was still watching.' : 'You gave it no pattern to answer.'}</div>`;
+    this.profile.innerHTML = `
+      <div class="profile-card${card.saved ? ' saved' : ''}">
+        <div class="profile-top"><span><i class="argus-eye"></i><b>ARGUS</b> · SUBJECT PROFILE</span><span class="profile-game">HUMAN <span>OVERRIDE</span></span></div>
+        <div class="profile-main">
+          <div>
+            <div class="profile-kicker">PLAY STYLE</div>
+            <div class="profile-label">${card.label}</div>
+            <div class="profile-verdict"><b>ARGUS</b>${card.verdict}</div>
+          </div>
+          <div class="profile-outcome">
+            <div class="profile-kicker">ROUND REACHED</div>
+            <div class="profile-round">${card.round}</div>
+            <div class="profile-stamp">${card.saved ? 'HUMANITY SAVED' : 'ARGUS WINS'}</div>
+          </div>
+        </div>
+        <div class="profile-stats">${stats.map(([label, value, note]) => `<div class="profile-stat"><span>${label}</span><b>${value}${note ? `<small>${note}</small>` : ''}</b></div>`).join('')}</div>
+        <div class="profile-adaptations"><div class="profile-kicker">ADAPTATIONS USED AGAINST YOU</div>${adaptations}</div>
+        <div class="profile-foot"><span>DON'T LET THE AI WIN.</span><span class="profile-url">${card.url}</span></div>
+      </div>
+      <div class="panel-actions"><button class="button primary" data-action="profile-back">BACK</button></div>`;
   }
 
   /** Fill in the game-over screen for a finished run. */
@@ -263,7 +349,7 @@ export class Screens {
         <div class="over-title">YOU HELD UNTIL <span>ROUND ${run.round}</span></div>
         <div class="over-best">${run.best ? 'A new best.' : run.bestRound > 0 ? `Your best is round ${run.bestRound}.` : ''}</div>
         <div class="over-stats">${rows.map(([label, value]) => `<div class="over-stat"><span>${label}</span><b>${value}</b></div>`).join('')}</div>
-        <div class="panel-actions"><button class="button primary" data-action="restart">PLAY AGAIN</button><button class="button" data-action="quit">TITLE SCREEN</button></div>
+        <div class="panel-actions"><button class="button primary" data-action="restart">PLAY AGAIN</button><button class="button" data-action="profile">ARGUS'S PROFILE OF YOU</button><button class="button" data-action="quit">TITLE SCREEN</button></div>
       </div>`;
   }
 

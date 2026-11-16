@@ -5,7 +5,8 @@
 // stays crisp at any resolution.
 
 import type { QualityLevel } from '../config';
-import { QUALITY } from '../config';
+import { ARGUS, QUALITY } from '../config';
+import { settings } from '../core/settings';
 import { RoundAnnouncer } from './RoundAnnouncer';
 
 function el(tag: string, className: string, parent: HTMLElement, text = ''): HTMLElement {
@@ -67,6 +68,16 @@ export interface HudState {
   debug: string[] | null;
 }
 
+/** What ARGUS's banner shows: the round the counters are for, and what it saw and is doing about it. */
+export interface HudAnalysis {
+  round: number;
+  lines: Array<{ observed: string; adapting: string }>;
+}
+
+/** Why a hit did less than it might have: the word shown under the crosshair. */
+export type HitNote = 'resisted' | 'plated' | 'guarded' | 'guardBroke';
+const HIT_NOTES: Record<HitNote, string> = { resisted: 'RESISTED', plated: 'ARMOUR', guarded: 'PLATE', guardBroke: 'PLATE OFF' };
+
 const MAX_MARKERS = 3;
 
 export class Hud {
@@ -107,6 +118,18 @@ export class Hud {
   private readonly debug: HTMLElement;
   private readonly hint: HTMLElement;
   private readonly toast: HTMLElement;
+  private readonly hitNote: HTMLElement;
+  private readonly analysisPanel: HTMLElement;
+  private readonly analysisRound: HTMLElement;
+  private readonly analysisLines: HTMLElement;
+  private readonly remarkLine: HTMLElement;
+  private readonly remarkText: HTMLElement;
+  // When each of these comes down, by the clock on the wall (the game's own
+  // clock can be stopped or stepped by the debug tools; what is on screen
+  // for a person to read should not be).
+  private analysisUntil = 0;
+  private remarkUntil = 0;
+  private hitNoteUntil = 0;
 
   private hitTimer = 0;
   private damageTimer = 0;
@@ -195,6 +218,24 @@ export class Hud {
     this.hint.innerHTML =
       '<b>WASD</b> move <i>·</i> <b>CLICK</b> fire <i>·</i> <b>RIGHT CLICK</b> aim <i>·</i> <b>R</b> reload <i>·</i> <b>V</b> melee <i>·</i> <b>F</b> use <i>·</i> <b>1 2</b> weapons <i>·</i> <b>SHIFT</b> sprint <i>·</i> <b>ESC</b> pause';
     this.toast = el('div', 'hud-toast', this.root);
+
+    // Under the crosshair: why a hit did less than it might have.
+    this.hitNote = el('div', 'hit-note', this.root);
+
+    // ARGUS's side of the screen (the player's objective is on the left,
+    // in the mission's colour; what ARGUS has made of them is on the
+    // right, in its own): the analysis shown between rounds, and under it
+    // the remarks it passes during them.
+    const argus = el('div', 'hud-argus', this.root);
+    this.analysisPanel = el('div', 'argus-analysis', argus);
+    const head = el('div', 'argus-head', this.analysisPanel);
+    el('i', 'argus-eye', head);
+    el('span', 'argus-title', head, 'ARGUS ANALYSIS');
+    this.analysisRound = el('span', 'argus-round', head);
+    this.analysisLines = el('div', 'argus-lines', this.analysisPanel);
+    this.remarkLine = el('div', 'argus-remark', argus);
+    el('span', 'argus-remark-name', this.remarkLine, 'ARGUS');
+    this.remarkText = el('span', 'argus-remark-text', this.remarkLine);
   }
 
   setVisible(visible: boolean): void {
@@ -211,15 +252,77 @@ export class Hud {
     this.damageTimer = 0;
     this.hitTimer = 0;
     this.hitMarker.className = 'hitmarker';
+    this.hitNoteUntil = 0;
+    this.hitNote.classList.remove('show');
+    this.analysisUntil = 0;
+    this.analysisPanel.classList.remove('show');
+    this.remarkUntil = 0;
+    this.remarkLine.classList.remove('show');
   }
 
-  /** A shot landed. `weak` = weak-point hit, `kill` = it destroyed the robot. */
-  hit(weak: boolean, kill: boolean): void {
+  /**
+   * A shot landed. `weak` = weak-point hit, `kill` = it destroyed the
+   * robot. `note` says why it did less than it might have, if it did: the
+   * robot's shielding, a heavy's plating, or the plate over a weak point.
+   */
+  hit(weak: boolean, kill: boolean, note: HitNote | null = null): void {
     this.hitTimer = kill ? 0.32 : 0.16;
-    this.hitMarker.className = `hitmarker show${weak ? ' weak' : ''}${kill ? ' kill' : ''}`;
+    this.hitMarker.className = `hitmarker show${weak ? ' weak' : ''}${kill ? ' kill' : ''}${note && !kill ? ' dull' : ''}`;
     // Restart the pop animation.
     void this.hitMarker.offsetWidth;
     this.hitMarker.classList.add('pop');
+    if (note) {
+      this.hitNote.textContent = HIT_NOTES[note];
+      this.hitNote.className = `hit-note show ${note}`;
+      this.hitNoteUntil = performance.now() + (note === 'guardBroke' ? 1100 : 550);
+    }
+  }
+
+  /** ARGUS has finished its analysis of the round: show its banner. The game carries on behind it. */
+  analysis(analysis: HudAnalysis): void {
+    this.analysisRound.textContent = `ROUND ${analysis.round}`;
+    this.analysisLines.textContent = '';
+    analysis.lines.forEach((line, i) => {
+      const row = el('div', 'argus-line', this.analysisLines);
+      row.style.setProperty('--i', String(i));
+      const seen = el('div', 'argus-observed', row);
+      el('b', '', seen, 'OBSERVED');
+      el('span', '', seen, line.observed);
+      // "Adapting: rifle-resistant plating." becomes a label and what follows it.
+      const colon = line.adapting.indexOf(':');
+      const doing = el('div', `argus-adapting ${line.adapting.slice(0, colon).toLowerCase()}`, row);
+      el('b', '', doing, line.adapting.slice(0, colon).toUpperCase());
+      el('span', '', doing, line.adapting.slice(colon + 1).trim());
+    });
+    this.analysisPanel.classList.toggle('calm', settings.value.reducedMotion);
+    this.analysisPanel.classList.remove('show');
+    void this.analysisPanel.offsetWidth;
+    this.analysisPanel.classList.add('show');
+    this.analysisUntil = performance.now() + ARGUS.bannerSeconds * 1000;
+  }
+
+  /** ARGUS passes a remark. */
+  remark(line: string): void {
+    this.remarkText.textContent = line;
+    this.remarkLine.style.setProperty('--chars', String(line.length));
+    this.remarkLine.classList.toggle('calm', settings.value.reducedMotion);
+    this.remarkLine.classList.remove('show');
+    void this.remarkLine.offsetWidth;
+    this.remarkLine.classList.add('show');
+    this.remarkUntil = performance.now() + ARGUS.remarkSeconds * 1000;
+  }
+
+  /** Take down ARGUS's banner and remark at once (for staged screenshots). */
+  dismissArgus(): void {
+    this.analysisUntil = 0;
+    this.remarkUntil = 0;
+    this.analysisPanel.classList.remove('show');
+    this.remarkLine.classList.remove('show');
+  }
+
+  /** What ARGUS has on screen right now (for the checks). */
+  get argusShowing(): { analysis: boolean; remark: string | null } {
+    return { analysis: this.analysisUntil > 0, remark: this.remarkUntil > 0 ? this.remarkText.textContent : null };
   }
 
   /** Scrap was earned (positive) or spent (negative): a number floats up beside the crosshair. */
@@ -451,6 +554,19 @@ export class Hud {
     }
 
     if (this.hintTimer > 0) this.hintTimer -= dt;
+    const now = performance.now();
+    if (this.hitNoteUntil && now >= this.hitNoteUntil) {
+      this.hitNoteUntil = 0;
+      this.hitNote.classList.remove('show');
+    }
+    if (this.analysisUntil && now >= this.analysisUntil) {
+      this.analysisUntil = 0;
+      this.analysisPanel.classList.remove('show');
+    }
+    if (this.remarkUntil && now >= this.remarkUntil) {
+      this.remarkUntil = 0;
+      this.remarkLine.classList.remove('show');
+    }
     if (this.toastTimer > 0) {
       this.toastTimer -= dt;
       if (this.toastTimer <= 0) this.toast.classList.remove('show');

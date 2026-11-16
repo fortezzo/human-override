@@ -220,10 +220,11 @@ export class Effects {
   /** A robot's shielding turning part of a shot: a splash of light in the shielding's own colour. */
   shieldHit(point: THREE.Vector3, shotDirection: THREE.Vector3, color: THREE.Color): void {
     const p = this.particles;
-    const tint = { r: color.r * 9, g: color.g * 9, b: color.b * 9 };
+    const tint = { r: color.r * 6, g: color.g * 6, b: color.b * 6 };
     _dir.copy(shotDirection).negate();
     this.sparks(point, _dir, p.scaled(10), 1.2, 1.5, 5, tint);
-    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.12, size: 0.5, sizeEnd: 0.9, ...tint, alpha: 0.5 });
+    // (Small and brief, like the glint of any other hit: it must not hide the robot being shot at.)
+    p.emitGlow({ x: point.x, y: point.y, z: point.z, vx: 0, vy: 0, vz: 0, life: 0.07, size: 0.2, sizeEnd: 0.34, ...tint, alpha: 0.4 });
   }
 
   /** The plate over a weak point coming off: a clang's worth of sparks, and the plate's fragments. */

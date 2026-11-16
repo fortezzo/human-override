@@ -12,10 +12,11 @@ import { CUSTODIAN } from '../entities/robot/designs/custodian';
 import { DRONE } from '../entities/robot/designs/drone';
 import { HEAVY } from '../entities/robot/designs/heavy';
 import { PROXY } from '../entities/robot/designs/proxy';
+import { Argus } from './Argus';
 import { Mission } from './Mission';
 import { Sight } from './Sight';
 import { AudioEngine } from '../audio/AudioEngine';
-import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROUNDS, SCRAP, SPECIALS, type QualityLevel } from '../config';
+import { GOVERNOR, LOOK, LOOKDEV, QUALITY, QUALITY_ORDER, ROBOT, ROUNDS, SCRAP, SPECIALS, type QualityLevel } from '../config';
 import { Assets } from '../core/assets';
 import { Input } from '../core/input';
 import { damp, rand } from '../core/math';
@@ -33,9 +34,10 @@ import { Effects } from '../fx/Effects';
 import { Particles } from '../fx/Particles';
 import { updateShaftTime } from '../render/atmosphere';
 import { LightRig } from '../render/lighting';
-import { MaterialLibrary, type SurfaceKind } from '../render/materials';
+import { MaterialLibrary, drawSeeThroughOnce, type SurfaceKind } from '../render/materials';
 import { bakeReflectionProbe, blankEnvironment, countBrokenPixels } from '../render/reflectionProbe';
 import { Renderer } from '../render/Renderer';
+import type { Analysis } from '../sim/argus';
 import { createWallet, earn, type Wallet } from '../sim/economy';
 import { floodFrom } from '../sim/navGrid';
 import { ROOM, PLAYER_START } from '../world/lobby/plan';
@@ -85,6 +87,8 @@ export class Game {
   interactions!: Interactions;
   /** The mission: power, the three keys, the core, the kill switch. */
   mission!: Mission;
+  /** ARGUS: what it has noticed about the player, and what it is doing about it. */
+  argus!: Argus;
   /** Scrap, and what happened this run. */
   wallet: Wallet = createWallet(SCRAP.start);
   /** Scrap earned in the run before the round now being played began. */
@@ -111,6 +115,10 @@ export class Game {
   onGameOver: (stats: RunStats, best: boolean) => void = () => {};
   /** Something in the mission has just happened: a line for the HUD. */
   onNotice: (title: string, detail: string) => void = () => {};
+  /** ARGUS has finished its analysis of the last round: show the banner. */
+  onAnalysis: (analysis: Analysis) => void = () => {};
+  /** ARGUS has a remark to make. */
+  onRemark: (line: string) => void = () => {};
   /** The kill switch has been pulled. `best` is true if no run has finished the mission faster. */
   onSaved: (stats: RunStats, best: boolean) => void = () => {};
 
@@ -240,8 +248,11 @@ export class Game {
     // A spare robot that is never shown. While it exists the robots' shaders
     // stay built between rounds, and are rebuilt along with everything else
     // when the quality level changes, so the first robot of a round never
-    // stalls the game.
-    this.spare = new Robot(this.robotModel, 0, 0, 0);
+    // stalls the game. It wears ARGUS's shielding and a plate over its visor
+    // for the same reason: a shield's shader is thrown away when the last
+    // shielded robot of a round is cleared off the floor, and would have to
+    // be built again for the first one of the next.
+    this.spare = new Robot(this.robotModel, 0, 0, 0, { health: ROBOT.health, speed: ROBOT.walkSpeed, shield: 'carbine', guard: 1 });
     this.spare.root.visible = false;
     // Parked under the floor, and exempt from the "is it in view?" test so
     // that the one time it is drawn (see warmShadows) it is drawn for sure.
@@ -255,7 +266,14 @@ export class Game {
     this.scene.add(this.escort);
 
     this.sight = new Sight(this.camera, () => this.world.solids);
-    this.director = new Director(this.world, this.robots, (x, z, heading, traits) => this.addRobot(x, z, heading, traits), this.sight);
+    this.director = new Director(
+      this.world,
+      this.robots,
+      (x, z, heading, traits) => this.addRobot(x, z, heading, traits),
+      this.sight,
+      () => ({ x: this.player.position.x, z: this.player.position.z, vx: this.player.velocity.x, vz: this.player.velocity.z }),
+    );
+    this.argus = new Argus(this.director, this.player, this.robots);
     this.combat = new Combat(this.world, this.robots, this.player, this.camera, this.view, this.effects, this.casings, this.audio);
     this.mission = new Mission(this.world, this.director, this.lights, this.audio, this.player, this.camera, this.robots);
     this.interactions = new Interactions(this.world, this.player, this.camera, this.weapons, () => this.wallet, this.mission);
@@ -272,6 +290,7 @@ export class Game {
     // Compile every shader up front, in the background, so neither the first
     // frame nor the first gunshot or destroyed robot causes a stutter.
     onProgress(0.94);
+    drawSeeThroughOnce(this.scene);
     const standIn = this.useStandInEnvironment();
     await this.warmShaders();
     lap('compile shaders');
@@ -288,7 +307,10 @@ export class Game {
   private wireEvents(): void {
     const { weapons, player, audio, combat, director, interactions } = this;
     weapons.onShot = (shot) => combat.shot(shot);
-    weapons.onDryFire = () => audio.play('rifleDry');
+    weapons.onDryFire = () => {
+      audio.play('rifleDry');
+      this.argus.say('emptyGun');
+    };
     weapons.onReloadStage = (stage) => audio.play(stage === 'magOut' ? 'reloadMagOut' : stage === 'magIn' ? 'reloadMagIn' : 'reloadBolt');
     weapons.onSwitch = (weapon) => {
       this.view.show(weapon.id);
@@ -298,6 +320,7 @@ export class Game {
     weapons.onMeleeLand = () => combat.strike();
 
     combat.onHit = (hit) => {
+      this.argus.hit(hit);
       let scrap = hit.scrap;
       if (hit.killed) {
         this.stats.kills++;
@@ -326,21 +349,35 @@ export class Game {
       audio.play('sting');
       this.onRound('start', round, director.rounds.plan.count);
       this.mission.roundStarted(round);
+      this.argus.roundStarted(round);
     };
+    this.argus.onAnalysis = (analysis) => {
+      audio.play('argusAnalysis');
+      this.onAnalysis(analysis);
+    };
+    this.argus.onRemark = (line) => {
+      audio.play('argusRemark');
+      this.onRemark(line);
+    };
+    this.mission.onCue = (cue) => this.argus.say(cue);
 
     this.mission.onNotice = (title, detail) => this.onNotice(title, detail);
     this.mission.onPowerDown = () => {
       for (const robot of this.robots) robot.powerDown();
+      // ARGUS is off: it neither watches nor adapts from here on.
+      this.argus.shutDown();
     };
     this.mission.onSaved = () => this.showSaved();
     director.onRoundClear = (round) => {
       audio.play('roundClear');
       this.onRound('clear', round, this.wallet.earned - this.earnedBeforeRound);
+      this.argus.roundCleared(round);
     };
 
     interactions.onPurchase = (purchase) => {
       this.stats.scrapSpent += purchase.cost;
       audio.play('buy');
+      if (purchase.kind === 'weapon') this.argus.say('newWeapon');
       if (purchase.kind === 'door') {
         this.stats.doorsOpened++;
         audio.play('doorOpen', { position: purchase.door.centre });
@@ -606,6 +643,7 @@ export class Game {
     this.world.reset();
     this.director.reset();
     this.director.forceEntry = null;
+    this.argus.reset();
     this.mission.reset();
     this.weapons.reset();
     this.view.show(this.weapons.def.id);
@@ -796,6 +834,7 @@ export class Game {
     if (!this.debugCamera && this.world.track(player.position.x, player.position.z)) this.areaChanged();
 
     weapons.update(dt, player);
+    this.argus.update(dt);
     this.view.root.visible = !this.hideWeapon;
     this.view.update(dt, player, look, { reload: weapons.reload, swap: weapons.swap, strike: weapons.strike });
 
@@ -936,7 +975,7 @@ export class Game {
         robot.dispose();
         this.robots.splice(i, 1);
         if (robot.extra) this.mission.robotLost(robot);
-        else this.director.recalled();
+        else this.director.recalled(robot);
       }
     }
 

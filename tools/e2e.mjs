@@ -1499,7 +1499,20 @@ try {
   check('and only once', Object.values((await mission()).keys).filter(Boolean).length === 1);
 
   // ---- 2b. The uplink: hold the ground round it for a minute.
-  await ev(() => window.__HO.holdRounds(false));
+  // (In round 6, when ARGUS has robots to spare for it: an uplink started in
+  // the first rounds draws none beyond the round's own.)
+  await ev(() => {
+    const ho = window.__HO;
+    ho.holdRounds(false);
+    for (let i = 0; i < 4000 && ho.run().round < 6; i++) {
+      ho.step(1 / 60, 10);
+      if (ho.run().round < 6 && ho.game.director.rounds.phase === 'active') {
+        ho.clearRobots();
+        ho.skipRound();
+      }
+    }
+    ho.clearRobots();
+  });
   await standAt('uplink');
   const uplinkPrompt = (await run()).prompt;
   await tap('interact');
@@ -1537,7 +1550,11 @@ try {
     `20.0 s after 20 s, ${held.at59.toFixed(1)} s and no key after 59, the key at 60`,
   );
   check('its clock stops while the player is away, and the tracker says so', Math.abs(held.awayHeld) < 0.05 && held.awayTitle === 'GET BACK TO THE UPLINK', `${held.awayHeld.toFixed(2)} s gained in ten seconds away: "${held.awayTitle}"`);
-  check('ARGUS sends more robots at the uplink than the round would', held.wave >= 4, `up to ${held.wave} extra robots on the map`);
+  // (How many at once depends on the round: an uplink started early is a smaller fight.)
+  const waveRules = (await mission()).rules;
+  const waveRound = (await run()).round;
+  const waveAllowed = Math.min(waveRules.uplinkWaveMax, waveRules.uplinkWaveBase + Math.floor(waveRound / waveRules.uplinkWaveRounds));
+  check('ARGUS sends more robots at the uplink than the round would, as many at once as the round allows', held.wave >= 1 && held.wave === waveAllowed && waveRules.uplinkWaveMax > waveRules.uplinkWaveBase, `up to ${held.wave} extra robots on the map in round ${waveRound} (${waveRules.uplinkWaveMax} from round ${(waveRules.uplinkWaveMax - waveRules.uplinkWaveBase) * waveRules.uplinkWaveRounds} on)`);
 
   // ---- 2c. The Custodian arrives with a later round (the config says which) and carries the third key.
   m = await mission();
@@ -1743,8 +1760,24 @@ try {
   }));
   check(
     'then the HUMANITY SAVED screen shows the run, with the choice to fight on or stop',
-    ending.state === 'saved' && ending.shown && ending.title === 'HUMANITY SAVED' && ending.stats.length === 6 && ending.stats[0].startsWith('Mission time') && ending.buttons.join() === 'KEEP FIGHTING,END RUN',
+    ending.state === 'saved' && ending.shown && ending.title === 'HUMANITY SAVED' && ending.stats.length === 6 && ending.stats[0].startsWith('Mission time') && ending.buttons.join() === "KEEP FIGHTING,ARGUS'S PROFILE OF YOU,END RUN",
     `${ending.stats.slice(0, 3).join(', ')}`,
+  );
+  // ARGUS's profile of the player is offered here too, and says how it ended.
+  await page.click('.screen.saved [data-action="profile"]');
+  await page.waitForTimeout(150);
+  const savedCard = await ev(() => {
+    const screen = document.querySelector('.screen.profile');
+    return { shown: !screen.classList.contains('hidden'), stamp: screen.querySelector('.profile-stamp')?.textContent, label: screen.querySelector('.profile-label')?.textContent, saved: screen.querySelector('.profile-card').classList.contains('saved') };
+  });
+  await page.click('.screen.profile [data-action="profile-back"]');
+  await page.waitForTimeout(100);
+  const backAtSaved = await ev(() => !document.querySelector('.screen.saved').classList.contains('hidden') && document.querySelector('.screen.profile').classList.contains('hidden'));
+  const argusAfter = await ev(() => ({ offline: window.__HO.argus().offline, active: window.__HO.argus().active.length, analyses: window.__HO.argus().history.length }));
+  check(
+    "it offers ARGUS's profile of the player, stamped HUMANITY SAVED; and ARGUS itself is off: it watches and adapts no more",
+    savedCard.shown && savedCard.stamp === 'HUMANITY SAVED' && savedCard.saved && /^THE [A-Z]+$/.test(savedCard.label ?? '') && backAtSaved && argusAfter.offline && argusAfter.active === 0,
+    `${savedCard.label}, ${savedCard.stamp}`,
   );
   check('the fastest mission time is remembered', Math.abs(ending.best.missionTime - ending.time) < 0.01 && ending.time > 60, `${ending.best.missionTime?.toFixed(0)} s`);
   const missionAudit = await ev(() => window.__HO.spawnAudit());
@@ -1769,7 +1802,7 @@ try {
   await step(2);
   check(
     'KEEP FIGHTING clears the wrecks away and the rounds carry on: three more are played through',
-    resumed.state === 'playing' && resumed.robots.length === 0 && endless.round >= roundThen + 4 && (await mission()).phase === 'saved',
+    resumed.state === 'playing' && resumed.robots.length === 0 && endless.round >= roundThen + 4 && (await mission()).phase === 'saved' && (await ev(() => window.__HO.argus().history.length)) === argusAfter.analyses,
     `from round ${roundThen} to round ${endless.round} in ${(endlessFrames / 3600).toFixed(1)} game minutes, ${endless.kills} destroyed in all`,
   );
   // Going down after the switch has been pulled is not ARGUS winning.
@@ -1791,6 +1824,549 @@ try {
   m = await mission();
   r = await run();
   check('a new run starts the mission afresh', m.phase === 'power' && Object.values(m.keys).every((key) => !key) && !r.doors.hallCore && m.custodian === 'waiting' && m.uplink === 'idle' && !m.suspended && (await ev(() => window.__HO.game.lights.power)) === false);
+
+  // ================================================================= ARGUS
+  // The special robots, ARGUS's four counters (each has to be something
+  // the player can see, and something they can beat by playing another
+  // way), the analysis banner, the remarks, and the end-of-run card.
+  const lobbyStart = () =>
+    ev(() => {
+      const ho = window.__HO;
+      ho.autopilot(false);
+      ho.restart();
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.step(1 / 60, 20);
+      ho.place(0, 0.5, 180, 0);
+      ho.step(1 / 60, 5);
+    });
+  /** Fire one shot at a part of a robot, and say how much of its health that took. */
+  const shootAt = (index, part) =>
+    ev(
+      ([index, part]) => {
+        const ho = window.__HO;
+        const game = ho.game;
+        const robot = index < 0 ? game.robots.find((candidate) => candidate.alive) : game.robots[index];
+        const v = new game.camera.position.constructor();
+        if (part === 'weak') robot.aimPoint(v, true);
+        else if (part === 'head') {
+          v.setFromMatrixPosition(robot.bones.get('Head').matrixWorld);
+          v.y += 0.08;
+        } else if (part === 'thigh') {
+          const hip = new v.constructor().setFromMatrixPosition(robot.bones.get('LeftUpLeg').matrixWorld);
+          v.setFromMatrixPosition(robot.bones.get('LeftLeg').matrixWorld).lerp(hip, 0.5);
+        } else robot.chest(v);
+        const eye = game.camera.position;
+        const p = game.player.position;
+        const dx = v.x - eye.x;
+        const dy = v.y - eye.y;
+        const dz = v.z - eye.z;
+        ho.place(p.x, p.z, (Math.atan2(-dx, -dz) * 180) / Math.PI, (Math.atan2(dy, Math.hypot(dx, dz)) * 180) / Math.PI);
+        ho.step(1 / 60, 4);
+        const before = robot.mind.health;
+        ho.tap('fire');
+        ho.step(1 / 60, 14);
+        return Math.round((before - robot.mind.health) * 10) / 10;
+      },
+      [index, part],
+    );
+  /** The word under the crosshair that says why a hit did less than it might have, if one is showing. */
+  const hitNote = () =>
+    ev(() => {
+      const note = document.querySelector('.hit-note');
+      return note.classList.contains('show') ? note.textContent : null;
+    });
+  const near = (a, b) => Math.abs(a - b) < 0.05;
+
+  // ---- Shielding: seen on the robot, halves the weapon it answers, beaten by anything else.
+  await lobbyStart();
+  const shielded = await ev(() => {
+    const ho = window.__HO;
+    const i = ho.spawnKind(0, 4.5, 180, { shield: 'pistol', hold: true, health: 5000 });
+    ho.step(1 / 60, 20);
+    return { i, drawn: Boolean(ho.game.robots[i].root.getObjectByName('shield')?.visible), against: ho.run().robots[i].shield };
+  });
+  const resisted = await shootAt(shielded.i, 'chest');
+  const resistedNote = await hitNote();
+  const struck = await ev((i) => {
+    const ho = window.__HO;
+    const robot = ho.game.robots[i];
+    ho.place(0, 3.0, 180, 0);
+    ho.step(1 / 60, 4);
+    const before = robot.mind.health;
+    ho.tap('melee');
+    ho.step(1 / 60, 40);
+    return before - robot.mind.health;
+  }, shielded.i);
+  check(
+    "ARGUS's shielding shows on the robot, halves the damage of the weapon it answers and says so; a strike goes straight through it",
+    shielded.drawn && shielded.against === 'pistol' && resisted === 14 && resistedNote === 'RESISTED' && struck === 150,
+    `a sidearm shot to the body did ${resisted} of its 28 ("${resistedNote}"); a strike did ${struck} of its 150`,
+  );
+
+  // ---- The plate over a weak point: seen, turns weak-point hits into ordinary ones, comes off.
+  await lobbyStart();
+  const guarded = await ev(() => {
+    const ho = window.__HO;
+    const i = ho.spawnKind(0, 4.5, 180, { guard: 60, hold: true, health: 5000 });
+    ho.step(1 / 60, 20);
+    return { i, drawn: Boolean(ho.game.robots[i].root.getObjectByName('guard')?.visible) };
+  });
+  const plated = [await shootAt(guarded.i, 'head')];
+  const plateNote = await hitNote();
+  plated.push(await shootAt(guarded.i, 'head'), await shootAt(guarded.i, 'head'));
+  const plateOffNote = await hitNote();
+  const plateGone = await ev((i) => !window.__HO.game.robots[i].root.getObjectByName('guard') && window.__HO.run().robots[i].guard === 0, guarded.i);
+  const bare = await shootAt(guarded.i, 'head');
+  check(
+    'the plate ARGUS puts over a weak point shows on the robot, makes a weak-point hit an ordinary one, and can be shot off',
+    guarded.drawn && plated.every((d) => d === 28) && plateNote === 'PLATE' && plateOffNote === 'PLATE OFF' && plateGone && near(bare, 61.6),
+    `three sidearm shots to the head did ${plated.join(', ')} ("${plateNote}", then "${plateOffNote}"); with the plate off, the next did ${bare}`,
+  );
+
+  // ---- The heavy: plated everywhere but the core in its chest.
+  await lobbyStart();
+  const heavyAt = await ev(() => {
+    const ho = window.__HO;
+    const i = ho.spawnKind(0, 5.2, 180, { kind: 'heavy', hold: true, health: 5000 });
+    ho.step(1 / 60, 20);
+    return i;
+  });
+  const coreHit = await shootAt(heavyAt, 'weak');
+  const helmetHit = await shootAt(heavyAt, 'head');
+  const armourNote = await hitNote();
+  const legHit = await shootAt(heavyAt, 'thigh');
+  check(
+    "the heavy's plating turns most of a hit anywhere but the glowing core in its chest",
+    near(coreHit, 61.6) && near(helmetHit, 8.4) && armourNote === 'ARMOUR' && legHit > 0 && legHit < 8.5,
+    `a sidearm shot did ${coreHit} to the core, ${helmetHit} to the helmet ("${armourNote}") and ${legHit} to a leg`,
+  );
+
+  // ---- The drone: flies, is fast, and is fragile.
+  await lobbyStart();
+  const drone = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const i = ho.spawnKind(4.6, 3.6, 180, { kind: 'drone' });
+    const robot = game.robots[i];
+    const v = new game.camera.position.constructor();
+    const out = { i, feet: 0, hull: 0, reached: -1, speed: robot.moveSpeed, ordinary: game.director.rounds.plan.walkSpeed, health: robot.mind.health, plan: game.director.rounds.plan.health };
+    for (let frame = 0; frame < 60 * 6; frame++) {
+      ho.step(1 / 60, 1);
+      if (frame === 30) {
+        out.feet = robot.root.position.y;
+        out.hull = robot.aimPoint(v).y;
+      }
+      const p = game.player.position;
+      if (Math.hypot(robot.position.x - p.x, robot.position.z - p.z) < 1.7) {
+        out.reached = frame / 60;
+        break;
+      }
+    }
+    return out;
+  });
+  const droneShot = await shootAt(drone.i, 'weak');
+  await step(40);
+  const droneLeft = (await run()).robots.filter((q) => q.kind === 'drone' && q.alive).length;
+  check(
+    'a drone flies at head height, is several times as fast as the walking horde, and goes down to one shot',
+    drone.feet > 0.1 && drone.hull > 1.2 && drone.hull < 1.9 && drone.reached > 0 && drone.reached < 3 && drone.speed > drone.ordinary * 3 && drone.health < drone.plan * 0.5 && droneShot > 0 && droneLeft === 0,
+    `its hull hung ${drone.hull.toFixed(2)} m off the floor; it covered 4 m in ${drone.reached.toFixed(1)} s at ${drone.speed} m/s (the horde walks at ${drone.ordinary}); one sidearm shot destroyed it`,
+  );
+
+  // ---- The bomber: primes within reach, goes off, hurts what is near it, and can be backed away from.
+  /** Let a bomber come from four metres off and go off, the player doing as told meanwhile. */
+  const blastTrial = (back) =>
+    ev((back) => {
+      const ho = window.__HO;
+      const game = ho.game;
+      ho.autopilot(false);
+      ho.restart();
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.step(1 / 60, 20);
+      ho.god(false);
+      ho.place(0, 0.5, 180, 0);
+      const i = ho.spawnKind(0, 5.0, 180, { kind: 'bomber' });
+      const robot = game.robots[i];
+      const out = { primedAt: -1, fuse: 0, blast: false, health: 100, alive: true, apart: 0 };
+      for (let frame = 0; frame < 60 * 8; frame++) {
+        const p = game.player.position;
+        const apart = Math.hypot(robot.position.x - p.x, robot.position.z - p.z);
+        if (out.primedAt < 0 && robot.fuse >= 0) {
+          out.primedAt = apart;
+          if (back) ho.press('back', true);
+        }
+        if (robot.fuse >= 0 && !robot.removed) {
+          out.fuse += 1 / 60;
+          out.apart = apart;
+        }
+        ho.step(1 / 60, 1);
+        if (robot.removed) {
+          out.blast = game.blast > 0.5;
+          break;
+        }
+      }
+      ho.press('back', false);
+      ho.step(1 / 60, 2);
+      out.health = game.player.health;
+      out.alive = game.player.alive;
+      out.left = game.robots.length;
+      ho.god(true);
+      return out;
+    }, back);
+  const stoodStill = await blastTrial(false);
+  const backedOff = await blastTrial(true);
+  const rules3 = await ev(() => ({ bomber: window.__HO.game.director.rounds.plan && window.__HO.mission().rules, trigger: 2.4 }));
+  check(
+    'a bomber primes when it comes within reach and goes off after its fuse; standing still costs half a life, backing away almost nothing',
+    stoodStill.primedAt > 1.5 && stoodStill.primedAt < 2.6 && stoodStill.fuse > 0.6 && stoodStill.fuse < 1.1 && stoodStill.blast && stoodStill.left === 0 && stoodStill.alive && stoodStill.health < 75 && stoodStill.health > 25 && backedOff.alive && backedOff.health > 80 && backedOff.health > stoodStill.health + 20,
+    `it primed ${stoodStill.primedAt.toFixed(1)} m off and went off ${stoodStill.fuse.toFixed(2)} s later; a player who stood still was left with ${Math.round(stoodStill.health)} health, one who backed away (${backedOff.apart.toFixed(1)} m off when it went) with ${Math.round(backedOff.health)}`,
+  );
+  void rules3;
+
+  await lobbyStart();
+  const chain = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const bomber = ho.spawnKind(0, 5.6, 180, { kind: 'bomber', hold: true });
+    for (const [x, z] of [[-1.2, 5.6], [1.2, 5.6], [0, 6.8]]) ho.spawnKind(x, z, 180, { hold: true });
+    ho.step(1 / 60, 20);
+    return { bomber, kills: ho.run().kills, scrap: ho.run().scrap, health: game.robots[bomber].mind.health };
+  });
+  let bomberShots = 0;
+  for (; bomberShots < 6; bomberShots++) {
+    if ((await ev((i) => window.__HO.game.robots[i]?.kind === 'bomber' && window.__HO.game.robots[i].alive, chain.bomber)) !== true) break;
+    await shootAt(chain.bomber, 'chest');
+  }
+  await step(70);
+  r = await run();
+  check(
+    'a bomber destroyed first goes off among its own: the robots round it are destroyed too, and they are the player\'s kills',
+    bomberShots >= 1 && bomberShots <= 3 && r.robots.filter((q) => q.alive).length === 0 && r.kills - chain.kills === 4 && r.scrap - chain.scrap === (bomberShots - 1) * 10 + 60 + 3 * 60 && r.health === 100,
+    `${bomberShots} sidearm shots set it off; ${r.kills - chain.kills} robots destroyed for ${r.scrap - chain.scrap} scrap, and the player, ${(5.1).toFixed(1)} m back, untouched`,
+  );
+
+  // ---- What the rounds are made of, and where ARGUS sends things.
+  const makeup = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    const rounds = {};
+    for (let i = 0; i < 9000 && game.stats.round < 9; i++) {
+      ho.simulate(1 / 60, 20);
+      const round = game.stats.round;
+      if (round > 0 && !(round in rounds)) rounds[round] = ho.composition();
+      if (game.director.rounds.phase === 'active') {
+        ho.clearRobots();
+        ho.skipRound();
+      }
+    }
+    return { rounds, analyses: ho.argus().history.length, active: ho.argus().active.length };
+  });
+  const specialsBy = (round) => `${makeup.rounds[round]?.drone ?? '?'} drones, ${makeup.rounds[round]?.bomber ?? '?'} bombers, ${makeup.rounds[round]?.heavy ?? '?'} heavies`;
+  check(
+    'the specials are mixed in as the rounds climb: drones first, then a bomber, then a heavy, and never in the first rounds',
+    [1, 2, 3].every((n) => makeup.rounds[n] && makeup.rounds[n].drudge === makeup.rounds[n].total) &&
+      makeup.rounds[4]?.drone >= 1 &&
+      makeup.rounds[4]?.bomber === 0 &&
+      makeup.rounds[6]?.bomber >= 1 &&
+      makeup.rounds[6]?.heavy === 0 &&
+      makeup.rounds[8]?.heavy >= 1 &&
+      [4, 5, 6, 7, 8, 9].every((n) => makeup.rounds[n].drudge >= makeup.rounds[n].total * 0.6),
+    `round 4: ${specialsBy(4)}; round 6: ${specialsBy(6)}; round 8: ${specialsBy(8)} (of ${makeup.rounds[8]?.total})`,
+  );
+  check('ARGUS only watches for the first two rounds, and with nothing to go on it adapts nothing', makeup.analyses >= 6 && makeup.active === 0, `${makeup.analyses} analyses from round 3 on, no counters in force`);
+
+  /** Force ARGUS's counters in the lull, let the next round start, and report what it is made of and what arrives. */
+  const roundWith = (counters) =>
+    ev((counters) => {
+      const ho = window.__HO;
+      const game = ho.game;
+      const before = game.stats.round;
+      for (let i = 0; i < 4000 && game.director.rounds.phase !== 'waiting'; i++) {
+        ho.clearRobots();
+        ho.skipRound();
+        ho.simulate(1 / 60, 5);
+      }
+      ho.forceCounters(counters);
+      for (let i = 0; i < 4000 && game.stats.round === before; i++) ho.simulate(1 / 60, 10);
+      const made = ho.composition();
+      const plain = ho.mission().rules && game.director.rounds.plan;
+      // Let a dozen of them arrive.
+      const seen = { shield: 0, guard: 0, drone: 0, bomber: 0 };
+      const counted = new Set();
+      for (let i = 0; i < 2400 && counted.size < 14; i++) {
+        ho.simulate(1 / 60, 5);
+        for (const robot of game.robots) {
+          if (counted.has(robot)) continue;
+          counted.add(robot);
+          if (robot.armour.shield) seen.shield++;
+          if (robot.armour.guard > 0) seen.guard++;
+          if (robot.kind === 'drone') seen.drone++;
+          if (robot.kind === 'bomber') seen.bomber++;
+        }
+      }
+      return { round: game.stats.round, made, seen, arrived: counted.size, count: plain.count };
+    }, counters);
+  const base = await roundWith([]);
+  const plating = await roundWith([{ counter: 'shielding', weapon: 'carbine' }, { counter: 'guard' }]);
+  const flushing = await roundWith([{ counter: 'flush' }, { counter: 'intercept' }]);
+  check(
+    'with shielding and guarding in force, a share of the round carries each, and they arrive carrying them; the round is no bigger for it',
+    base.made.shielded === 0 && base.made.guarded === 0 && plating.made.shielded >= plating.made.drudge * 0.3 && plating.made.shielded < plating.made.drudge * 0.5 && plating.made.guarded >= plating.made.drudge * 0.4 && plating.seen.shield >= 1 && plating.seen.guard >= 1,
+    `round ${plating.round}: ${plating.made.shielded} of ${plating.made.drudge} ordinary robots shielded against the carbine, ${plating.made.guarded} with a plate over the weak point; of the first ${plating.arrived} to arrive, ${plating.seen.shield} and ${plating.seen.guard}`,
+  );
+  check(
+    'with flushing and interception in force, bombers and drones are added to the round and sent in behind and ahead of the player',
+    flushing.made.bomber >= 2 && flushing.made.behind > flushing.made.drudge * 0.4 && flushing.made.ahead === 4 && flushing.made.drone >= base.made.drone + 4,
+    `round ${flushing.round}: ${flushing.made.bomber} bombers, ${flushing.made.behind} of the round routed behind the player, ${flushing.made.ahead} drones routed ahead`,
+  );
+  // Where "behind" and "ahead" are. Standing at the main breaker, facing
+  // the wall, the nearest way in is the power room's ceiling vent, behind.
+  const argusRoutes = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.holdRounds(true);
+    ho.clearRobots();
+    for (const id of ['lobbyHall', 'lobbyPower', 'hallPower']) ho.openDoor(id);
+    ho.step(1 / 60, 140);
+    const breaker = ho.mission().places.breaker;
+    ho.place(breaker.stand[0], breaker.stand[1], 180, 0);
+    ho.step(1 / 60, 10);
+    const behind = ho.entryFor('behind');
+    const still = ho.entryFor('ahead');
+    // Running across the lobby looking back over the shoulder, as someone leading a horde does:
+    // first east (toward the power room), then west.
+    const run = (x, yaw) => {
+      ho.place(x, 0.5, yaw, 0);
+      ho.press('back', true);
+      ho.step(1 / 60, 40);
+      const entry = ho.entryFor('ahead');
+      const vx = game.player.velocity.x;
+      ho.press('back', false);
+      ho.step(1 / 60, 20);
+      return { entry, vx };
+    };
+    const east = run(-3, 90);
+    const west = run(3, -90);
+    return { behind, still, east, west, at: [game.player.position.x, game.player.position.z] };
+  });
+  check(
+    "a robot ARGUS routes 'behind' the player comes in at the nearest entry they cannot see; one routed 'ahead' comes in on the side they are running toward",
+    argusRoutes.behind?.id === 'powerVent' && argusRoutes.still === null && argusRoutes.east.vx > 2 && argusRoutes.east.entry !== null && argusRoutes.east.entry.x > 5 && argusRoutes.west.vx < -2 && argusRoutes.west.entry !== null && argusRoutes.west.entry.x < -5,
+    `at the breaker, behind is the ${argusRoutes.behind?.id}; running east (${argusRoutes.east.vx.toFixed(1)} m/s), ahead is the ${argusRoutes.east.entry?.id}; running west (${argusRoutes.west.vx.toFixed(1)} m/s), the ${argusRoutes.west.entry?.id}; standing still there is ${argusRoutes.still === null ? 'no "ahead"' : argusRoutes.still.id}`,
+  );
+
+  // ---- A real analysis: play a round one way, read the banner, see the counter arrive; play another way, see it withdrawn.
+  const banner = () =>
+    ev(() => {
+      const panel = document.querySelector('.argus-analysis');
+      return {
+        showing: panel.classList.contains('show'),
+        title: panel.querySelector('.argus-title').textContent,
+        round: panel.querySelector('.argus-round').textContent,
+        lines: [...panel.querySelectorAll('.argus-line')].map((row) => [...row.children].map((part) => `${part.firstElementChild.textContent}: ${part.lastElementChild.textContent}`)),
+      };
+    });
+  const remarkShown = () =>
+    ev(() => {
+      const line = document.querySelector('.argus-remark');
+      return line.classList.contains('show') ? line.querySelector('.argus-remark-text').textContent : null;
+    });
+  /** End the round in play and step on until ARGUS's analysis of it is on screen. */
+  const endRoundAndWait = () =>
+    ev(() => {
+      const ho = window.__HO;
+      const next = `ROUND ${ho.game.stats.round + 1}`;
+      ho.clearRobots();
+      ho.holdRounds(false);
+      ho.skipRound();
+      const up = () => document.querySelector('.argus-analysis').classList.contains('show') && document.querySelector('.argus-round').textContent === next;
+      for (let i = 0; i < 60 * 8 && !up(); i++) ho.step(1 / 60, 1);
+      return { time: ho.game.stats.time, state: ho.run().state };
+    });
+  await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    // On to round 2, which is the first one ARGUS acts on.
+    for (let i = 0; i < 6000 && game.stats.round < 2; i++) {
+      ho.simulate(1 / 60, 10);
+      if (game.stats.round < 2 && game.director.rounds.phase === 'active') {
+        ho.clearRobots();
+        ho.skipRound();
+      }
+    }
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.place(0, 0.5, 180, 0);
+    for (const x of [-1.8, -0.6, 0.6, 1.8]) ho.spawnKind(x, 4.6, 180, { hold: true, health: 70 });
+    ho.step(1 / 60, 20);
+  });
+  // Round 2, fought with the sidearm and nothing else: twelve body shots, four robots.
+  let firstRemark = null;
+  for (let shot = 0; shot < 12; shot++) {
+    await shootAt(-1, 'chest');
+    if (shot === 2) firstRemark = await remarkShown();
+    // (Let the one that has just been destroyed finish falling apart before the next shot.)
+    if (shot % 3 === 2) await step(30);
+  }
+  const spokeTooSoon = await ev(() => window.__HO.argusSay('holding'));
+  const notesAfter = await ev(() => window.__HO.argus().notes);
+  const lull = await endRoundAndWait();
+  const firstBanner = await banner();
+  const whileShowing = await ev(() => {
+    const ho = window.__HO;
+    const before = ho.game.stats.time;
+    ho.step(1 / 60, 30);
+    return { moved: ho.game.stats.time - before, state: ho.run().state, counters: ho.argus().active, used: ho.argus().report.adaptations.length };
+  });
+  check('ARGUS passes a remark on what the player does, and does not speak again straight away', firstRemark === 'One unit lost. I have others.' && spokeTooSoon === false, `after the first kill: "${firstRemark}"`);
+  check(
+    'in the lull after a round fought with one weapon, the ARGUS ANALYSIS banner says what it saw and what it is doing about it',
+    notesAfter.hits === 12 &&
+      notesAfter.damage.pistol === 336 &&
+      firstBanner.showing &&
+      firstBanner.title === 'ARGUS ANALYSIS' &&
+      firstBanner.round === 'ROUND 3' &&
+      firstBanner.lines.length === 1 &&
+      firstBanner.lines[0].join(' | ') === 'OBSERVED: 100% of damage from the sidearm. | ADAPTING: sidearm-resistant plating.' &&
+      whileShowing.counters.length === 1 &&
+      whileShowing.counters[0].counter === 'shielding' &&
+      whileShowing.counters[0].weapon === 'pistol',
+    `"${firstBanner.lines.map((line) => line.join(' ')).join(' / ')}"`,
+  );
+  check('the banner does not pause the game', lull.state === 'playing' && whileShowing.state === 'playing' && near(whileShowing.moved, 0.5), `${whileShowing.moved.toFixed(2)} s of play passed in half a second with the banner up`);
+  // Round 3 arrives with the counter on it.
+  const countered = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    for (let i = 0; i < 3000 && game.stats.round < 3; i++) ho.step(1 / 60, 4);
+    const made = ho.composition();
+    let carrying = 0;
+    for (let i = 0; i < 2400 && carrying === 0; i++) {
+      ho.step(1 / 60, 4);
+      carrying = ho.run().robots.filter((q) => q.shield === 'pistol').length;
+    }
+    return { round: game.stats.round, made, carrying, used: ho.argus().report.adaptations };
+  });
+  check('and the next round comes with that counter on it: robots shielded against the weapon the player leaned on', countered.round === 3 && countered.made.shielded >= 3 && countered.carrying >= 1, `round 3: ${countered.made.shielded} of ${countered.made.total} robots shielded against the sidearm`);
+  check(
+    "a counter goes on ARGUS's profile of the player when its round begins, not when it is chosen: a run that ends first does not list a counter that was never sent",
+    whileShowing.used === 0 && countered.used.length === 1 && countered.used[0].rounds.join() === '3',
+    `in the lull before round 3: ${whileShowing.used} listed; once round 3 had begun: ${countered.used.map((used) => `${used.name} (round ${used.rounds.join(', ')})`).join('; ')}`,
+  );
+  // Round 3, fought two ways: the sidearm and the strike, about half and half.
+  await ev(() => {
+    const ho = window.__HO;
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.place(0, 0.5, 180, 0);
+    ho.tap('reload');
+    ho.step(1 / 60, 120);
+    ho.spawnKind(0, 4.6, 180, { hold: true, health: 400 });
+    ho.step(1 / 60, 20);
+  });
+  for (let shot = 0; shot < 6; shot++) await shootAt(-1, 'chest');
+  await ev(() => {
+    const ho = window.__HO;
+    ho.place(0, 3.1, 180, 0);
+    ho.step(1 / 60, 4);
+    ho.tap('melee');
+    ho.step(1 / 60, 50);
+  });
+  const mixed = await ev(() => window.__HO.argus().notes.damage);
+  await endRoundAndWait();
+  const secondBanner = await banner();
+  const afterChange = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    for (let i = 0; i < 3000 && game.stats.round < 4; i++) ho.step(1 / 60, 4);
+    return { active: ho.argus().active, made: ho.composition(), round: game.stats.round };
+  });
+  check(
+    'changing how the player fights beats it: after a round split between two weapons the counter is withdrawn, the banner says so, and the next round is unshielded',
+    mixed.pistol === 168 &&
+      mixed.melee === 150 &&
+      secondBanner.showing &&
+      secondBanner.round === 'ROUND 4' &&
+      secondBanner.lines.some((line) => line.join(' | ') === 'OBSERVED: You changed your approach. | WITHDRAWING: sidearm-resistant plating.') &&
+      !afterChange.active.some((counter) => counter.counter === 'shielding') &&
+      afterChange.round === 4 &&
+      afterChange.made.shielded === 0,
+    `"${secondBanner.lines.map((line) => line.join(' ')).join(' / ')}"; round 4: ${afterChange.made.shielded} shielded`,
+  );
+
+  // ---- The end of that run: ARGUS's profile of the player.
+  await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.god(false);
+    const p = game.player.position;
+    for (const [dx, dz] of [[1.2, 0], [-1.2, 0], [0, 1.2], [0, -1.2], [0.9, 0.9], [-0.9, -0.9]]) ho.spawnKind(p.x + dx, p.z + dz, 0, {});
+    for (let i = 0; i < 60 * 30 && ho.run().state === 'playing'; i++) ho.step(1 / 60, 1);
+    ho.step(1 / 60, 5);
+  });
+  await page.waitForTimeout(150);
+  const overButtons = await ev(() => [...document.querySelectorAll('.screen.over button')].map((b) => b.textContent));
+  await page.click('.screen.over [data-action="profile"]');
+  await page.waitForTimeout(150);
+  const card = await ev(() => {
+    const screen = document.querySelector('.screen.profile');
+    const text = (selector) => screen.querySelector(selector)?.textContent ?? '';
+    return {
+      shown: !screen.classList.contains('hidden') && document.querySelector('.screen.over').classList.contains('hidden'),
+      heading: text('.profile-top'),
+      label: text('.profile-label'),
+      verdict: text('.profile-verdict'),
+      round: text('.profile-round'),
+      stamp: text('.profile-stamp'),
+      stats: [...screen.querySelectorAll('.profile-stat')].map((stat) => `${stat.firstElementChild.textContent}: ${stat.lastElementChild.textContent}`),
+      adaptations: [...screen.querySelectorAll('.profile-adaptations li')].map((item) => `${item.querySelector('span').textContent} (${item.querySelector('i').textContent})`),
+      url: text('.profile-url'),
+      address: location.host + location.pathname,
+      width: screen.querySelector('.profile-card').getBoundingClientRect().width,
+      fits: screen.querySelector('.profile-card').getBoundingClientRect().bottom < innerHeight && screen.querySelector('.profile-card').getBoundingClientRect().top > 0,
+      runRound: window.__HO.run().round,
+    };
+  });
+  await page.click('.screen.profile [data-action="profile-back"]');
+  await page.waitForTimeout(100);
+  const backAtOver = await ev(() => !document.querySelector('.screen.over').classList.contains('hidden') && document.querySelector('.screen.profile').classList.contains('hidden'));
+  check(
+    "the game-over screen offers ARGUS's profile of the player: a card with a play style, the key numbers, the adaptations it used and the round reached",
+    overButtons.join() === "PLAY AGAIN,ARGUS'S PROFILE OF YOU,TITLE SCREEN" &&
+      card.shown &&
+      card.heading.includes('ARGUS') &&
+      /^THE [A-Z]+$/.test(card.label) &&
+      card.verdict.length > 20 &&
+      card.round === String(card.runRound) &&
+      card.stamp === 'ARGUS WINS' &&
+      card.stats.length === 6 &&
+      card.stats[0].startsWith('FAVOURITE WEAPON: ') &&
+      card.adaptations[0] === 'Sidearm-resistant plating (ROUND 3)' &&
+      card.fits &&
+      backAtOver,
+    `${card.label}: "${card.verdict.replace(/^ARGUS/, '')}"; ${card.stats.slice(0, 3).join(', ')}; adaptations: ${card.adaptations.join(', ')}`,
+  );
+  check('the card carries the address of the page it was played on, so a screenshot of it carries the link', card.url === card.address && card.url.length > 3, card.url);
+  await ev(() => {
+    const ho = window.__HO;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.step(1 / 60, 10);
+  });
+  check('a new run starts ARGUS afresh', (await ev(() => window.__HO.argus())).history.length === 0 && (await ev(() => window.__HO.argus().report.adaptations.length)) === 0);
 
   // The reflections each room is lit by are made from a photograph of it.
   // One broken pixel in that photograph (a shader's "not a number") used to

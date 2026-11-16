@@ -42,6 +42,7 @@ import {
   type MissionTarget,
   type Objective,
 } from '../sim/mission';
+import type { RemarkCue } from '../sim/argus';
 import { setArgusGlow } from '../world/build/LedBank';
 import { setArgusOnline } from '../world/lobby/ScreenBank';
 import { MISSION_PLACES, UPLINK, type MissionPlace } from '../world/plan';
@@ -276,6 +277,7 @@ export class Mission {
         this.world.mission.dropKey(robot.position.x, robot.position.z);
         this.audio.play('missionNotice');
         this.onNotice('CUSTODIAN DESTROYED', 'PICK UP ITS KEY');
+        this.onCue('custodianDown');
       }
       return MISSION.custodian.scrap;
     }
@@ -284,6 +286,7 @@ export class Mission {
       bossDestroyed(this.state);
       this.audio.play('missionNotice');
       this.onNotice('PROXY DESTROYED', this.state.phase === 'armed' ? 'PULL THE SWITCH' : 'HOLD UNTIL THE SWITCH ARMS');
+      this.onCue('proxyDown');
       return MISSION.proxy.scrap;
     }
     return 0;
@@ -368,6 +371,9 @@ export class Mission {
     return { prompt: { text: 'The Core: sealed', cost: null, usable: false, note: `Three override keys required (you have ${held})` }, use: null };
   }
 
+  /** Something has happened in the mission that ARGUS may remark on. */
+  onCue: (cue: RemarkCue) => void = () => {};
+
   private throwBreaker(): void {
     if (!restorePower(this.state)) return;
     this.world.mission.setPower(true);
@@ -375,6 +381,7 @@ export class Mission {
     this.audio.play('missionPower', { position: new THREE.Vector3(...MISSION_PLACES.breaker.at) });
     this.player.addShake(0.2);
     this.onNotice('POWER RESTORED', 'THE KEY CAGE IS UNLOCKED');
+    this.onCue('powerRestored');
   }
 
   private take(id: KeyId): void {
@@ -391,6 +398,7 @@ export class Mission {
     const held = keysHeld(this.state);
     if (held === KEY_IDS.length) this.onNotice('ALL THREE KEYS RECOVERED', 'UNSEAL THE CORE');
     else this.onNotice('OVERRIDE KEY RECOVERED', `${held} OF ${KEY_IDS.length}`);
+    this.onCue('keyTaken');
   }
 
   private engageUplink(): void {
@@ -398,6 +406,7 @@ export class Mission {
     this.waveClock = 2;
     this.audio.play('missionAlarm');
     this.onNotice('UPLINK ENGAGED', `HOLD THIS GROUND FOR ${MISSION.uplinkSeconds} SECONDS`);
+    this.onCue('uplinkStarted');
   }
 
   private unseal(): void {
@@ -406,6 +415,7 @@ export class Mission {
     this.audio.play('doorOpen', { position: new THREE.Vector3(...MISSION_PLACES.coreDoor.at) });
     this.player.addShake(0.15);
     this.onNotice('THE CORE IS UNSEALED', 'ARM THE KILL SWITCH');
+    this.onCue('coreOpened');
   }
 
   private arm(): void {
@@ -415,6 +425,7 @@ export class Mission {
     this.audio.play('missionAlarm');
     const seconds = MISSION.armSeconds;
     this.onNotice('KILL SWITCH ARMING', `HOLD THE CORE FOR ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
+    this.onCue('standStarted');
   }
 
   private pull(): void {

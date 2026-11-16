@@ -6,6 +6,7 @@
 // itself, and ride on one bone.
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { addsLightOnly } from '../../render/glow';
 import type { WeaponKey } from '../../sim/argus';
 
@@ -17,8 +18,24 @@ export const SHIELD_COLOR: Record<string, number> = {
   melee: 0xff4fc8,
 };
 
-let plate: THREE.BufferGeometry | null = null;
+let plates: THREE.BufferGeometry | null = null;
 let pattern: THREE.Texture | null = null;
+
+/**
+ * The four plates of a shield as one shape, so that a shield is one thing
+ * to draw and not four: one plate in front of the chest, one behind and
+ * one at each side.
+ */
+function shieldPlates(): THREE.BufferGeometry {
+  // [sideways, up, forward, turn about the upright, radius]
+  const layout: Array<[number, number, number, number, number]> = [
+    [0, 0.02, 0.3, 0, 0.23],
+    [0, 0.06, -0.37, Math.PI, 0.21],
+    [0.31, 0.03, -0.03, Math.PI / 2, 0.17],
+    [-0.31, 0.03, -0.03, -Math.PI / 2, 0.17],
+  ];
+  return mergeGeometries(layout.map(([x, y, z, turn, radius]) => new THREE.CircleGeometry(radius, 6).rotateY(turn).translate(x, y, z)))!;
+}
 
 /** A hexagon of light: a bright rim, a faint fill and a honeycomb inside it. */
 function shieldPattern(): THREE.Texture {
@@ -66,31 +83,21 @@ export interface Shield {
 /**
  * Shielding against `weapon`: four plates of light round the chest, one
  * in front, one behind and one at each side. `chest` is the middle of the
- * chest in the rest pose, and `size` the robot's own.
+ * chest in the rest pose.
  */
 export function createShield(weapon: WeaponKey, chest: THREE.Vector3): Shield {
-  plate ??= new THREE.CircleGeometry(1, 6);
+  plates ??= shieldPlates();
   pattern ??= shieldPattern();
   const color = new THREE.Color(SHIELD_COLOR[weapon] ?? 0xffffff);
-  const material = new THREE.MeshBasicMaterial({ map: pattern, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false });
+  // (Seen from both sides, and drawn in one go: see drawSeeThroughOnce in render/materials.)
+  const material = new THREE.MeshBasicMaterial({ map: pattern, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, toneMapped: false, fog: false });
   const object = new THREE.Group();
   object.name = 'shield';
-  // [sideways, up, forward, turn about the upright, radius]
-  const plates: Array<[number, number, number, number, number]> = [
-    [0, 0.02, 0.3, 0, 0.23],
-    [0, 0.06, -0.37, Math.PI, 0.21],
-    [0.31, 0.03, -0.03, Math.PI / 2, 0.17],
-    [-0.31, 0.03, -0.03, -Math.PI / 2, 0.17],
-  ];
-  for (const [x, y, z, turn, radius] of plates) {
-    const mesh = new THREE.Mesh(plate, material);
-    mesh.position.set(chest.x + x, chest.y + y, chest.z + z);
-    mesh.rotation.y = turn;
-    mesh.scale.setScalar(radius);
-    mesh.renderOrder = 8;
-    addsLightOnly(mesh);
-    object.add(mesh);
-  }
+  const mesh = new THREE.Mesh(plates, material);
+  mesh.position.copy(chest);
+  mesh.renderOrder = 8;
+  addsLightOnly(mesh);
+  object.add(mesh);
   const setLevel = (level: number): void => {
     material.color.copy(color).multiplyScalar(1.5 * level);
   };
@@ -98,9 +105,27 @@ export function createShield(weapon: WeaponKey, chest: THREE.Vector3): Shield {
   return { object, setLevel, dispose: () => material.dispose() };
 }
 
-let guardPlate: THREE.BufferGeometry | null = null;
+let guardSteelShape: THREE.BufferGeometry | null = null;
+let guardEdgeShape: THREE.BufferGeometry | null = null;
 let guardSteel: THREE.MeshStandardMaterial | null = null;
 let guardEdge: THREE.MeshBasicMaterial | null = null;
+
+/**
+ * The steel of a plate as one shape (one thing to draw, and one shadow to
+ * cast, not five): the slab, standing a little proud of the face, the
+ * brackets that hold it to the cheeks, and two bolts.
+ */
+function guardSteelParts(): THREE.BufferGeometry {
+  // [sideways, up, forward, width, height, depth]
+  const boxes: Array<[number, number, number, number, number, number]> = [
+    [0, 0.0, 0.035, 0.27, 0.15, 0.022],
+    [0.128, 0.0, -0.02, 0.02, 0.11, 0.1],
+    [-0.128, 0.0, -0.02, 0.02, 0.11, 0.1],
+    [0.1, 0.045, 0.049, 0.022, 0.022, 0.012],
+    [-0.1, 0.045, 0.049, 0.022, 0.022, 0.012],
+  ];
+  return mergeGeometries(boxes.map(([x, y, z, w, h, d]) => new THREE.BoxGeometry(w, h, d).translate(x, y, z)))!;
+}
 
 /**
  * A plate over the weak point: a slab of bare steel across the visor with
@@ -108,26 +133,21 @@ let guardEdge: THREE.MeshBasicMaterial | null = null;
  * the dark. `visor` is the middle of the visor in the rest pose.
  */
 export function createGuard(visor: THREE.Vector3): THREE.Group {
-  guardPlate ??= new THREE.BoxGeometry(1, 1, 1);
-  guardSteel ??= new THREE.MeshStandardMaterial({ color: 0x8e8b84, metalness: 0.9, roughness: 0.42 });
+  guardSteelShape ??= guardSteelParts();
+  // (The lit edge, along the top of the slab.)
+  guardEdgeShape ??= new THREE.BoxGeometry(0.27, 0.008, 0.024).translate(0, 0.079, 0.035);
+  guardSteel ??= new THREE.MeshStandardMaterial({ color: 0x55534f, metalness: 0.9, roughness: 0.5 });
   guardEdge ??= new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff0d0).multiplyScalar(3), toneMapped: false, fog: false });
   const object = new THREE.Group();
   object.name = 'guard';
-  const part = (material: THREE.Material, x: number, y: number, z: number, w: number, h: number, d: number): void => {
-    const mesh = new THREE.Mesh(guardPlate!, material);
-    mesh.position.set(visor.x + x, visor.y + y, visor.z + z);
-    mesh.scale.set(w, h, d);
-    mesh.castShadow = material === guardSteel;
+  // (It casts no shadow of its own: the head behind it already does, and
+  // a shadow from a mesh that is not skinned, in among robots that are,
+  // makes the shadow pass change shaders at every plated robot.)
+  const steel = new THREE.Mesh(guardSteelShape, guardSteel);
+  const edge = new THREE.Mesh(guardEdgeShape, guardEdge);
+  for (const mesh of [steel, edge]) {
+    mesh.position.copy(visor);
     object.add(mesh);
-  };
-  // The slab, standing a little proud of the face, and the brackets that hold it to the cheeks.
-  part(guardSteel, 0, 0.0, 0.035, 0.27, 0.15, 0.022);
-  part(guardSteel, 0.128, 0.0, -0.02, 0.02, 0.11, 0.1);
-  part(guardSteel, -0.128, 0.0, -0.02, 0.02, 0.11, 0.1);
-  // Bolts.
-  part(guardSteel, 0.1, 0.045, 0.049, 0.022, 0.022, 0.012);
-  part(guardSteel, -0.1, 0.045, 0.049, 0.022, 0.022, 0.012);
-  // The lit edge.
-  part(guardEdge, 0, 0.079, 0.035, 0.27, 0.008, 0.024);
+  }
   return object;
 }

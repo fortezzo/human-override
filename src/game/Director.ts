@@ -3,10 +3,12 @@
 // sim/facility.ts; this class connects them to the map and the robots.
 
 import * as THREE from 'three';
-import { ROBOT, ROUNDS } from '../config';
+import { ARGUS, ROBOT, ROUNDS, SPECIALS } from '../config';
 import { rand } from '../core/math';
 import type { Robot, RobotTraits } from '../entities/robot/Robot';
+import type { Adaptation } from '../sim/argus';
 import { pickEntry, pickUnseenEntry } from '../sim/facility';
+import { composeRound, type HordeRules, type SpawnOrder } from '../sim/horde';
 import { createRounds, remaining, robotDestroyed, robotRecalled, skipRound, speedFor, updateRounds, type RoundState } from '../sim/rounds';
 import { ENTRY_PLANS, insideRoom, type AreaId, type EntryPlan } from '../world/plan';
 import type { World } from '../world/World';
@@ -22,6 +24,11 @@ interface Arrival {
 }
 
 const _mouth = new THREE.Vector3();
+
+/** What a round is made of (the rules are in sim/horde.ts). */
+const HORDE: HordeRules = { specials: SPECIALS, shielding: ARGUS.shielding, flush: ARGUS.flush, intercept: ARGUS.intercept, guard: ARGUS.guard };
+/** The ways in on foot: the only ones a heavy can use (it does not fit a ceiling duct). */
+const WALK_ENTRIES = ENTRY_PLANS.filter((entry) => entry.kind === 'walk');
 
 export class Director {
   rounds: RoundState = createRounds(ROUNDS);
@@ -48,12 +55,21 @@ export class Director {
   suspended = false;
   /** Debug: send every robot in through this entry (its id), whatever the rules say. */
   forceEntry: string | null = null;
+  /** ARGUS's counters for the next round to start (it sets them in the lull before it). */
+  counters: readonly Adaptation[] = [];
+  /** Debug: rounds of ordinary robots only, with no specials and no counters. */
+  plain = false;
+  /** The robots of the round being played, in the order they are sent, and how many of them have been. */
+  private orders: SpawnOrder[] = [];
+  private sent = 0;
 
   constructor(
     private readonly world: World,
     private readonly robots: Robot[],
     private readonly spawn: (x: number, z: number, heading: number, traits: RobotTraits) => Robot,
     private readonly sight: Sight,
+    /** Where the player is, and which way they are moving (metres per second). */
+    private readonly whereabouts: () => { x: number; z: number; vx: number; vz: number },
   ) {}
 
   /** Start again from before round 1. */
@@ -64,6 +80,25 @@ export class Director {
     this.waiting = 0;
     this.waited = 0;
     this.lastResorts = 0;
+    this.counters = [];
+    this.orders = [];
+    this.sent = 0;
+  }
+
+  /** How many of each kind the round being played is made of, and how many carry each of ARGUS's counters. */
+  get composition(): { total: number; drudge: number; drone: number; bomber: number; heavy: number; shielded: number; guarded: number; behind: number; ahead: number } {
+    const count = (test: (order: SpawnOrder) => boolean): number => this.orders.filter(test).length;
+    return {
+      total: this.orders.length,
+      drudge: count((o) => o.kind === 'drudge'),
+      drone: count((o) => o.kind === 'drone'),
+      bomber: count((o) => o.kind === 'bomber'),
+      heavy: count((o) => o.kind === 'heavy'),
+      shielded: count((o) => o.shield !== undefined),
+      guarded: count((o) => o.guard === true),
+      behind: count((o) => o.route === 'behind'),
+      ahead: count((o) => o.route === 'ahead'),
+    };
   }
 
   /** Robots left to destroy this round, on the map or still to come. */
@@ -90,7 +125,8 @@ export class Director {
    * a multiple of an ordinary robot's in the current round; `speed`, if
    * given, is in metres per second (otherwise it walks or runs as that
    * round's robots do). `entries`, if given, names the only ways in it may
-   * use (ARGUS's Proxy is too big for some of them).
+   * use (ARGUS's Proxy is too big for some of them). ARGUS's counters are
+   * for the rounds: what the mission sends in does not carry them.
    */
   sendExtra(
     areas: readonly AreaId[],
@@ -146,7 +182,10 @@ export class Director {
     if (!this.paused && !this.suspended) {
       // Robots waiting to come in count towards how full the map is.
       const tick = updateRounds(this.rounds, ROUNDS, dt, this.active + this.waiting);
-      if (tick.started !== null) this.onRoundStart(tick.started);
+      if (tick.started !== null) {
+        this.compose(tick.started);
+        this.onRoundStart(tick.started);
+      }
       this.waiting += tick.spawn;
       // Each is let in as soon as there is somewhere it can appear unseen.
       if (this.waiting > 0) this.waited += dt;
@@ -168,9 +207,71 @@ export class Director {
     robotDestroyed(this.rounds);
   }
 
-  /** A robot was taken off the map without being destroyed; it will come round again. */
-  recalled(): void {
+  /** A robot was taken off the map without being destroyed; it will come round again, as what it was. */
+  recalled(robot?: Robot): void {
     robotRecalled(this.rounds);
+    if (robot) this.orders.push({ kind: robot.kind, ...(robot.armour.shield ? { shield: robot.armour.shield } : {}), ...(robot.armour.guard > 0 ? { guard: true } : {}) });
+  }
+
+  /**
+   * Debug: the entry ARGUS would use right now for a robot it had routed
+   * 'behind' the player or 'ahead' of them, or null if there is none.
+   */
+  entryFor(route: 'behind' | 'ahead'): EntryPlan | null {
+    return this.routedEntry(route, ENTRY_PLANS, (entry) => this.unseenSpot(entry) !== null);
+  }
+
+  /** Work out what the round that has just started is made of. */
+  private compose(round: number): void {
+    const plan = this.rounds.plan;
+    this.orders = this.plain ? Array.from({ length: plan.count }, (): SpawnOrder => ({ kind: 'drudge' })) : composeRound(HORDE, round, plan.count, this.counters, Math.random);
+    // (Whatever ARGUS added for a counter is part of the round: it has to be destroyed like the rest.)
+    plan.count = this.orders.length;
+    this.sent = 0;
+  }
+
+  /** What makes the robot of one order what it is. */
+  private traitsFor(order: SpawnOrder): RobotTraits {
+    const plan = this.rounds.plan;
+    switch (order.kind) {
+      case 'drone':
+        return { kind: 'drone', health: plan.health * SPECIALS.drone.health, speed: SPECIALS.drone.speed, attackDamage: SPECIALS.drone.damage };
+      case 'bomber':
+        // (Its blow is the blast: it does not strike.)
+        return { kind: 'bomber', health: plan.health * SPECIALS.bomber.health, speed: SPECIALS.bomber.speed, attackDamage: 0 };
+      case 'heavy':
+        return { kind: 'heavy', health: plan.health * SPECIALS.heavy.health, speed: SPECIALS.heavy.speed, attackDamage: SPECIALS.heavy.damage, staggerDamage: ROBOT.staggerDamage * 4, flinchTime: 0.08 };
+      default:
+        return { health: plan.health, speed: speedFor(plan, Math.random()), ...(order.shield ? { shield: order.shield } : {}), ...(order.guard ? { guard: plan.health * ARGUS.guard.plate } : {}) };
+    }
+  }
+
+  /**
+   * ARGUS has a say in where this one comes in. 'behind': the entry
+   * nearest the player that they cannot see, which is the breach that
+   * flushes them out of a spot they are holding. 'ahead': the one most
+   * nearly in front of the way they are running, which is how an
+   * interceptor cuts across a loop. Null if there is no such entry now.
+   */
+  private routedEntry(route: 'behind' | 'ahead', entries: readonly EntryPlan[], unseen: (entry: EntryPlan) => boolean): EntryPlan | null {
+    const reachable = this.world.reachable;
+    const { x, z, vx, vz } = this.whereabouts();
+    const speed = Math.hypot(vx, vz);
+    if (route === 'ahead' && speed < 1) return null;
+    let best: EntryPlan | null = null;
+    let bestScore = -Infinity;
+    for (const entry of entries) {
+      if (entry.fromRound > this.rounds.round || !reachable.has(entry.area)) continue;
+      const dx = entry.at[0] - x;
+      const dz = entry.at[1] - z;
+      const distance = Math.hypot(dx, dz) || 1;
+      const score = route === 'behind' ? -distance : (dx * vx + dz * vz) / (distance * speed) - distance * 0.02;
+      if (score > bestScore && unseen(entry)) {
+        bestScore = score;
+        best = entry;
+      }
+    }
+    return best;
   }
 
   /** Debug: end the round now. The caller clears the robots off the map. */
@@ -227,7 +328,8 @@ export class Director {
    * from, favouring their own area, and never one where they would see it
    * appear. Null if there is nowhere for now.
    */
-  private chooseArrival(): Arrival | null {
+  private chooseArrival(order: SpawnOrder): Arrival | null {
+    const entries = order.kind === 'heavy' ? WALK_ENTRIES : ENTRY_PLANS;
     const forced = this.forceEntry && ENTRY_PLANS.find((entry) => entry.id === this.forceEntry);
     if (forced) {
       const [x, z] = this.spotAt(forced);
@@ -239,7 +341,7 @@ export class Director {
       if (spot) spots.set(entry, spot);
       return spot !== null;
     };
-    const entry = pickUnseenEntry(ENTRY_PLANS, this.rounds.round, this.world.playerArea, this.world.reachable, unseen, Math.random());
+    const entry = (order.route && this.routedEntry(order.route, entries, unseen)) || pickUnseenEntry(entries, this.rounds.round, this.world.playerArea, this.world.reachable, unseen, Math.random());
     if (entry) {
       const [x, z] = spots.get(entry)!;
       return { entry, x, z, forced: false };
@@ -250,7 +352,7 @@ export class Director {
     // behind them.
     if (this.waited < ROUNDS.arrivalPatience) return null;
     const reachable = this.world.reachable;
-    const behind = ENTRY_PLANS.filter((candidate) => reachable.has(candidate.area) && !this.sight.inView(_mouth.set(candidate.at[0], 1.2, candidate.at[1])));
+    const behind = entries.filter((candidate) => reachable.has(candidate.area) && !this.sight.inView(_mouth.set(candidate.at[0], 1.2, candidate.at[1])));
     const fallback = pickEntry(behind, this.world.playerArea, reachable, Math.random());
     if (!fallback) return null;
     this.lastResorts += 1;
@@ -260,13 +362,14 @@ export class Director {
 
   /** Create the next robot, if there is somewhere it can appear unseen. Returns false if it has to wait. */
   private sendOne(): boolean {
-    const arrival = this.chooseArrival();
+    const order: SpawnOrder = this.orders[this.sent] ?? { kind: 'drudge' };
+    const arrival = this.chooseArrival(order);
     if (!arrival) return false;
     const { entry, x, z } = arrival;
-    const plan = this.rounds.plan;
-    const traits: RobotTraits = { health: plan.health, speed: speedFor(plan, Math.random()) };
+    const traits = this.traitsFor(order);
     if (entry.kind === 'drop') traits.dropFrom = (entry.height ?? 4.8) + ROBOT.dropStart;
     const robot = this.spawn(x, z, rand(-Math.PI, Math.PI), traits);
+    this.sent += 1;
     robot.hurry = entry.kind === 'walk';
     robot.entry = entry.id;
     this.onArrival(robot, entry, arrival.forced);

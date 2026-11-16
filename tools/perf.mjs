@@ -3,9 +3,10 @@
 //   npm run build && node tools/perf.mjs
 //
 // Measures the real, uncapped frame rate at each quality level at 1080p in
-// the heaviest moment the current stage can produce, how evenly frames
-// arrive at the screen's own rate (smoothness), plus start-up timings and
-// the total download size. Numbers are from this machine's GPU; the report
+// the heaviest moment the current stage can produce (a full horde of
+// ordinary robots, as every stage has measured it, and the same horde as
+// ARGUS sends it), how evenly frames arrive at the screen's own rate
+// (smoothness), plus start-up timings and the total download size. Numbers are from this machine's GPU; the report
 // prints its name so they can be put in context.
 
 import fs from 'node:fs';
@@ -54,56 +55,80 @@ await page.evaluate(() => {
   ho.step(1 / 60, 40);
   ho.place(-1, 17.5, 0, -2);
 });
-const stress = () =>
-  page.evaluate(() => {
-    const ho = window.__HO;
-    ho.clearRobots();
-    // 24 robots, tough enough to last the measurement, some of them runners.
-    for (let i = 0; i < 24; i++) ho.spawnRobot(-3.2 + (i % 6) * 0.9, 8.6 + Math.floor(i / 6) * 1.7, 180, false, i % 3 === 0 ? 3.0 : 1.6, i % 4 === 0 ? 150 : 1500);
-    ho.game.weapons.state.reserve = 9000;
-    ho.press('fire', true);
-  });
 
-console.log('\nquality   fps    frame ms   draw calls   triangles   robots  particles  scrap');
-for (const level of ['low', 'medium', 'high', 'ultra']) {
-  await page.evaluate((level) => window.__HO.setQuality(level), level);
-  await stress();
-  await page.waitForTimeout(1500);
-  // Average over two seconds of real frames.
-  const result = await page.evaluate(
-    () =>
-      new Promise((resolve) => {
-        let frames = 0;
-        let peakCalls = 0;
-        let peakTriangles = 0;
-        let peakParticles = 0;
-        let peakGibs = 0;
-        const start = performance.now();
-        const tick = () => {
-          frames++;
-          const s = window.__HO.stats();
-          peakCalls = Math.max(peakCalls, s.calls);
-          peakTriangles = Math.max(peakTriangles, s.triangles);
-          peakParticles = Math.max(peakParticles, s.particles);
-          peakGibs = Math.max(peakGibs, s.gibs);
-          const elapsed = performance.now() - start;
-          if (elapsed < 2000) requestAnimationFrame(tick);
-          else resolve({ fps: (frames * 1000) / elapsed, peakCalls, peakTriangles, peakParticles, peakGibs, robots: s.robots });
-        };
-        requestAnimationFrame(tick);
-      }),
-  );
-  await page.evaluate(() => window.__HO.press('fire', false));
-  console.log(
-    `${level.padEnd(8)} ${result.fps.toFixed(0).padStart(5)} ${(1000 / result.fps).toFixed(2).padStart(9)} ${String(result.peakCalls).padStart(11)} ${String(result.peakTriangles).padStart(12)} ${String(result.robots).padStart(7)} ${String(result.peakParticles).padStart(9)} ${String(result.peakGibs).padStart(7)}`,
-  );
+// It is measured twice. First with 24 ordinary robots, which is how every
+// stage has measured it, so the numbers can be set side by side. Then as
+// ARGUS sends it late in a run: two heavies, two bombers and four drones
+// among the 24, and of the sixteen ordinary robots four in ten shielded
+// against the gun being fired and half with a plate over the weak point
+// (the two of its counters that put something on the robots; the other
+// two send more bombers and drones, which are in the picture already).
+function horde(argus) {
+  const ho = window.__HO;
+  ho.clearRobots();
+  let ordinary = 0;
+  // 24 robots, tough enough to last the measurement, some of them runners.
+  for (let i = 0; i < 24; i++) {
+    const x = -3.2 + (i % 6) * 0.9;
+    const z = 8.6 + Math.floor(i / 6) * 1.7;
+    const speed = i % 3 === 0 ? 3.0 : 1.6;
+    const health = i % 4 === 0 ? 150 : 1500;
+    const kind = !argus ? null : i === 7 || i === 16 ? 'heavy' : i === 2 || i === 21 ? 'bomber' : i === 5 || i === 10 || i === 13 || i === 18 ? 'drone' : null;
+    if (!argus) ho.spawnRobot(x, z, 180, false, speed, health);
+    else if (kind) ho.spawnKind(x, z, 180, { kind, health: 1500, ...(kind === 'bomber' ? { speed: 1.6 } : {}) });
+    else {
+      ho.spawnKind(x, z, 180, { speed, health, ...(ordinary % 5 < 2 ? { shield: 'carbine' } : {}), ...(ordinary % 2 === 0 ? { guard: 400 } : {}) });
+      ordinary++;
+    }
+  }
+  ho.game.weapons.state.reserve = 9000;
+  ho.press('fire', true);
+}
+
+for (const argus of [false, true]) {
+  console.log(argus ? '\nThe same horde as ARGUS sends it: specials among the 24, shielding and plates on the rest' : '\nA full horde of ordinary robots');
+  console.log('quality   fps    frame ms   draw calls   triangles   robots  particles  scrap');
+  for (const level of ['low', 'medium', 'high', 'ultra']) {
+    await page.evaluate((level) => window.__HO.setQuality(level), level);
+    await page.evaluate(horde, argus);
+    await page.waitForTimeout(1500);
+    // Average over two seconds of real frames.
+    const result = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          let frames = 0;
+          let peakCalls = 0;
+          let peakTriangles = 0;
+          let peakParticles = 0;
+          let peakGibs = 0;
+          const start = performance.now();
+          const tick = () => {
+            frames++;
+            const s = window.__HO.stats();
+            peakCalls = Math.max(peakCalls, s.calls);
+            peakTriangles = Math.max(peakTriangles, s.triangles);
+            peakParticles = Math.max(peakParticles, s.particles);
+            peakGibs = Math.max(peakGibs, s.gibs);
+            const elapsed = performance.now() - start;
+            if (elapsed < 2000) requestAnimationFrame(tick);
+            else resolve({ fps: (frames * 1000) / elapsed, peakCalls, peakTriangles, peakParticles, peakGibs, robots: s.robots });
+          };
+          requestAnimationFrame(tick);
+        }),
+    );
+    await page.evaluate(() => window.__HO.press('fire', false));
+    console.log(
+      `${level.padEnd(8)} ${result.fps.toFixed(0).padStart(5)} ${(1000 / result.fps).toFixed(2).padStart(9)} ${String(result.peakCalls).padStart(11)} ${String(result.peakTriangles).padStart(12)} ${String(result.robots).padStart(7)} ${String(result.peakParticles).padStart(9)} ${String(result.peakGibs).padStart(7)}`,
+    );
+  }
 }
 
 // ---- Smoothness: how evenly frames arrive at the screen's own rate
 // A high average can hide stutter, so this part runs the way a player sees
 // the game (frame rate limited to the screen's) and looks at the slowest
-// frames instead of the average. Same scene: the full horde in the server
-// hall, every door open, the carbine firing. It is also run at 3840 x 2160,
+// frames instead of the average. Same scene, in its heavier form: the
+// horde as ARGUS sends it, in the server hall, every door open, the
+// carbine firing. It is also run at 3840 x 2160,
 // which loads the graphics card about as a slower card is loaded at 1080p.
 // The page used so far is emptied first, so it does not compete for the
 // graphics card with what is measured from here on.
@@ -126,17 +151,11 @@ const paced = async (width, height) => {
     ho.step(1 / 60, 40);
     ho.place(-1, 17.5, 0, -2);
   });
-  console.log(`\nSmoothness at ${width} x ${height}, frame rate limited to the screen's (5 seconds of the full horde)`);
+  console.log(`\nSmoothness at ${width} x ${height}, frame rate limited to the screen's (5 seconds of the horde as ARGUS sends it)`);
   console.log('quality   frames   usual ms   99th ms   worst ms   frames over 25 ms');
   for (const level of ['low', 'medium', 'high', 'ultra']) {
     await limited.page.evaluate((level) => window.__HO.setQuality(level), level);
-    await limited.page.evaluate(() => {
-      const ho = window.__HO;
-      ho.clearRobots();
-      for (let i = 0; i < 24; i++) ho.spawnRobot(-3.2 + (i % 6) * 0.9, 8.6 + Math.floor(i / 6) * 1.7, 180, false, i % 3 === 0 ? 3.0 : 1.6, i % 4 === 0 ? 150 : 1500);
-      ho.game.weapons.state.reserve = 9000;
-      ho.press('fire', true);
-    });
+    await limited.page.evaluate(horde, true);
     // Long enough for the change of level itself to be over and done with.
     await limited.page.waitForTimeout(3500);
     const r = await limited.page.evaluate(
@@ -165,6 +184,112 @@ const paced = async (width, height) => {
 };
 await paced(1920, 1080);
 await paced(3840, 2160);
+
+// ---- First appearances: does the picture stall the first time a thing is drawn?
+// Shaders are built while the game loads, including those of things that
+// are not on screen yet (Game.warmShaders, and the spare robot). This is
+// the check of it: in a fresh page, each kind of robot and each of ARGUS's
+// counters is put in front of the camera for the first time, and the
+// slowest frame in the second that follows is reported. A frame at this
+// screen's own rate is the "usual" figure; 16.7 ms is one frame at 60 a
+// second.
+{
+  const fresh = await launch({ width: 1920, height: 1080, capped: true });
+  await fresh.page.goto(`${site.url}?debug=1`);
+  await fresh.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await fresh.page.evaluate(() => {
+    const ho = window.__HO;
+    ho.play();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.setQuality('high');
+    ho.place(0, 4.4, 0, 0);
+  });
+  // Let the change of level, and the start of the run, be over and done with.
+  await fresh.page.waitForTimeout(5000);
+  await fresh.page.evaluate(() => {
+    window.__frames = [];
+    window.__marks = [];
+    let last = performance.now();
+    const tick = () => {
+      const now = performance.now();
+      window.__frames.push([now, now - last]);
+      last = now;
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await fresh.page.waitForTimeout(1200);
+  /** Turn to face a robot's chest (for the shots). */
+  const face = `(robot) => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const aim = robot.chest(new game.camera.position.constructor());
+    const eye = game.camera.position;
+    const p = game.player.position;
+    ho.place(p.x, p.z, (Math.atan2(-(aim.x - eye.x), -(aim.z - eye.z)) * 180) / Math.PI, (Math.atan2(aim.y - eye.y, Math.hypot(aim.x - eye.x, aim.z - eye.z)) * 180) / Math.PI);
+  }`;
+  const first = async (name, fn, wait = 1300) => {
+    await fresh.page.evaluate(
+      ({ name, source, face }) => {
+        window.__marks.push([name, performance.now()]);
+        (0, eval)(`(${source})`)((0, eval)(`(${face})`));
+      },
+      { name, source: fn.toString(), face },
+    );
+    await fresh.page.waitForTimeout(wait);
+  };
+  await first('an ordinary robot', () => window.__HO.spawnKind(-2.4, -1.6, 0, { hold: true }));
+  await first('a robot carrying shielding', () => window.__HO.spawnKind(-0.8, -1.6, 0, { hold: true, shield: 'pistol', health: 5000 }));
+  await first('a robot with a plate over its visor', () => window.__HO.spawnKind(0.8, -1.6, 0, { hold: true, guard: 40 }));
+  await first('a shot that the shielding turns', (face) => {
+    const ho = window.__HO;
+    face(ho.game.robots.find((robot) => robot.alive && robot.armour.shield));
+    ho.tap('fire');
+  });
+  await first('a drone', () => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 4.4, 0, 0);
+    ho.spawnKind(0, -1.0, 0, { kind: 'drone', hold: true });
+  });
+  await first('a heavy', () => window.__HO.spawnKind(-2, -1.6, 0, { kind: 'heavy', hold: true }));
+  await first('a bomber', () => window.__HO.spawnKind(2, -2.6, 0, { kind: 'bomber', hold: true }));
+  await first(
+    'the bomber going off',
+    (face) => {
+      const ho = window.__HO;
+      window.__bomber = ho.game.robots.find((robot) => robot.alive && robot.kind === 'bomber');
+      face(window.__bomber);
+      // (The sidearm fires once for each pull of the trigger.)
+      ho.tap('fire');
+      window.__firing = setInterval(() => ho.tap('fire'), 300);
+    },
+    2600,
+  );
+  const wentOff = await fresh.page.evaluate(() => {
+    clearInterval(window.__firing);
+    return !window.__bomber.alive;
+  });
+  await first('a Custodian', () => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(0, 4.4, 0, 0);
+    ho.spawnRobot(-1.5, -1.6, 0, true, 1.2, 4000, 'custodian');
+  });
+  await first('the Proxy', () => window.__HO.spawnRobot(1.5, -1.6, 0, true, 1.2, 4000, 'proxy'));
+  const { frames, marks } = await fresh.page.evaluate(() => ({ frames: window.__frames, marks: window.__marks }));
+  const ordered = frames.map((frame) => frame[1]).sort((a, b) => a - b);
+  console.log(`\nFirst appearances at 1920 x 1080 on High, frame rate limited to the screen's (usual frame ${ordered[Math.floor(ordered.length / 2)].toFixed(1)} ms)`);
+  console.log('first time on screen                     slowest frame in the next second   frames over 25 ms');
+  for (const [name, at] of marks) {
+    const after = frames.filter(([time]) => time >= at && time < at + 1000);
+    const note = name === 'the bomber going off' && !wentOff ? '   (it did not go off)' : '';
+    console.log(`${name.padEnd(40)} ${Math.max(...after.map((frame) => frame[1])).toFixed(1).padStart(9)} ms ${String(after.filter((frame) => frame[1] > 25).length).padStart(27)}${note}`);
+  }
+  await fresh.browser.close();
+}
 
 // ---- Time to the title screen on slower connections (fresh visit, no cache)
 console.log('\nTime to title screen on a simulated connection:');

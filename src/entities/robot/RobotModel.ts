@@ -21,6 +21,12 @@ export class RobotModel {
   /** The rigid pieces a destroyed robot becomes. */
   readonly chunks: Chunk[];
   readonly material: THREE.MeshStandardMaterial;
+  /**
+   * The same finish for the pieces it breaks into. They are not skinned,
+   * and a material used by both kinds of mesh has its shader swapped every
+   * time the renderer goes from one kind to the other.
+   */
+  readonly chunkMaterial: THREE.MeshStandardMaterial;
   readonly glowTexture: THREE.Texture;
   /** Extra rotations layered over every animation (the hunch). */
   readonly posture: Array<{ bone: string; rotation: THREE.Quaternion }>;
@@ -88,6 +94,7 @@ export class RobotModel {
 
     const { color: edgeColor, ...edge } = design.edge ?? {};
     this.material = createRobotMaterial(assets, edgeColor ? { ...edge, color: new THREE.Color(...edgeColor) } : edge);
+    this.chunkMaterial = createRobotMaterial(assets, edgeColor ? { ...edge, color: new THREE.Color(...edgeColor) } : edge);
     this.lamp = design.lamp ?? null;
     const skeleton = new THREE.Skeleton(rig.bones);
     const body = new THREE.SkinnedMesh(built.body, this.material);

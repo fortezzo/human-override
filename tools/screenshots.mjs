@@ -1,6 +1,6 @@
 // Takes the project's screenshots from the production build.
 //
-//   npm run build && npm run shots              -> media/stage-2
+//   npm run build && npm run shots              -> media/stage-3
 //   npm run shots -- media/some-other-folder
 //
 // Every shot is staged through the debug tools with time stepped by hand
@@ -13,7 +13,7 @@ import path from 'node:path';
 import { gpuName, launch } from './lib/browser.mjs';
 import { serve } from './lib/static-server.mjs';
 
-const outDir = process.argv[2] ?? 'media/stage-2';
+const outDir = process.argv[2] ?? 'media/stage-3';
 if (!fs.existsSync('dist/index.html')) {
   console.error('No production build found. Run "npm run build" first.');
   process.exit(1);
@@ -538,23 +538,19 @@ await run(() => {
   const ho = window.__HO;
   const place = ho.mission().places.killSwitch;
   ho.tap('interact');
-  // Hold the console, facing it, until the Proxy has arrived and found its feet.
-  for (let i = 0; i < 60 * 40; i++) {
+  // Hold the console, facing it, until the Proxy has walked in from the loading dock and is in the room.
+  for (let i = 0; i < 60 * 45; i++) {
     ho.place(place.stand[0], place.stand[1], 180);
     ho.step(1 / 60, 1);
     const proxy = ho.game.robots.find((robot) => robot.role === 'proxy');
-    if (proxy && proxy.grounded && i > 60 * 13) break;
+    if (proxy && proxy.position.z > 28.6 && i > 60 * 13) break;
   }
-  // Back away from it across the room and turn to face it.
+  // Seen from the far side of the room, clear of the console: fighting distance.
   const proxy = ho.game.robots.find((robot) => robot.role === 'proxy');
   if (proxy) {
-    const centre = [place.at[0], place.at[2] - 2.6];
-    let dx = centre[0] - proxy.position.x;
-    let dz = centre[1] - proxy.position.z;
-    const length = Math.hypot(dx, dz) || 1;
-    const x = Math.max(-5.6, Math.min(3.6, proxy.position.x + (dx / length) * 5.4));
-    const z = Math.max(27.2, Math.min(36.6, proxy.position.z + (dz / length) * 5.4));
-    ho.place(x, z, (Math.atan2(-(proxy.position.x - x), -(proxy.position.z - z)) * 180) / Math.PI, 7);
+    const x = -5.3;
+    const z = 34.4;
+    ho.place(x, z, (Math.atan2(-(proxy.position.x - x), -(proxy.position.z - z)) * 180) / Math.PI, 5);
   }
   ho.step(1 / 60, 2);
 });
@@ -582,12 +578,15 @@ await shoot('27-mission-kill-switch');
 await run(() => {
   const ho = window.__HO;
   const place = ho.mission().places.killSwitch;
-  ho.place(place.stand[0], place.stand[1], 180);
-  ho.step(1 / 60, 6);
+  for (let i = 0; i < 60 * 9; i++) {
+    ho.place(place.stand[0], place.stand[1], 180);
+    ho.step(1 / 60, 1);
+  }
   ho.tap('interact');
   ho.photoMode(true);
   ho.view(-1, 2.3, 26.6, 180, -13, 78);
-  ho.step(1 / 60, 62);
+  // Two seconds on: the robots are down, ARGUS's eye is dark and its red light has left the room.
+  ho.step(1 / 60, 125);
 });
 await shoot('28-mission-powered-down');
 await run(() => {
@@ -607,6 +606,201 @@ await run(() => {
   window.__HO.step(1 / 60, 240);
 });
 await shoot('30-title-with-records');
+
+// ================================================================== ARGUS
+// The special robots, ARGUS's counters where they can be seen, the
+// analysis banner, and its profile of the player at the end of a run.
+/** Turn on each robot in turn and fire at where it is weakest until none is left standing. */
+const destroyAll = () =>
+  run(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    const aim = new game.camera.position.constructor();
+    for (let frames = 0; frames < 60 * 40; frames++) {
+      const robot = game.robots.find((r) => r.alive);
+      if (!robot) break;
+      robot.aimPoint(aim, true);
+      const eye = game.camera.position;
+      const dx = aim.x - eye.x;
+      const dz = aim.z - eye.z;
+      const p = game.player.position;
+      ho.place(p.x, p.z, (Math.atan2(-dx, -dz) * 180) / Math.PI, (Math.atan2(aim.y - eye.y, Math.hypot(dx, dz)) * 180) / Math.PI);
+      ho.press('fire', true);
+      const weapon = game.weapons.state;
+      if (weapon.reserve < 30) weapon.reserve = 150;
+      if (weapon.ammo === 0 && !game.weapons.reloading) ho.tap('reload');
+      ho.step(1 / 60, 1);
+    }
+    ho.press('fire', false);
+    ho.step(1 / 60, 50);
+  });
+
+// ---- 31. The lull after a round fought one way: ARGUS says what it saw.
+await run(() => {
+  const ho = window.__HO;
+  const game = ho.game;
+  ho.play();
+  ho.restart();
+  ho.god(true);
+  ho.steadyLights(true);
+  ho.scrap(6000);
+  for (const id of ['lobbyHall', 'lobbyPower']) ho.openDoor(id);
+  // On to round 4 with nothing on the map.
+  for (let i = 0; i < 6000 && game.stats.round < 4; i++) {
+    ho.simulate(1 / 60, 10);
+    if (game.stats.round < 4 && game.director.rounds.phase === 'active') {
+      ho.clearRobots();
+      ho.skipRound();
+    }
+  }
+  ho.holdRounds(true);
+  ho.clearRobots();
+  // The carbine from its rack, and nothing else used all round.
+  ho.place(1.6, 10.2, 180);
+  ho.step(1 / 60, 6);
+  ho.tap('interact');
+  ho.step(1 / 60, 60);
+  // Six robots coming up the middle of the server hall.
+  ho.place(-1, 10.4, 180, 0);
+  for (const [x, z] of [[-2.6, 16.4], [-0.4, 17.4], [1.2, 16.0], [-1.6, 19.6], [0.6, 20.4], [-3.4, 21.0]]) ho.spawnKind(x, z, 0, { speed: 1.4 });
+  ho.step(1 / 60, 30);
+});
+await overlay(false);
+await destroyAll();
+await run(() => {
+  const ho = window.__HO;
+  ho.place(-1, 10.4, 180, -4);
+  const next = `ROUND ${ho.game.stats.round + 1}`;
+  ho.announcement.clear();
+  ho.holdRounds(false);
+  ho.skipRound();
+  const up = () => document.querySelector('.argus-analysis').classList.contains('show') && document.querySelector('.argus-round').textContent === next;
+  for (let i = 0; i < 60 * 8 && !up(); i++) ho.step(1 / 60, 1);
+  ho.step(1 / 60, 20);
+});
+// (The banner's lines come in one after another: let the last of them arrive.)
+await page.waitForTimeout(1600);
+await shoot('31-argus-analysis');
+
+// ---- 32. The next round arrives carrying what it said: shielding against that gun, plates over weak points.
+await run(() => {
+  const ho = window.__HO;
+  const game = ho.game;
+  for (let i = 0; i < 3000 && game.stats.round < 5; i++) ho.step(1 / 60, 4);
+  ho.holdRounds(true);
+  ho.clearRobots();
+  ho.announcement.clear();
+  // Seven of that round's robots, as the director would have made them, coming on up the hall.
+  const plate = game.director.rounds.plan.health * 0.45;
+  const made = [
+    [-2.8, 15.2, { shield: 'carbine' }],
+    [-0.6, 16.2, { guard: plate }],
+    [1.1, 15.0, { shield: 'carbine', guard: plate }],
+    [-1.8, 18.4, {}],
+    [0.4, 19.0, { shield: 'carbine' }],
+    [-3.6, 19.6, { guard: plate }],
+    [2.2, 18.6, {}],
+  ];
+  for (const [x, z, traits] of made) ho.spawnKind(x, z, 0, { speed: 1.2, ...traits });
+  ho.place(-1, 10.6, 180, 0);
+  ho.step(1 / 60, 70);
+  ho.argusSay('weakStreak');
+});
+await page.waitForTimeout(1600);
+// A shot at the nearest shielded one, so that the word under the crosshair is on screen, and a remark from ARGUS.
+await run(() => {
+  const ho = window.__HO;
+  const game = ho.game;
+  const robot = game.robots.filter((r) => r.alive && r.armour.shield).sort((a, b) => a.position.z - b.position.z)[0];
+  const aim = robot.chest(new game.camera.position.constructor());
+  const eye = game.camera.position;
+  const p = game.player.position;
+  ho.place(p.x, p.z, (Math.atan2(-(aim.x - eye.x), -(aim.z - eye.z)) * 180) / Math.PI, (Math.atan2(aim.y - eye.y, Math.hypot(aim.x - eye.x, aim.z - eye.z)) * 180) / Math.PI);
+  ho.step(1 / 60, 3);
+  ho.tap('fire');
+  ho.step(1 / 60, 2);
+});
+await page.waitForTimeout(260);
+await page.screenshot({ path: path.join(outDir, '32-argus-counters.jpg'), type: 'jpeg', quality: 92 });
+console.log('  32-argus-counters.jpg');
+
+// ---- 35 (taken first, while the floor is clean). The heavy up close: plated all over, its core burning in its chest.
+await run(() => {
+  const ho = window.__HO;
+  ho.clearRobots();
+  ho.announcement.clear();
+  ho.place(0, 3.4, 0, 2);
+  ho.spawnKind(0.3, 0.2, 0, { kind: 'heavy', hold: true });
+  ho.spawnKind(-2.3, -1.6, 0, { hold: true });
+  ho.spawnKind(2.6, -2.0, 0, { hold: true });
+  ho.step(1 / 60, 60);
+});
+await shoot('35-heavy');
+
+// ---- 33. The special robots: drones, a bomber and a heavy in a round of the ordinary kind.
+await run(() => {
+  const ho = window.__HO;
+  ho.clearRobots();
+  ho.announcement.clear();
+  ho.place(0, 4.4, 0, 0);
+  // Coming from the breach across the lobby: a heavy in the middle, a bomber running ahead of it, two drones overhead.
+  ho.spawnKind(0.3, -3.6, 180, { kind: 'heavy' });
+  ho.spawnKind(-2.3, -1.4, 180, { kind: 'bomber' });
+  ho.spawnKind(2.6, -1.0, 180, { kind: 'drone', speed: 0.6 });
+  ho.spawnKind(-3.8, -3.4, 180, { kind: 'drone', speed: 0.6 });
+  for (const [x, z] of [[2.4, -4.2], [-1.6, -5.4], [3.9, -2.8], [-4.6, -5.6], [1.2, -6.4]]) ho.spawnKind(x, z, 180, { speed: 1.3 });
+  ho.step(1 / 60, 50);
+});
+await shoot('33-special-robots');
+
+// ---- 34. A bomber shot while it is still among its own.
+await run(() => {
+  const ho = window.__HO;
+  const game = ho.game;
+  ho.clearRobots();
+  ho.place(0, 4.4, 0, -2);
+  const bomber = game.robots[ho.spawnKind(0.2, -2.6, 0, { kind: 'bomber', hold: true })];
+  for (const [x, z] of [[-1.3, -2.4], [1.6, -2.9], [0.4, -4.1], [-1.0, -4.0], [2.6, -1.6], [-2.8, -1.9]]) ho.spawnKind(x, z, 0, { hold: true });
+  ho.step(1 / 60, 40);
+  const aim = bomber.chest(new game.camera.position.constructor());
+  const eye = game.camera.position;
+  const p = game.player.position;
+  ho.place(p.x, p.z, (Math.atan2(-(aim.x - eye.x), -(aim.z - eye.z)) * 180) / Math.PI, (Math.atan2(aim.y - eye.y, Math.hypot(aim.x - eye.x, aim.z - eye.z)) * 180) / Math.PI);
+  ho.press('fire', true);
+  for (let i = 0; i < 60 * 6 && !bomber.removed; i++) ho.step(1 / 60, 1);
+  ho.press('fire', false);
+  // A few frames into the blast.
+  ho.step(1 / 60, 5);
+});
+await shoot('34-bomber-blast');
+
+// ---- 36 and 37. A whole run by the skilled model, to its end: the screen it ends on, and ARGUS's profile of it.
+await run(() => {
+  const ho = window.__HO;
+  ho.autopilot(false);
+  ho.restart();
+  ho.god(false);
+  ho.steadyLights(false);
+  ho.autopilot(true, 'skilled', true);
+});
+for (let i = 0; i < 400; i++) {
+  const state = await run(() => {
+    const ho = window.__HO;
+    for (let k = 0; k < 900 && ho.game.state === 'playing'; k++) ho.simulate(1 / 60, 1);
+    return ho.game.state;
+  });
+  if (state !== 'playing') break;
+}
+const ended = await run(() => {
+  const ho = window.__HO;
+  ho.autopilot(false);
+  ho.step(1 / 60, 40);
+  return ho.game.state;
+});
+await shoot(ended === 'saved' ? '36-run-ends-humanity-saved' : '36-run-ends-game-over');
+await page.click(`.screen.${ended === 'saved' ? 'saved' : 'over'} [data-action="profile"]`);
+await shoot('37-argus-profile');
+await page.click('.screen.profile [data-action="profile-back"]');
 
 const errors = [...new Set(problems)].filter((p) => !/X3595|gradient instruction/.test(p));
 if (errors.length) console.log('Console errors:\n' + errors.join('\n'));

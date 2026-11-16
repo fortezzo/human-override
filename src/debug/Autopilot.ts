@@ -25,7 +25,7 @@
 // reports how long they take and how they end.)
 
 import * as THREE from 'three';
-import { MELEE, MISSION, WEAPONS, type WeaponId } from '../config';
+import { MELEE, MISSION, SPECIALS, WEAPONS, type WeaponId } from '../config';
 import type { Action } from '../core/input';
 import { angleDelta, clamp } from '../core/math';
 import type { Robot } from '../entities/robot/Robot';
@@ -175,6 +175,8 @@ export class Autopilot {
   private wobbleTimer = 0;
   private sinceShot = 99;
   private fleeTimer = 0;
+  /** Seconds since it last changed guns of its own accord (it does not change back and forth for every other target). */
+  private sinceSwap = 99;
   private lull = 0;
   /** Buttons pressed for one frame, to be let go at the start of the next. */
   private readonly tapped = new Set<Action>();
@@ -271,6 +273,7 @@ export class Autopilot {
     }
     if (this.resting) return;
     this.sinceShot += dt;
+    this.sinceSwap += dt;
 
     // The nearest robot it has a clear line to.
     _eye.copy(game.camera.position);
@@ -279,6 +282,10 @@ export class Autopilot {
     let closestAny = Infinity;
     let crowd = 0;
     let standing = 0;
+    /** A bomber about to go off, close enough to matter. */
+    let fuseNear = false;
+    /** How near the robot it would shoot at counts as being: a bomber counts as nearer than it is, so it is shot first. */
+    let nearestRank = Infinity;
     for (const robot of robots) {
       if (!robot.alive) continue;
       standing++;
@@ -286,11 +293,19 @@ export class Autopilot {
       const distance = _aim.distanceTo(_eye);
       closestAny = Math.min(closestAny, distance);
       if (distance < 3) crowd++;
-      if (distance >= nearest) continue;
+      if (robot.fuse >= 0 && distance < SPECIALS.bomber.radius + 1) fuseNear = true;
+      // (A practised player picks the bomber out of the crowd while it is
+      // still a way off, and leaves the robots that are proof against the
+      // gun in hand until last, unless they are on top of it.)
+      let rank = distance;
+      if (profile.practised && robot.kind === 'bomber' && distance > 4 && distance < 16) rank = distance * 0.4;
+      else if (profile.practised && distance > 2.5 && robot.shieldedAgainst === weapons.def.id) rank = distance * 1.5;
+      if (rank >= nearestRank) continue;
       _dir.copy(_aim).sub(_eye).divideScalar(distance);
       this.raycaster.set(_eye, _dir);
       this.raycaster.far = distance - 0.3;
       if (this.raycaster.intersectObjects(world.solids, false).length) continue;
+      nearestRank = rank;
       nearest = distance;
       seen = robot;
     }
@@ -302,7 +317,7 @@ export class Autopilot {
     if (current && current !== seen && current.alive) {
       current.aimPoint(_aim);
       const distance = _aim.distanceTo(_eye);
-      if (distance * 0.7 < nearest) {
+      if (distance * 0.7 < nearest && !(seen && seen.kind === 'bomber' && current.kind !== 'bomber')) {
         _dir.copy(_aim).sub(_eye).divideScalar(distance);
         this.raycaster.set(_eye, _dir);
         this.raycaster.far = distance - 0.3;
@@ -341,6 +356,8 @@ export class Autopilot {
     // clear and turns. (Not once they are within reach: turning its back on
     // a robot at arm's length only gets it hit from behind.)
     if (profile.practised && this.fleeTimer <= 0 && !player.stamina.winded && weapons.reloading && closestAny < 6 && closestAny > 2.2) this.fleeTimer = 1.2;
+    // A bomber beeping within reach of its blast: anybody runs.
+    if (fuseNear && this.fleeTimer <= 0 && !player.stamina.winded) this.fleeTimer = 1.0;
     if (this.fleeTimer > 0) {
       this.fleeTimer -= dt;
       this.releaseTrigger();
@@ -379,15 +396,20 @@ export class Autopilot {
     // worth running for with the robots a few steps behind.)
     const shopping = purchase !== null && (!seen || nearest > 6 || (dry && nearest > 2.5) || (profile.practised && purchase.urgent === true && nearest > 3.5));
     // The mission's errands wait for a gap in the same way; one that cannot
-    // wait (the armed switch) is run at once. Ground that has been left is
-    // gone back to unless something is close enough to hit.
-    const errand = duty !== null && !shopping && this.givingGround <= 0 && (zone ? outside && (!seen || nearest > 2.5) : duty.urgent === true || !seen || nearest > profile.errandAt);
+    // wait (the armed switch) is run at once, though not through a robot at
+    // arm's length: that one is dealt with first, unless the switch can be
+    // used from here. Ground that has been left is gone back to unless
+    // something is close enough to hit.
+    const offered = duty !== null && !duty.hold && game.mission.interaction()?.use != null;
+    const errand =
+      duty !== null && !shopping && this.givingGround <= 0 && (zone ? outside && (!seen || nearest > 2.5) : duty.urgent === true ? !seen || nearest > 1.6 || offered : !seen || nearest > profile.errandAt);
 
     if (seen && !shopping && !errand) {
       this.lull = 0;
       this.status = `fighting (${nearest.toFixed(1)} m)`;
       // Where it means to hit, plus however far its hands have wandered.
-      seen.aimPoint(_aim, this.aimAtHead);
+      // (The heavy's core is the only part of it worth shooting, and it glows: everybody aims there.)
+      seen.aimPoint(_aim, this.aimAtHead || seen.kind === 'heavy');
       if (profile.wobble > 0) {
         this.wobbleTimer -= dt;
         if (this.wobbleTimer <= 0) {
@@ -418,17 +440,31 @@ export class Autopilot {
       else if (!weapons.reloading && !weapons.busy) {
         const index = weapons.loadout.slots.findIndex((slot, i) => slot && i !== weapons.loadout.current);
         const other = index >= 0 ? weapons.loadout.slots[index]! : null;
-        const swap = (): void => this.tap(index === 0 ? 'weapon1' : 'weapon2');
-        if (state.ammo === 0) {
+        const swap = (): void => {
+          this.tap(index === 0 ? 'weapon1' : 'weapon2');
+          this.sinceSwap = 0;
+        };
+        // ARGUS's shielding is against one gun. A robot that is proof
+        // against the gun in hand is shot with the other one, if it is
+        // loaded and the robot is near enough for it; and having changed,
+        // the practised player stays with that gun for a few seconds
+        // rather than changing back for the next robot along.
+        const shield = seen.shieldedAgainst;
+        const proofAgainstThis = shield === def.id;
+        const proofAgainstOther = other !== null && shield === other.id;
+        const settled = this.sinceSwap > 2.5;
+        if (profile.practised && proofAgainstThis && other && !proofAgainstOther && other.state.ammo > 0 && settled && (other.id !== 'shotgun' || nearest < 7)) swap();
+        else if (state.ammo === 0) {
           // An empty gun with robots at arm's length: the other gun, if it
           // is loaded, is quicker than a reload. Otherwise reload the
           // better of the two.
           if (profile.practised && other && other.state.ammo > 0 && nearest < 4) swap();
           else if (profile.practised && other && WORTH[other.id] > WORTH[def.id] && other.state.reserve > 0) swap();
           else if (state.reserve > 0) this.tap('reload');
-        } else if (profile.practised && other && WORTH[other.id] > WORTH[def.id]) {
+        } else if (profile.practised && other && WORTH[other.id] > WORTH[def.id] && !proofAgainstOther && settled) {
           // Holding the lesser gun: back to the better one as soon as it
-          // is loaded, or as soon as there is room to load it.
+          // is loaded, or as soon as there is room to load it (unless the
+          // robot in its sights is proof against that one).
           if (other.state.ammo > 0 || (other.state.reserve > 0 && nearest > 4.5)) swap();
         }
       }
@@ -485,7 +521,10 @@ export class Autopilot {
     }
     this.status = `going to ${goal.label}`;
     const distance = Math.hypot(goal.x - player.position.x, goal.z - player.position.z);
-    if (distance < (goal.reach ?? 1.5)) {
+    // (The mission's things can be used from as far away as their prompt
+    // reaches. A player presses F the moment it comes up, and does not push
+    // through a crowd for the last step to the console.)
+    if (distance < (goal.reach ?? 1.5) || (goal === duty && offered)) {
       if (goal.rest) return;
       // Face it and press the button. A new gun takes the place of the one
       // in hand, so make sure that is the one worth less.

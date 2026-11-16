@@ -77,7 +77,8 @@ function plating(rig: Rig, b: RobotBuilder): void {
 export const HEAVY: RobotDesign = {
   ...DRUDGE,
   proportions: { ...DRUDGE.proportions, shoulders: 1.56, hips: 1.42, upperArm: 1.06, forearm: 1.28, neck: 0.6 },
-  scale: 1.36,
+  // (As big as will still pass under the power room's doors.)
+  scale: 1.3,
   // Pale and hot: the colour of the reactor, and of nothing else in the building.
   eyeColor: 0xffe2b0,
   weakPoint: { bone: 'Spine2', centre: [CORE[0], CORE[1], CORE[2] - 0.022], radius: CORE_RADIUS + 0.02 },
