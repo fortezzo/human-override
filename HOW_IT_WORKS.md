@@ -1,6 +1,6 @@
 # How HUMAN OVERRIDE works
 
-A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 2: the core loop and the mission) and is extended as each stage is added.
+A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 3: the core loop, the mission, and ARGUS) and is extended as each stage is added.
 
 ## The one-paragraph version
 
@@ -16,7 +16,7 @@ There is no server behind it. Once the files are downloaded, everything runs on 
 
 ## How a run works
 
-**Rounds.** A round is a fixed number of robots: 6 in round 1, 8 in round 2, then 10, 13, 16, 20 and so on. They do not all arrive at once: one comes in every couple of seconds (faster in later rounds), and never more than 24 are on the map together. When the last one is destroyed there is a ten-second lull, then the next round starts with more robots that are tougher and faster. From round 5 some of them run, slowly at first; by round 13 the runners are just under your own sprinting speed. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code.
+**Rounds.** A round is a fixed number of robots: 6 in round 1, 10 in round 2, then 14, 18, 23, 29 and so on. They do not all arrive at once: one comes in every two and a half seconds or so (every two seconds from round 9), and never more than 24 are on the map together. When the last one is destroyed there is a fifteen-second lull, then the next round starts with more robots that are tougher and faster. Toughness climbs quickly for the first six rounds and slowly after that. From round 5 some of them run, slowly at first; by round 14 the runners are just under your own sprinting speed, but never more than half the horde runs. A round lasts about half a minute at the start and a minute and a half by round 10. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code, and it has been: see "How the difficulty was set" further down.
 
 **Scrap.** Destroying robots pays scrap: 10 for a hit, 60 for a kill, 100 for a kill through the head, 130 for a kill with the melee strike. The riskier the kill, the better it pays. The shotgun pays for one hit per shell however many of its nine pellets land, or it would print money.
 
@@ -37,16 +37,60 @@ The mission is a checklist with an order to it, and it lives in one small file o
 1. **Restore power.** The power room's main breaker. Until it is thrown, the key cage's lock is dead, the uplink is dead, and the Custodian does not come.
 2. **Recover three override keys**, in any order:
    - one sits in the **key cage** in the power room, whose lock lets go when the power comes back;
-   - one is issued by the **uplink** in the server hall to whoever starts it and then holds the ground around it for sixty seconds. The clock only runs while you are standing inside the ring on the floor; step out and it stops, keeping what you have earned. While it runs, ARGUS sends extra robots at it;
-   - one is carried by the **Custodian**, a tall, pale security machine that arrives with round 8 (or with the next round, if the power came on later than that). Destroy it and the key drops where it fell.
-3. **Unseal the core** with the three keys, **arm the kill switch**, and **survive** the 75 seconds it takes to arm. This is the final stand: the ordinary rounds stand aside and ARGUS sends a steady stream of robots at you, and ten seconds in, its own unit, the **Proxy**: half as tall again as anything else, black, with twelve times the health of an ordinary robot.
-4. **Pull the switch.** Every robot on the map goes limp and falls where it stands, ARGUS's eye on the core wall gutters and goes out, and the HUMANITY SAVED screen shows your run. From there you can stop, or keep fighting for a higher round (the machines still outside "have not heard").
+   - one is issued by the **uplink** in the server hall to whoever starts it and then holds the ground around it for sixty seconds. The clock only runs while you are standing inside the ring on the floor; step out and it stops, keeping what you have earned, which is what lets you back off to recover and come back. While it runs, ARGUS sends extra robots at it: none in the first two rounds, then one more at a time for every three rounds played, up to four, so an uplink started early is a smaller fight than one started late;
+   - one is carried by the **Custodian**, a tall, pale security machine that arrives with round 11 (or with the next round, if the power came on later than that). Destroy it and the key drops where it fell.
+3. **Unseal the core** with the three keys, **arm the kill switch**, and **hold the core** for the 75 seconds it takes to arm. The switch only arms while you are inside the core: step out and its clock stops, exactly as the uplink's does, and the tracker says GET BACK TO THE CORE. Running laps of the map does not win the game. This is the final stand: the ordinary rounds stand aside and ARGUS sends a heavy horde that presses in at a walk (one in five runs), and ten seconds in, its own unit, the **Proxy**: half as tall again as anything else, with ten times the health of an ordinary robot. It is too big for the ceiling ducts, so it comes in on foot through the loading dock and in through the core's door, where you can see it coming from across the room.
+4. **Pull the switch.** Every robot on the map goes limp and falls where it stands. ARGUS's eye on the core wall gutters twice and goes dark in a little over a second, the red light it threw on the room dies with it, the red lights on its machines go out, the monitors that showed its eye read ARGUS OFFLINE, and cold working light comes up in its place. Then the HUMANITY SAVED screen shows your run. From there you can stop, or keep fighting for a higher round (the machines still outside "have not heard").
 
 **The tracker.** The box under the round number always shows the next step, with three small lozenges for the keys and a marker in the world pointing at where to go. It never has to be kept in step with the mission by hand, because it does not store anything: every frame it asks the mission file "what now?" and prints the answer. With several keys still to find, the answer is whichever is nearest to hand: a key lying on the floor first, then the cage, then the Custodian if it is on the map, then the uplink.
 
 **The two elite robots** are the ordinary robot with different numbers and a different finish, exactly as the spec asked: the same skeleton and movements, scaled up, re-plated in another colour, with other lights. The Custodian carries a real glowing key in a cradle on its back, so you can see what you are being asked to shoot. Neither can be slowed to a crawl by automatic fire the way an ordinary robot can.
 
+**Making the Proxy readable.** A black machine in a dark red room is a dark clump, however good it looks up close. So the Proxy is lit from inside (broad seams down its chest and back, bands round its forearms and shins, lit shoulder plates, a row of eyes over the visor, all in the white-hot orange of ARGUS's own iris), and from a distance its edges glow pale and a light travels with it, so its shape and the floor round it are lit. Both of those fade out as it closes in: within two or three metres it is the black machine it was built as, with only its seams burning. A check measures it from eight metres against one of the horde on the same spot: it has to be about twice as bright, from the front, the side and behind.
+
 **Records.** The fastest time from pressing Play to pulling the switch is remembered in your browser alongside your best round, and shown on the title screen.
+
+## How ARGUS works
+
+ARGUS is the AI in the story. In the code it is **a set of rules, not machine learning**. Nothing in it learns, guesses or improves by itself, and there is no neural network anywhere in the game. It keeps a handful of running totals about how you are playing, compares each with a fixed number, and picks from four fixed responses. Every rule is in one file of plain logic (`src/sim/argus.ts`), every number it uses is in the config file, and every rule has a unit test. That is the honest description of it, and it is also why it is fair: the same play always gets the same answer.
+
+**What it writes down during a round** (only while there are robots on the map, so standing in an empty room does not count against you):
+
+- how much damage each weapon did (the melee strike counts as a weapon);
+- how many of your hits landed on a weak point;
+- how long you stayed within 4.5 metres of one spot (a stay counts once it has lasted 10 seconds);
+- how many laps you ran: coming back to within 3.5 metres of where you were at least 8 seconds ago, having covered 25 metres and been 8 metres away in between. Pacing up and down a corridor is not a lap.
+
+**What it does about it.** In the lull after each round, starting with the lull before round 3, it asks four questions:
+
+| It notices | When | Its counter for the next round | How you beat it |
+| --- | --- | --- | --- |
+| You lean on one weapon | 60% or more of the round's damage came from it | **Shielding**: four in ten of the ordinary robots carry plates of light round the chest, in that weapon's colour. That weapon does half damage to them | Use your other gun, or the strike, on the ones with shields. Spread your damage and the shielding is withdrawn |
+| You hold one spot | 45% or more of the round spent holding | **Flushing out**: two extra bombers, and half the round comes in at the entrance nearest you | Move. Shoot the bombers while they are still among their own |
+| You run the horde in circles | 3 or more laps in the round | **Interception**: four extra drones, sent in ahead of the way you are running | Change direction, or stand and fight for a while |
+| You land a lot of weak-point hits | 40% or more of your hits | **Guarding**: half the ordinary robots wear a steel plate over the visor. A hit there counts as a body hit until the plate has taken about half a robot's health; then it flies off | Shoot the plate off, or shoot the body |
+
+It acts on at most two at once: the two with the strongest evidence. A counter stays for as long as the habit does (the banner says "Maintaining"), and is taken away the round after you stop (the banner says "Withdrawing"). So every counter is something you can see on the robots, and something you can undo by playing differently. None of them is a hidden boost to a robot's health or damage, and the tests hold it to that: a shot on a plated head never does less than the same shot on the body would.
+
+**The banner.** About three seconds into the lull a panel slides in on the right of the screen: ARGUS ANALYSIS, then what it observed and what it is doing, one sentence each. For example: "Observed: 77% of damage from the carbine. Adapting: carbine-resistant plating." The game does not pause for it. It is on the right because your objective is on the left: your side of the screen, and its side.
+
+**Hits that did less.** When a shot lands on shielding, a heavy's plating or a plated head, a small word appears under the crosshair saying which (RESISTED, ARMOUR, PLATE, and PLATE OFF when the plate goes), and the hit marker is dimmer. You are never left wondering why a robot took so long to go down.
+
+**Remarks.** There are seventeen things it may comment on in one line: your first kill, a run of weak-point kills, standing still for twenty seconds, running laps, low health, an empty gun, a new weapon, each step of the mission. It never repeats a line and waits at least 18 seconds between them.
+
+**The profile.** At the end of a run, the game-over and HUMANITY SAVED screens both offer "ARGUS's profile of you": a card with a play-style label (the Marksman, the Fortress, the Runner, the Specialist, the Brawler or the Improviser), six numbers, the counters it used and in which rounds, the round you reached, whether humanity was saved, and the web address of the page, so a screenshot of the card carries the link to the game. The label is the habit that stood out most over the whole run, measured against bars set from the same thresholds as the counters (the bar for a favourite weapon is higher over a whole run, three quarters of all damage, because nearly everyone's best gun does most of the work). If no habit is past its bar you are the Improviser, which is the best thing it can call you.
+
+**When the switch is pulled, ARGUS is off.** It stops watching and adapting, its counters are withdrawn, and the rounds you fight on through afterwards are plain ones.
+
+## The special robots
+
+From round 4 the horde is no longer all one kind. The specials take the place of ordinary robots, so a round is no longer for having them, and they are spread through the round, never sent first or all at once.
+
+- **Drones** (from round 4: two, and one more every two rounds, up to six). They fly at head height at 5.2 metres a second, faster than you walk, and sting for a little. They have a third of an ordinary robot's health, so one or two shots bring one down. You hear them before you see them.
+- **Bombers** (from round 6: one, up to three). A robot with a yellow charge strapped to its chest. It runs at you, and within 2.4 metres it primes: its lights beat faster, it beeps, and 0.8 seconds later it goes off, hurting everything within 4.5 metres, less with distance. Stand still and it costs about half your health; back away and it costs almost nothing. Destroy it first and it goes off where it stands, which wrecks the robots round it and pays you for each.
+- **Heavies** (from round 8: one; two from round 12). Slow, a third bigger, with four times the health and plating that turns seven tenths of any hit. The plating has one opening: the reactor burning in the middle of its chest. A shot there does full weak-point damage. Shoot the glow.
+
+All three are built in code on the same skeleton as the ordinary robot (the drone simply has nothing built on its limbs, and the game holds it in the air), so they needed no new downloads, and they share its path-finding, hit testing and the way it breaks apart.
 
 ## How the map works
 
@@ -180,17 +224,36 @@ The code was written by an AI agent that cannot hold a mouse, so the project car
 
 - **A whole mission, scripted.** The same test plays the mission from the first breaker to HUMANITY SAVED: it stands where a player would stand and presses F at each step, holds the uplink for its sixty seconds (and walks away for ten of them to check the clock stops), shoots the Custodian and the Proxy until they are destroyed, pulls the switch, checks every robot has gone down, then fights on through three more rounds. It also tries each step too early and checks that nothing happens.
 
-- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and shops. It has two characters. The "expert" never misses. The "first-timer" is a rough model of someone new to this kind of game: slow to notice a robot, shaky, aims at the body, backs away late. The spec asks that a first-time player usually goes down between rounds 5 and 8, so a tool plays sixteen whole runs as the first-timer, without drawing them (a five-minute run takes about five seconds), and reports the round each ended in. It is a model, not a person: it shows whether the numbers are in the right place, not how the game feels.
+- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and shops. It comes in three characters. The "expert" never misses and is there to prove the game can be played. The "first-timer" is a rough model of someone new to this kind of game: slow to notice a robot, shaky, aims at the body, backs away late, runs when hurt. The "skilled" player is in between, and is the model of the "focused player" the mission is paced for: quick but not instant, on target most of the time, sprints clear to reload, keeps both guns loaded and topped up, and gets ready before starting a fight. Any of them can also be told to play the mission, following the objective tracker as a person would.
+
+- **Whole runs, played many times.** Two tools use those characters to answer questions about difficulty, without drawing anything (so a fifteen-minute run takes about twenty seconds). `npm run balance` plays ordinary rounds and reports the round each run ended in. `npm run mission` plays the whole mission with no god mode and reports when each step was reached, in what round, and how each run ended. They are models, not people: they show whether the numbers are in the right place, not how the game feels.
 
 - **Checks that look at the building itself.** Some bugs are in the map, not the rules, and were found by eye first and then turned into checks so they cannot come back: every room is sealed by its own walls; nothing stands across any doorway (a rail along one wall once carried straight on across four openings); there is nowhere a player can stand that no robot can reach; every way in is joined to every room on the map the robots steer by (a parked cart once cut the loading dock off, and every robot sent that way stood against a wall); the places robots walk in from cannot be seen from indoors; a robot in the darkest corner still stands out from what is behind it; and every door, the core's included, is opened with F and walked through on foot at every quality level, with the room beyond measured to make sure it is lit.
 
 - **Real input.** The debug controls press the game's buttons from the inside, which cannot notice a key that is wired to nothing, or a menu button that fails to capture the mouse. So the last part of the test uses the real thing: real clicks on Play, Resume and Play Again with the browser really capturing and releasing the mouse, and every key on the controls list really pressed. This found the sprint bug described above, and that choosing "Auto" quality after trying another level did nothing. Finally the browser's processor is slowed sixteen times over to imitate a weak computer, and the test waits for the game to notice and lower its own quality.
 
-Alongside these, **a screenshot script** re-stages the same moments every time so any change can be compared with the approved look, and **a performance report** measures frame rate at each quality level, the download size, and smoothness: not the average frame, which can hide stutter, but the slowest frames. That report is how the stalling monitors were found; the average had looked fine.
+Alongside these, **a screenshot script** re-stages the same moments every time so any change can be compared with the approved look, and **a performance report** measures frame rate at each quality level, the download size, and smoothness: not the average frame, which can hide stutter, but the slowest frames. That report is how the stalling monitors were found; the average had looked fine. It measures the heaviest moment two ways (a full horde of ordinary robots, and the same horde as ARGUS sends it, with specials, shielding and plates), and it puts each new kind of robot in front of the camera for the first time in a fresh page to see whether the picture stalls when a thing is first drawn. That second scene earned its keep the day it was added: it showed that each plate was six separate things to draw and each shield four, and they were merged into one apiece.
+
+The same day's digging answered an older question, which was where the occasional single slow frame came from. The game was throwing away about 190 MB of short-lived memory every second in a heavy fight, and the browser has to stop now and then to clear that up. Nearly all of it came from about fourteen small panes of glass on lamps, cameras and fire extinguishers. The drawing library draws a see-through, two-sided surface in two goes, and each go made it choose that surface's shader afresh and hand every light in the building to the graphics card again. Drawing them in one go looks the same, and the heaviest scene went from 188 frames a second to 229. The lesson is the one the stalling monitors taught: measure the thing itself (here, memory), not only the frame rate it eventually shows up in.
+
+## How the difficulty was set
+
+The spec gives three targets: a first-time player should usually go down between rounds 5 and 8; a focused player should finish the mission in 15 to 20 minutes, around round 10 to 12; and the final stand should be hard but winnable. Nobody had fought the mission without god mode until the two models did.
+
+The first thing they showed was a flaw in the models themselves. At arm's length they nearly stopped shooting (their aim was held to a standard meant for distant targets, every change of target restarted their reaction time, and they kept using the strike long after it had stopped destroying a robot in one blow). That made every character go down in the same round for an artificial reason, and hid the real picture. Those were fixed first, and several more habits a real player does not have were fixed as they showed up: letting guns run dry with thousands of scrap in the bank, standing at a door that had just been opened, topping up a full magazine with robots three steps away, backing into corners.
+
+The real picture was that the game got harder too steeply after round 6, so skill bought almost nothing: the first-timer went down in round 6 and a never-missing expert in round 9. The rounds were also twice too short: round 10 came at six and a half minutes. So:
+
+- **Rounds are longer**: more robots, arriving a little slower, with a 15-second lull.
+- **The climb after round 6 is gentler**: toughness nearly levels off, arrivals stop speeding up at round 9, and no more than half the horde runs (the runners still reach just under sprint speed in the late rounds, as you asked for after Stage 1).
+- **The uplink's ring is wider** (it sits in a corner of the hall, under a ceiling vent) and its wave grows with the round.
+- **The final stand's horde walks.** In a room the size of the core, a crowd of sprinters leaves nothing to do but go down; the Proxy is there to be the thing that hunts.
+- **The Custodian arrives with round 11**, which is what puts the end of the mission at fifteen minutes and more.
+
+The numbers the models produce now are in PROGRESS.md, with how many runs each is based on. They will move again in Stage 4, when the player gets boosts, a better weapon and grenades, and the same two tools will be used to move the robots' numbers up to match.
 
 ## Still to come
 
 These parts are designed but not built yet. This document will grow as they are.
 
-- **ARGUS, the AI that studies you** (Stage 3): during each round the game counts things about how you play, such as which weapon does most of your damage, how long you stay in one spot, and how many head shots you land. Between rounds, a set of plain rules turns those counts into one or two counters and tells you about them. It is rule-based game AI, not machine learning: there is no training and no neural network, just "if the player does X a lot, respond with Y", and every response is visible and beatable.
 - **The full economy** (Stage 4): shutters to repair, boost stations, a prototype crate, an overclock bench, pickups, swarm rounds, grenades.

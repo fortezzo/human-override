@@ -8,12 +8,292 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | --- | --- | --- |
 | 0 | The look test: one room, one robot, one rifle | **Approved** (after two rounds of feedback, recorded below) |
 | 1 | Core loop: whole map, rounds, scrap, weapons, HUD, restart, debug mode | **Played; nine items of feedback, all done** (recorded below) |
-| 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Built. Waiting for you to play it.** |
-| 3 | ARGUS: specials, tracking, counters, banner, end-of-run report | Not started |
+| 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Played; four items of feedback, all done** (recorded below) |
+| 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Built. Waiting for you to play it.** |
 | 4 | Full economy | Not started |
 | 5 | Polish | Not started |
 
-The approved look lives in `media/look-target/` and is never overwritten. Stage 2's pictures are in `media/stage-2/` (30 of them, including every Stage 1 view re-taken) and are re-made with `npm run build` then `npm run shots`. Stage 1's are kept in `media/stage-1/` as they were when you played it.
+The approved look lives in `media/look-target/` and is never overwritten. Stage 3's pictures are in `media/stage-3/` (37 of them, including every earlier view re-taken) and are re-made with `npm run build` then `npm run shots`. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+
+## Stage 2 feedback: what changed
+
+You approved the mission flow, the objective tracker and marker, the round announcement, the Custodian and the HUMANITY SAVED screen, and listed four things.
+
+| # | You asked for | What was done | How it is checked now |
+| --- | --- | --- | --- |
+| 1 | Hold the core: the switch only arms while you are inside it, and the timer pauses when you leave, as the uplink's does | Exactly that. Outside the core the clock stops, the tracker reads **GET BACK TO THE CORE** with the time left and "CLOCK STOPPED", and the lights round the dais dim until you are back. The notice now says "HOLD THE CORE FOR 1:15", the prompt at the switch "Hold the core until it is armed". The Proxy is not sent while you are outside, either. | Unit tests of the rule (the clock, what the tracker says, the Proxy waiting). End to end: ten seconds stood in the hall leave the clock where it was (14.4 s, then 14.4 s), and two seconds back inside move it on by two. |
+| 2 | The Proxy reads as a dark clump at fighting distance; give it glowing accents of its own and enough light that its shape reads from across the core. (Up close it looks great.) | **Accents of its own**: broad lit seams down its chest and back, bands round its forearms and shins, lit shoulder plates, lights on the sides of its head and a row of eyes over the visor, in the white-hot orange of ARGUS's own iris, not the horde's red. **Light**: from across a room its edges glow pale whatever light it stands in, and a lamp travels with it, lighting its shape and the floor round it. **The close-up is kept**: both of those fade as it closes in, and within two or three metres it is the black machine you approved, with only its seams burning. It also **walks in now** (through the loading dock and the core's door) where it used to drop out of a ceiling duct, sometimes three metres beside you: you see it coming from across the room. | A new check photographs it from 8 m in the core, from the front, the side and behind, against one of the horde on the same spot, and measures how much brighter than the room each is. The old Proxy measured exactly the same as an ordinary robot (+23 steps of brightness out of 255); the new one **+46 to +58**, twice as bright or more, with 80 to 89% of it standing out from what is behind it. Another checks that it comes in at the dock and never falls from above. |
+| 3 | ARGUS's eye still glows after the switch is pulled; make it flicker and go dark and let the room's red light die with it | Pulling the switch now kills ARGUS where you can see it. Its eye gutters twice and is out in 1.2 seconds; the red light it threw on the core, the red lights on its racks and its face on the lobby monitors (which change to "ARGUS OFFLINE / MANUAL OVERRIDE ENGAGED") all follow the same number, so none can be left on; and cold working light comes up in the core as the red goes, so the room and what is lying in it can be seen. With "reduce screen shake and flashing" on, it fades without the flicker. The ending card waits 3 seconds, so you watch it happen. | End to end, from a fixed camera on the eye's wall: the eye measures 156 of red (out of 255) before the pull and 18 a second and a half after; the whole picture goes from 1.67 times as red as blue to 0.79. Picture 28 is re-taken two seconds after the pull. |
+| 4 | Nothing has fought the mission without god mode. Run a first-timer model and a skilled-player model through it, say how long it takes and how often each wins the final stand, and tune toward the spec | Done; see **"Mission length and difficulty"** below. The short version: the game was about twice too fast and got too hard too suddenly after round 6. After re-tuning, the skilled model finishes **17 missions in 48**; the ones it finishes take **17:44 (median), in round 11**; it wins the final stand **17 times in the 29 it reaches**. The first-timer never finishes and goes down in **round 5** (median) when it attempts the mission, **round 7** when it only fights. | `npm run mission` and `npm run balance` re-produce every number in that section. |
+
+### Mission length and difficulty
+
+Two models of a player did this. The **first-timer** is the one from Stage 1: slow to notice a robot, shaky, aims at the body, backs away late, runs when hurt. The **skilled** player is new, and is my stand-in for the spec's "focused player": quick but not instant (0.22 s), mostly on target, goes for the head a little over half the time, sprints clear to reload, keeps both guns loaded and topped up, and gets ready before starting a fight. Both can now play the mission by themselves: they follow the objective tracker, hold the uplink's ring and the core, step out to recover and come back, and pull the switch. Two tools play whole runs with them, with no god mode and no free scrap, without drawing anything: `npm run balance` (ordinary rounds) and `npm run mission` (the whole mission).
+
+**What they found first was wrong with the models, not the game.** At arm's length they nearly stopped shooting: their aim was held to a standard meant for distant targets, every change of target restarted their reaction time, and they went on using the strike long after it had stopped destroying a robot in one blow. That made every model go down in the same round for an artificial reason. Fixing it, and then reading the last seconds of dozens of their runs, turned up more habits no real player has: letting both guns run dry with 13,000 scrap in the bank, standing at a door they had just opened (a real bug in the autopilot: it kept following a route worked out while the door was shut), topping up a nearly full magazine with robots three steps away, backing into corners, and, once ARGUS existed, swapping guns for every other target. Each was fixed before the game's numbers were touched. I am telling you this because it is the main risk in this section: **the numbers below are only as good as the models**.
+
+**What was wrong with the game:**
+
+- It was about **twice too fast**. Round 10 started six and a half minutes in; the spec wants the mission to end at fifteen to twenty, around round 10 to 12.
+- It got **too hard too suddenly**. The "damage per second the rounds demand" grew by about 35 to 40% a round after round 5 (robots arriving faster, each tougher, more of them running). So skill bought almost nothing: the first-timer went down in round 6, the skilled model in round 8, and a model that never misses in round 9.
+- **The uplink was a trap**: its ring sits in a corner of the hall with a ceiling vent inside it, and a full extra wave came on top of whatever round it was. The skilled model died there four times in twelve; the first-timer almost every time.
+- **The final stand could not be won**: 0 wins in 12 for the skilled model with a full loadout. Half the horde were sprinters, in a room twelve metres across.
+
+**What was changed** (all of it in `src/config.ts`; decisions 75 to 80 below give every number):
+
+- Rounds are longer: more robots, arriving a little slower, with a 15-second lull. Round 5 now starts at about 3 minutes, round 8 at 7, round 10 at 10, round 11 at 12.
+- The climb after round 6 is gentler: toughness nearly levels off, arrivals stop speeding up at round 9, and no more than half the horde runs. **Runners still reach just under your sprint speed in the late rounds**, as you asked after Stage 1; I tried capping them below walking pace first, saw that it contradicted that instruction, and put them back.
+- The uplink's ring is wider (8.5 m, was 6.5), and its extra wave grows with the round: none in rounds 1 and 2, one robot at a time in rounds 3 to 5, two in 6 to 8, up to four from round 12.
+- The final stand's horde presses in at a walk, with one runner in five; twelve at once. The Proxy is the thing that hunts. It has ten times an ordinary robot's health (was twelve).
+- The Custodian arrives with round 11 (was 8). That, more than anything, is what puts the end of the mission past fifteen minutes.
+
+**Where it stands now**, on the final code, with everything in Stage 3 switched on (specials and ARGUS's counters): 48 missions by the skilled model, 16 by the first-timer, and 16 runs of ordinary rounds by the first-timer. No god mode, no free scrap.
+
+| | Skilled model (48 missions) | First-timer model (16 missions, 16 ordinary runs) |
+| --- | --- | --- |
+| Finished the mission | **17 of 48 (35%)** | 0 of 16 |
+| Mission time, of those that finished | **median 17:44** (fastest 16:34, slowest 21:57); 13 of 17 between 15 and 20 minutes | |
+| Round the mission ended in | **11** (median); 17 of 17 in rounds 10 to 12 | |
+| Reached the final stand | 29 of 48 | 0 of 16 |
+| **Won the final stand** | **17 of 29 (59%)**, taking 1:35 (median) from arming the switch to pulling it | never reached it |
+| Got the uplink's key | 45 of 48 | 7 of 16 |
+| Went down in round (attempting the mission) | 11 (median; 4 to 12), of the 31 that went down | **5** (median; 4 to 8); 15 of 16 in rounds 5 to 8 |
+| Went down in round (ordinary rounds only) | | **7** (median); 14 of 16 (88%) in rounds 5 to 8; earliest 3, latest 8 |
+
+Where the skilled model's lost runs ended: 13 before the Custodian came (ten of them in rounds 8 to 10, fighting the rounds with two keys in hand; one each, in rounds 4 to 6, at the breaker, in the uplink's ring and on the way back to it), 6 in round 11 or 12 with the Custodian down or the core open but the switch not yet armed, and 12 in the final stand (8 inside the core, 4 on their way back into it).
+
+Where the first-timer's missions ended: 9 at the uplink (6 holding its ring, 3 on their way back to it), in rounds 4 to 6, and 7 with two keys in hand, in rounds 5 to 8, waiting for a Custodian that does not come until round 11.
+
+**Against the spec's three targets:**
+
+- *A first-time player should usually go down between rounds 5 and 8.* Met by the model both ways of playing. When it only fights: median round 7, 14 of 16 runs in rounds 5 to 8 (the other two went down in round 3). When it attempts the mission: median round 5, 15 of 16 in rounds 5 to 8 (the other in round 4). Attempting the mission costs it about two rounds because it starts the uplink as soon as it can, in round 4; nine of its sixteen runs ended there, six of them before it had bought the carbine. A real first-timer may well not find the uplink that early.
+- *A focused player can finish the mission in 15 to 20 minutes, around round 10 to 12.* Met for time and round. The 17 missions it finished took a median of 17:44 and every one ended in round 11 or 12; 13 of the 17 took between 15 and 20 minutes, and the other four between 20:33 and 21:57 (runs in which it stepped out of the core to recover, which stops the clock). **It finishes about one mission in three: 17 of 48.** I think that is the right side of "can finish" for a mission that is meant to be the hard thing in the game, but it is your call, and it is one number in a model.
+- *The final stand is hard but winnable.* The skilled model wins it 17 times in the 29 it reaches (59%), in about a minute and a half. Played by itself forty times from a full loadout, it won 22 (55%). Before the changes described above it was 0 in 12. Every loss now comes in the fight itself. None comes with the switch ready, which is where my test player had been throwing runs away (see "found on the way" below).
+
+**What I would watch when you play it:** the ten minutes between the uplink and the Custodian. The model that finishes one mission in three loses 10 of its 48 runs there, all in rounds 8 to 10, to the ordinary rounds with ARGUS's counters and the first heavy on them, before the mission asks anything more of it. That is where a focused player's run is most likely to end, and it is where I am least sure the model is a fair stand-in: it is a carbine specialist (about 70% of its damage), so ARGUS shields against the carbine from round 6 on in most runs, and it answers that less nimbly than a person would. If those rounds feel too hard to you, the quickest levers are in `src/config.ts`: how much of a round is shielded (`ARGUS.shielding.share`, 0.4), the heavy's health (`SPECIALS.heavy.health`, 4), and the round the Custodian comes in (`MISSION.custodianFromRound`, 11). If the final stand feels wrong, the Proxy's blow is the first thing I would turn (`MISSION.proxy.damage`, 45: three of them and you are down).
+
+### Found on the way, and fixed
+
+- **The Proxy could land beside you.** It was sent to "the core", whose only ways in are two ceiling ducts. See item 2.
+- **The autopilot could stand at a door for ever.** It keeps a route of its own; when a door opened, that route was not thrown away. In ordinary play its next errand usually hid this; in the mission it could wait at the core's door until a robot happened to distract it. The map of the floor now counts its own changes, and anything that keeps a route compares the count.
+- **The test's own helper was sabotaging the Proxy fight.** It struck every 0.7 seconds at close range, and a strike cancels a reload, so with a crowd round it it barely fired. One run in several took four minutes of "fire" to fail. It now waits for a reload to finish.
+- **The profile card could list a counter for a round that never came.** ARGUS chooses its counters in the lull, and a run that ended before the next round began (the switch pulled, for one) still listed them. I saw it on the last screenshot of the set: "rounds 10 to 12" on a card that said the run reached round 11. The card now lists a counter only for rounds that began, and a check holds it to that.
+- **The glass on the lamps was costing a megabyte of memory a frame.** Found while asking where the occasional single slow frame came from; it has been there since the first stage. See "Three things found by measuring" in the performance section: the heaviest scene now runs at 229 frames a second where it ran at 188.
+- **My test player would not pull the switch.** With the switch armed and a robot standing between it and the console, the skilled model pushed at the robot's chest for four seconds and went down, a metre and a half from the switch with a loaded shotgun in its hands. No person does that: the prompt reaches two and a half metres. It now presses F as soon as the prompt is offered, and deals with a robot at arm's length before walking through it. In the final stand played by itself forty times it won 15 before the change and 22 after. A difference that size in forty is suggestive, not proof; but in about seventy stands since, it has not once gone down with the switch ready.
+- **Sixteen runs are too few to judge the mission by.** Three batches on identical rules finished 6 of 16, 2 of 32 and 5 of 32. I had been reading differences of that size as the effect of my changes. The numbers in this document come from 48 missions, and I say how many runs each number is from.
+- **Things shown for a set time on the HUD must count real time.** ARGUS's banner first counted the game's clock, which the debug tools stop and step, and so was gone before any screenshot could catch it. (The round announcement already did this right.)
+
+## Stage 3: what is built
+
+**ARGUS watches, adapts and says so.** This is **rule-based game AI, not machine learning**: a handful of counts compared with fixed thresholds, all in one plain file (`src/sim/argus.ts`) with a unit test for every rule.
+
+- **What it tracks, each round**: damage by weapon (the strike counts as one), hits on weak points, time spent holding one spot (within 4.5 m for 10 s or more), and laps run (back within 3.5 m of where you were at least 8 s ago, having covered 25 m and been 8 m away). Only while there are robots on the map.
+- **Four counters**, chosen in the lull, from round 3, at most two at once, the strongest evidence first:
+
+| It notices | When | The counter | How it shows | How you beat it |
+| --- | --- | --- | --- | --- |
+| You lean on one weapon | 60% of a round's damage | **Shielding**: 4 in 10 ordinary robots take half damage from that weapon | Plates of light round the chest in that weapon's colour (sidearm green, shotgun amber, carbine blue, strike magenta); "RESISTED" under the crosshair | The other gun or the strike. Spread your damage and it is withdrawn |
+| You hold one spot | 45% of the round | **Flushing out**: 2 extra bombers; half the round comes in at the entrance nearest you | The bombers; robots arriving close by | Move; shoot the bombers among their own |
+| You run the horde in circles | 3 laps | **Interception**: 4 extra drones sent in ahead of the way you are running | The drones, from in front | Change direction; stand and fight |
+| You land many weak-point hits | 40% of hits | **Guarding**: half the ordinary robots wear a plate over the visor; a hit there is a body hit until the plate has taken 45% of a robot's health | The plate, with a lit edge; "PLATE", then "PLATE OFF" when it flies off | Shoot it off, or shoot the body |
+
+- A counter stays while the habit does ("Maintaining") and goes the round after you stop ("Withdrawing: ..."). None is a hidden boost: a plated head never takes less than a body shot would, and the tests hold it to that.
+- **The ARGUS ANALYSIS banner**: 3.2 seconds into the lull, on the right of the screen (your objective is on the left), for 8 seconds, without pausing the game. "Observed: 77% of damage from the carbine. Adapting: carbine-resistant plating."
+- **Remarks**: 17 things it may comment on, 23 lines, never repeated, at least 18 seconds apart.
+- **"ARGUS's profile of you"**: a card offered on the game-over and HUMANITY SAVED screens: a play-style label (the Marksman, the Fortress, the Runner, the Specialist, the Brawler, the Improviser), six numbers, every counter it used and in which rounds, the round reached, whether humanity was saved, and the web address of the page.
+- **When the switch is pulled it is off**: no more analysis, counters or remarks.
+
+**Three special robots**, built in code on the same skeleton as the ordinary one, mixed in as the rounds climb. They take the place of ordinary robots (never more than a third of a round) and are spread through it.
+
+| | From round | How many | What it does | Its answer |
+| --- | --- | --- | --- | --- |
+| **Drone** | 4 | 2, +1 every 2 rounds, up to 6 | Flies at head height at 5.2 m/s; a third of a robot's health; stings for 12 | One or two shots |
+| **Bomber** | 6 | 1, up to 3 | Runs at 3.9 m/s; within 2.4 m it primes (beeping, lights beating) and 0.8 s later goes off: up to 60 damage, reaching 4.5 m | Back away (it costs almost nothing), or shoot it first: it goes off among its own, and their destruction is paid to you |
+| **Heavy** | 8 | 1; 2 from round 12 | 1.35 m/s; four times the health; plating turns 70% of a hit; 50 a blow; only ever walks in | The reactor glowing in its chest takes full weak-point damage |
+
+**Also new**: a word under the crosshair when a hit does less than it might (RESISTED, ARMOUR, PLATE, PLATE OFF); nine sounds (the blast, the bomber's beep, the drone, shielding, the plate, the banner, the remark); debug tools to put any kind of robot on the map and to read what ARGUS has noted.
+
+## Design decisions made in Stage 3
+
+Numbering continues from Stage 2's list further down. The first group came out of your feedback.
+
+69. **The switch arms only while you are in the core.** (Supersedes decision 61's "you may leave the core".) The Proxy is not sent while you are outside.
+70. **The Proxy's own light comes up with distance.** You said the close-up was right and the distance was wrong, so the close-up was left alone: beyond 6.5 m everything is on, within 2.5 m a fifth of the edge glow and an eighth of the lamp are left. Its lit seams and bands are there at any distance.
+71. **The Proxy walks in**, at the loading dock (or the main entrance, if you could see the dock), never by the power room, whose doors are lower than it is. It reaches the core's door about nine seconds after the notice.
+72. **ARGUS dies in 1.2 seconds, guttering twice.** Two flashes in a second is inside what is safe to show; the reduced-flashing setting removes them. Cold light comes up as the red goes, or the room would be black. The ending card waits 3 seconds (was 2.5).
+73. **One lamp for two jobs.** The light that travels with the Proxy is also the flash of a bomber's blast (the two never happen together: the rounds stand aside during the final stand). The number of lights in the building never changes mid-game, which is what keeps the picture from stalling.
+74. **Three player models.** The "skilled" one is my reading of "a focused player"; it is described above and in `src/debug/Autopilot.ts`. If you think a focused player is better or worse than that, its numbers are one line.
+75. **Rounds, re-tuned again** (supersedes 48): 6, 10, 14, 18, 23, 29, 35, 40, 46, 52 robots, then 6 more a round; one arrival every 2.6 s in round 1, quickening to every 2.0 s by round 9 and no further; a 15-second lull; health 70 in round 1, +26 a round to round 6 (200), then +3% a round.
+76. **Runners**: from round 5; 8% more of the horde each round, up to half; 3.4 m/s rising 0.31 a round to 6.0 by round 14 (you sprint at 6.4). Your Stage 1 instruction stands.
+77. **The uplink**: ring 8.5 m; one extra robot every 5 s, as many at once as the round allows (0, 1, 2, 3, 4 from rounds 1, 3, 6, 9, 12).
+78. **The final stand**: one robot every 1.9 s, 12 at once, walking, one in five running; the Proxy at 10 seconds with 10 times a robot's health.
+79. **The Custodian arrives with round 11** (supersedes 58).
+80. **ARGUS's counters are for the rounds.** What the mission sends in (the wave at the uplink, the final stand) does not carry shielding or plates. I tried it the other way: the stand, which had been tuned to about one win in two, went to one in eleven.
+
+ARGUS and the specials:
+
+81. **Rule-based, and it says so**: in the README, in the guide, on the first line of the code.
+82. **The thresholds** (60% of damage, 45% of the round, 3 laps, 40% of hits) are high enough that an ordinary mixed round triggers nothing. A round with too little to go on (under 300 damage, 10 hits or 12 seconds) is not judged.
+83. **The first two rounds always get shielding against the sidearm at round 3**, because the sidearm is all you have. I left that in: it is the game teaching the rule early, and the shotgun is affordable by then.
+84. **Two counters at most, and a counter is not sticky.** ARGUS reads only the round just played. That makes it easy to beat, on purpose: the spec asks for "beatable by changing how I play", and a player who has just worked out what it wants should see it work in the very next round.
+85. **"Behind you" means the entrance nearest you that you cannot see**, not literally behind your back; and "ahead" means in front of the way you are *moving*, which for someone leading a horde is usually not the way they are looking. Neither ever overrides the rule that no robot is created in view.
+86. **A heavy cannot use a ceiling duct**, and is as tall as will still pass under the power room's doors (it was shortened for that).
+87. **The bomber does not strike**: its blow is the blast. One that goes off by itself is nobody's kill but still counts toward clearing the round.
+88. **Drones use the floor's routes.** They fly at head height but go round what a walking robot goes round, so they can never be somewhere a route does not reach.
+89. **The banner is on the right; the words under the crosshair are plain** (RESISTED, ARMOUR, PLATE). Colour alone would not tell a colour-blind player which gun a shield is against; the word and the banner do.
+90. **The profile's style is judged over the whole run, against bars set from the counters' thresholds**: 40% of hits on weak points (the Marksman), 45% of the fighting spent holding one spot (the Fortress), three laps for every minute and a half of fighting (the Runner), three quarters of all damage from one gun (the Specialist: a higher bar than the 60% that brings shielding in a single round, because nearly everyone's best gun does most of the damage over a run), 30% of damage done by hand (the Brawler). The habit furthest past its bar is the label. With none past its bar you are "the Improviser", which is the best thing it can call you.
+91. **The end screens gained one button** ("ARGUS'S PROFILE OF YOU") and the game-over panel is 100 pixels wider to fit three in a row. Nothing else on those approved screens changed.
+92. **The card prints the page's address without "https://"**, so it is short enough to read off a screenshot. In the screenshots here it shows the test server's address; on the published site it will show that site's.
+93. **ARGUS is off after the switch.** The rounds you fight on through are plain: specials, no counters, no remarks. The monitors say ARGUS OFFLINE and it would be odd if it went on talking.
+94. **Nine new sounds, all cut from the Kenney packs already credited.** No new downloads in this stage.
+95. **Screenshots go to `media/stage-3/`.**
+96. **The speed report's "heaviest moment" is two scenes now**: the full horde of ordinary robots, kept so that one stage can be set beside another, and the same horde as ARGUS sends it (specials, shielding, plates), which is the heavier. Smoothness is measured on the heavier one. The report also puts each new thing on screen for the first time and looks for a stall.
+97. **A shield is one piece and a plate is two** (its steel, and its lit edge), where they were four and six: found by that second scene. And the spare robot the game keeps under the floor wears one of each, so their shaders are built while the game loads and stay built between rounds.
+98. **See-through, two-sided surfaces are drawn in one go.** That is the glass on lamps, cameras and extinguishers, the muzzle flash, the shaft of light over a dropped key, the uplink's ring and ARGUS's shielding. Drawing each twice (backs, then fronts) only matters where one part of a see-through object can be seen through another part of it, and none of these is big enough or solid enough for that to show: I compared the screenshots before and after. This touches the approved look in principle, so it is listed here and in the things to look at.
+99. **A plate casts no shadow of its own, and a robot's scrap has its own copy of the robot's material.** Both for the same reason: a material used in turn by a mesh with bones and a mesh without has its shader swapped at every turn.
+100. **The skilled model is corrected, not the game**, where a death came from something no person would do (decision 74, and "found on the way" above). The game's numbers were not changed after the 48-mission measurement.
+
+## Checks run at the end of Stage 3
+
+| Check | Result |
+| --- | --- |
+| 1. Type-check and production build | Pass, zero errors |
+| 2. Unit tests | **183 of 183 pass** in 15 files. New: ARGUS's rules (30 tests: what it writes down, each habit and its threshold, the analysis and its wording, withdrawal, remarks, the profile), what a round is made of (13), shielding, plating and the plate over a weak point (13), the uplink's wave. |
+| 3. Headless browser | **149 of 149 pass** against the production build served from a sub-folder address. What is new is listed below. |
+| 4. Screenshots | 37 in `media/stage-3/`, compared by eye with `media/look-target/`. |
+| 5. Performance | See below. |
+| 6. Credits | Pass: 176 shipped asset files all trace to credited sources (9 more than at the end of Stage 2: the new sounds, cut from packs already credited); the credits match `links.txt`; no file tracked by git is a raw download. |
+
+**New in the end-to-end test** (24 checks, making 149):
+
+- *Your feedback*: the clock stopping outside the core; the Proxy coming in on foot at the dock; the Proxy measured from 8 m against one of the horde; ARGUS's eye and red light measured before and after the pull.
+- *Each counter can be seen and beaten*: a sidearm shot on a robot shielded against the sidearm does 14 of its 28 and the screen says RESISTED, while a strike does its full 150. Three shots on a plated head do 28 each (PLATE), the third knocks the plate off (PLATE OFF), and the next does 61.6. A shot on the heavy does 61.6 to its core, 8.4 to its helmet (ARMOUR) and 6.7 to a leg.
+- *The specials*: a drone hangs 1.5 m off the floor, crosses 4 m in a second and goes down to one shot. A bomber primes 2.3 m off and goes off 0.8 s later: a player who stood still is left with about 53 health, one who backed away with about 86. A bomber shot first destroys the three robots standing round it, and all four are paid for.
+- *What a round is made of*: no specials in rounds 1 to 3; drones from 4, a bomber from 6, a heavy from 8; with each counter in force the right share of the round carries it and arrives carrying it; bombers and drones are added for flushing and interception; "behind" at the main breaker is the power room's vent, "ahead" is on the side you are running toward, and there is no "ahead" standing still.
+- *A real analysis, played*: a round fought with the sidearm alone; the banner reads "OBSERVED: 100% of damage from the sidearm. ADAPTING: sidearm-resistant plating."; the game does not pause; round 3 arrives with shielded robots. Then a round split between the sidearm and the strike: the banner reads "You changed your approach. WITHDRAWING: sidearm-resistant plating." and round 4 arrives unshielded.
+- *The remark* after the first kill, and none straight after it.
+- *The profile card*, reached by real clicks from the game-over screen and from HUMANITY SAVED: the label, the six numbers, the counter used in that run with its round, the stamp (ARGUS WINS / HUMANITY SAVED), the page's own address, and BACK. A counter goes on the card when its round begins, not when it is chosen. After the switch ARGUS is off, and three more rounds add no analysis.
+
+### Performance (check 5)
+
+Measured on the production build on an NVIDIA GeForce RTX 4070 SUPER (a fast desktop card), at 1920 x 1080 unless it says otherwise.
+
+**The heaviest moment the game can produce** is measured two ways now, frame rate uncapped.
+
+*A full horde of ordinary robots* is the scene every stage has measured, so it can be set beside Stage 2's: the most robots ever allowed on the map (24), closing on the player in the server hall with every door open so three areas are in view, the carbine firing without pause.
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 302 | 519 | 1.31 M | 23 | 91 | 11 |
+| Medium | 239 | 711 | 1.52 M | 22 | 166 | 33 |
+| High | 253 | 720 | 1.56 M | 24 | 136 | 33 |
+| Ultra | 182 | 742 | 1.66 M | 23 | 103 | 33 |
+
+*The same horde as ARGUS sends it* is new, and is the heaviest thing Stage 3 can put on screen: two heavies, two bombers and four drones among the 24, and of the sixteen ordinary robots seven shielded against the gun being fired and eight with a plate over the visor.
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 294 | 599 | 1.28 M | 22 | 116 | 33 |
+| Medium | 217 | 738 | 1.51 M | 23 | 231 | 33 |
+| High | 233 | 763 | 1.51 M | 23 | 283 | 44 |
+| Ultra | 171 | 728 | 1.60 M | 24 | 86 | 22 |
+
+ARGUS's horde costs 3 to 9% of the frame rate: up to 80 more separate things to draw than the ordinary horde (the count depends on what is in view at the moment it is taken), and more sparks and scrap.
+
+**Smoothness**: the heavier scene, with the frame rate limited to the screen's, as a player sees it (this screen refreshes 240 times a second, so a perfect frame is 4.2 ms). An average can hide stutter; this looks at the slowest frames instead.
+
+| | Quality | Usual frame | Slowest 1% | Worst frame | Frames over 25 ms in 5 s |
+| --- | --- | --- | --- | --- | --- |
+| 1920 x 1080 | Low | 4.2 ms | 5.1 ms | 5.9 ms | 0 |
+|  | Medium | 4.2 ms | 5.9 ms | 16.8 ms | 0 |
+|  | High | 4.2 ms | 5.7 ms | 9.8 ms | 0 |
+|  | Ultra | 5.6 ms | 7.1 ms | 9.9 ms | 0 |
+| 3840 x 2160 | Low | 4.7 ms | 8.6 ms | 11.5 ms | 0 |
+|  | Medium | 11.2 ms | 13.8 ms | 14.1 ms | 0 |
+|  | High | 12.4 ms | 16.2 ms | 17.6 ms | 0 |
+|  | Ultra | 21.3 ms | 25.0 ms | 32.7 ms | 1 |
+
+The 4K rows are there because 4K loads this card about as heavily as 1080p loads a much slower one. No frame at 1920 x 1080 took longer than 25 ms at any level, and Low, Medium and High now hold this screen's 240 a second in the heaviest scene. At 4K on Ultra, where a usual frame is already about 20 ms, one frame in the five seconds took 32.7 ms; the second run of the report had one of 28.1 ms in the same row, and the Stage 2 version measured between them one of 25.7 ms. Those are the pauses described under "Three things found by measuring" below.
+
+**First appearances** (new in the report): does the picture stall the first time a thing is drawn? In a fresh page, on High, each kind of robot and each of ARGUS's counters is put in front of the camera for the first time, and the slowest frame in the second that follows is reported. The usual frame is 4.2 ms; one frame at 60 a second is 16.7 ms.
+
+| First time on screen | Slowest frame in the next second | Frames over 25 ms |
+| --- | --- | --- |
+| An ordinary robot | 5.0 ms | 0 |
+| A robot carrying shielding | 5.4 ms | 0 |
+| A robot with a plate over its visor | 5.2 ms | 0 |
+| A shot that the shielding turns | 9.8 ms | 0 |
+| A drone | 5.1 ms | 0 |
+| A heavy | 6.0 ms | 0 |
+| A bomber | 6.1 ms | 0 |
+| The bomber going off | 8.9 ms | 0 |
+| A Custodian | 4.9 ms | 0 |
+| The Proxy | 5.6 ms | 0 |
+
+Nothing stalls: the slowest is 9.8 ms (a shot that the shielding turns).
+
+**Against Stage 2, measured the same day.** Frame rates on this machine differ from day to day, so the Stage 2 version was rebuilt as it was and measured today, between two runs of this one. Same scene for all: the ordinary horde.
+
+| | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| Stage 2's report, measured then | 258 | 186 | 198 | 175 |
+| The Stage 2 version, measured today | 290 | 206 | 221 | 189 |
+| This version earlier today, before the fixes below | 292 | 210 | 222 | 191 |
+| **This version** | **302** | **239** | **253** | **182** |
+| This version, measured again | 308 | 233 | 253 | 180 |
+
+Like for like, this version is **faster than Stage 2 wherever the processor is the limit**: 4% on Low, 16% on Medium and 14% on High. That is the first of the three fixes below. **On Ultra, where the graphics card is the limit, it is the same.** The report's two-second window read 182 and 180 against the Stage 2 version's 189, which is inside the spread between runs, so I checked two other ways. Second-by-second traces of the two versions lie on top of each other (182 to 197 frames a second from the second to the sixth second of the horde for this version, 185 to 193 for Stage 2). And switching the glass fix off and on four times in one session gives 203 either way on Ultra, and 237 against 286 on High.
+
+**Three things found by measuring, and fixed.** The report had only ever used ordinary robots and only ever looked at frame times. Adding ARGUS's horde to it, and then asking where the occasional single slow frame in the Stage 2 tables came from, turned up three things:
+
+1. **The glass on the lamps was being drawn twice, and its shader chosen afresh every time.** The drawing library draws a see-through, two-sided surface in two goes and marks its material as changed for each; a changed material has its shader looked up again and every light handed to the graphics card again. About fourteen small panes of glass (lamps, cameras, fire extinguishers) were doing that four times a frame each. It has been in the game since the first stage. It cost about a megabyte of throw-away memory a frame (190 MB a second in a heavy fight), and the browser's pauses to clear that up are, as far as I can tell, the single slow frames. They are now drawn in one go, which looks the same (decision 98).
+2. **Each of ARGUS's plates was six separate things to draw (five of them casting shadows) and each shield four.** With both on the horde that was 243 to 275 more things to draw than the ordinary horde; a shield is now one and a plate two, and it is at most 80.
+3. **A plate's own small shadow made the shadow pass change shaders at every plated robot.** It casts none now; the head behind it already does.
+
+Together, in the heaviest scene, played for 40 seconds on High at the screen's own rate: **229 frames a second where it was 188, 106 MB of memory a second thrown away where it was 190, and a worst frame of 16.5 ms where it was 21.8**.
+
+Frame rate in ARGUS's horde, uncapped, at each step:
+
+| | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| As first measured | 227 | 168 | 171 | 148 |
+| Shields and plates each one piece | 250 | 185 | 183 | 184 |
+| **Glass drawn once, plates casting no shadow** | **294** | **217** | **233** | **171** |
+
+(These fixes are all on the processor's side, and on Ultra the graphics card is the limit: the last two rows of the Ultra column differ by no more than one run of the report differs from the next.)
+
+What is left of the throw-away memory (about 100 MB a second in the heaviest scene) is mostly the drawing library handing all 24 lights to each of about 60 shaders whenever the view moves, the ambient-occlusion pass walking the whole scene several times a frame, and my own per-robot update. Those are Stage 5 work, and now there is a tool that shows them.
+
+**Something I got wrong today, and what it did to these numbers.** A test run I started in the small hours (a balance run with the never-missing model) was still alive nineteen hours later: stopping the command that started it had not stopped the hidden browser it was playing in. Every speed measurement I made before finding it was about 15% low (this version's ordinary horde read 257 / 184 / 189 / 164 with it running and 292 / 210 / 222 / 191 an hour later without it). Everything in this section was measured after it was stopped, with nothing else of mine running. I now check for leftovers before measuring. It may also be part of the day-to-day difference the Stage 2 notes could not explain; I cannot prove that after the fact.
+
+Budgets held: at most 24 robots on the map, the mission's own and the specials included; 24 lights live at once (one more than at Stage 2: the lamp that travels with the Proxy and doubles as the flash of a bomber's blast), a number that never changes during play, 4 of them casting shadows on Ultra, 3 on High and Medium, 2 on Low; at most 900 glowing and 320 smoke particles, 160 bullet decals, 48 casings, 72 scrap pieces, all pooled and recycled. Lower quality levels cut shadows, effects and resolution, never the number of robots.
+
+- **Total download: 17.2 MB** of the 40 MB budget (models 8.7, textures 4.9, sound 2.1, code 1.4).
+- **Time to the title screen**: 3.6 s from local files; 3.7 s at 100 Mbps, 5.0 s at 50 Mbps, 7.7 s at 25 Mbps (simulated).
+
+## Not verified
+
+- **How any of it sounds.** I cannot hear. The nine new sounds were cut and levelled by measurement. The bomber's beep, in particular, has to be heard over a fight to do its job, and I do not know that it is.
+- **How ARGUS reads in motion.** The banner, the remarks and the words under the crosshair were looked at as frozen pictures and their timings measured. Whether eight seconds is long enough to read two findings while reloading, and whether the remarks land as menace or as noise, needs you.
+- **The remarks' writing.** They are mine. They are meant to be cold and short. Say if the voice is wrong.
+- **Whether a person finishes the mission as often as the spec implies.** See "Mission length and difficulty": the time and the round are right for the model; how often it gets there is 17 in 48. A model is not a person.
+- **Whether each counter is noticed in the heat of a fight.** Each is drawn on the robots and named on screen; the check proves they are there, not that they are seen.
+- **The address on the profile card on the real site.** It prints whatever address the page is served from; it has only ever been served from this machine.
+- **Slower hardware, browsers other than Chromium, and how bright it is on your screen**: as at the end of Stage 1. The new "first appearances" check found no stall on this machine; a slow one builds shaders more slowly, and I have not seen one.
+
+## Known rough edges
+
+- **The skilled model loses a quarter of its missions in the ordinary rounds before the Custodian comes** (13 of 48; ten of them in rounds 8 to 10). If that matches what you find, "What I would watch" above names the numbers I would turn first.
+- **The game still throws away about 100 MB of script memory a second in a heavy fight** (it was 190), so the browser still pauses now and then to clear up, and a single slow frame still turns up in the smoothness tables. The three causes that are left are named in the performance section. Stage 5.
+- **The shielding is flat.** Four hexagons of light round the chest that do not turn with the arms; from some angles one looks like a sign held up beside the robot.
+- **The drone's rotors do not turn.** They are dark discs.
+- **The heavy swings like an ordinary robot** (there is no heavier animation in the set that suits it).
+- **ARGUS only knows four things about you.** Sprinting everywhere, never buying anything, hiding behind one doorway: it has no counter for those. The four are the spec's.
+- **ARGUS forgets.** It reads one round at a time, so alternating two habits round by round keeps it one step behind. That is by design (decision 84) but a determined player will find it.
+- **The rounds after the switch are plainer** than the ones before it: no counters, no remarks (decision 93). Stage 4's swarm rounds are meant for exactly there.
+- **Nothing to spend scrap on once you own two guns and two doors**: the skilled model is carrying over 20,000 unspent by round 10. Stage 4.
+- **The screenshots' profile card shows `127.0.0.1`**: see decision 92.
+- **The sidearm and shotgun have no hands on them**, **Auto never raises quality again by itself**, and **the music does not build through a round**: unchanged.
 
 ## Stage 1 feedback: what changed
 
@@ -46,6 +326,8 @@ These were not on your list. Each was found while fixing something that was.
 | **An elite robot removed by the debug "skip round" key left the mission waiting for it for ever** | Found by my own test script while building Stage 2. | The mission notices when a robot it still needs has left the map by any route, and sends it in again. | The scripted mission skips rounds with the Custodian due. |
 
 ## Stage 2: what is built
+
+*As written at the end of Stage 2, and left as it was. Where something here differs from the Stage 2 feedback table or from decisions 69 to 100 above (leaving the core during the final stand, how the Proxy arrives, the Custodian's round, the round sizes, the uplink's ring and wave, the final stand's horde), the ones above are current.*
 
 **The mission** (`src/sim/mission.ts` for the rules, `src/game/Mission.ts` to connect them to the map, `src/world/MissionSet.ts` for the moving parts)
 
@@ -106,92 +388,6 @@ The mission:
 66. **Power does not light the building up.** It turns a lamp green and adds a little cool light in the power room. The facility stays dark; Boost Stations and the bench, which need power, arrive in Stage 4.
 67. **The fastest mission time** is measured from pressing Play to pulling the switch, and stored with the best round (same browser storage, same key).
 68. **Screenshots go to `media/stage-2/`.**
-
-## Checks run at the end of Stage 2
-
-| Check | Result |
-| --- | --- |
-| 1. Type-check and production build | Pass, zero errors |
-| 2. Unit tests | **126 of 126 pass** in 12 files. New since Stage 1: the mission's steps (15 tests: every order the keys can be found in, every step tried too early, the clocks), stamina, the entry rule, and the path-finding's "can a robot actually get here". Adaptation rules come with Stage 3. |
-| 3. Headless browser | **125 of 125 pass** against the production build served from a sub-folder address. What is new is listed below. |
-| 4. Screenshots | 30 in `media/stage-2/`, compared by eye with `media/look-target/`. |
-| 5. Performance | See below. |
-| 6. Credits | Pass: 167 shipped asset files all trace to credited sources; the credits match `links.txt`; no file tracked by git is a raw download. |
-
-**The spec's scripted mission run** (check 3) is in the end-to-end test, as 22 checks. With god mode on and scrap for the asking, but every step taken as a player takes it (standing where they would stand, pressing F):
-- before power: the cage refuses, the uplink refuses, the core refuses;
-- the breaker restores power; the cage gives up its key, once;
-- the uplink: 20.0 s on the clock after 20 s in the ring, nothing gained in 10 s away (and the tracker says GET BACK TO THE UPLINK), no key at 59 s, the key at 60; up to 8 extra robots sent at it;
-- with two keys the tracker explains that a Custodian carries the third; it arrives with its round; shot until destroyed; its key drops; picked up;
-- three keys unseal the core; the switch refuses to be pulled early; the rounds stand aside; the Proxy arrives 10.0 s in and shows on the HUD; the Proxy is shot until destroyed; the switch arms at 75.0 s;
-- pulling it puts out every robot on the map (16 in the last run), which stay where they fell; the HUMANITY SAVED card shows the run; the mission time is remembered;
-- **then three more rounds are played through** by the autopilot, with the wrecks cleared away;
-- going down after that shows humanity saved on the card; a new run starts the mission afresh.
-
-Also new in the end-to-end test: the ten checks of the round announcement (including the reduced-flashing version); the real F key pulling the switch and real clicks on KEEP FIGHTING and END RUN, with the mouse let go and taken back; the checks listed against each feedback item above.
-
-### Performance (check 5)
-
-Measured on the production build on an NVIDIA GeForce RTX 4070 SUPER (a fast desktop card).
-
-**The heaviest moment the game can produce**: the most robots ever allowed on the map (24), closing on the player in the server hall with every door open so three areas are in view, the carbine firing without pause. 1920 x 1080, frame rate uncapped. (The final stand is lighter than this: the same limit of 24 robots, in one room.)
-
-| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
-| --- | --- | --- | --- | --- | --- | --- |
-| Low | 258 | 536 | 1.31 M | 23 | 89 | 11 |
-| Medium | 186 | 686 | 1.53 M | 24 | 105 | 11 |
-| High | 198 | 685 | 1.53 M | 24 | 133 | 11 |
-| Ultra | 175 | 708 | 1.62 M | 23 | 153 | 11 |
-
-**Smoothness**: the same scene with the frame rate limited to the screen's, as a player sees it (this screen refreshes 240 times a second, so a perfect frame is 4.2 ms). An average can hide stutter; this looks at the slowest frames instead.
-
-| | Quality | Usual frame | Slowest 1% | Worst frame | Frames over 25 ms in 5 s |
-| --- | --- | --- | --- | --- | --- |
-| 1920 x 1080 | Low | 4.2 ms | 5.2 ms | 6.0 ms | 0 |
-|  | Medium | 5.1 ms | 6.8 ms | 14.2 ms | 0 |
-|  | High | 5.2 ms | 7.1 ms | 10.7 ms | 0 |
-|  | Ultra | 5.5 ms | 9.1 ms | 11.2 ms | 0 |
-| 3840 x 2160 | Low | 5.1 ms | 6.4 ms | 10.0 ms | 0 |
-|  | Medium | 11.2 ms | 12.6 ms | 12.8 ms | 0 |
-|  | High | 11.9 ms | 13.4 ms | 42.1 ms | 1 |
-|  | Ultra | 19.1 ms | 21.6 ms | 22.0 ms | 0 |
-
-The 4K rows are there because 4K loads this card about as heavily as 1080p loads a much slower one. One frame in the 4K High row took 42 ms. A single slow frame like it turned up at 4K in two of the three runs of this report made today (in a different row each time) and in none at 1080p; the Stage 1 version's one run today had none. I have not found what causes it.
-
-**These numbers are lower than Stage 1's report** (which gave 318 / 231 / 226 / 193 frames a second), so I checked whether that was the game or the machine. The Stage 1 version was rebuilt as it was and measured again today on the same machine:
-
-| | Low | Medium | High | Ultra |
-| --- | --- | --- | --- | --- |
-| Stage 1's report, measured then | 318 | 231 | 226 | 193 |
-| The Stage 1 version, measured today | 266 | 196 | 204 | 162 |
-| This version, measured today | 258 | 186 | 198 | 175 |
-
-Most of the difference is the machine on the day. What is left is small (between a tenth and a third of a millisecond a frame on Low, Medium and High, and nothing on Ultra) and is the heaviest moment itself: robots are now solid, so two dozen of them stand in a wall in front of you where before they walked into you and were half cut away by the edge of the view. A still room costs the same as it did: at 3840 x 2160 on Ultra, 18.5 ms a frame now against 18.3 ms in the Stage 1 version, and the HUD (which gained the objective tracker, its marker and the announcement) costs nothing measurable. Two things were tightened on the way: the HUD's markers now move without making the browser lay the page out again, and the announcement is taken out of the picture entirely while nothing is being announced.
-
-Budgets held: at most 24 robots on the map, the mission's own included; 22 lights live at once (4 of them casting shadows on Ultra, 3 on High and Medium, 2 on Low); at most 900 glowing and 320 smoke particles, 160 bullet decals, 48 casings, 72 scrap pieces, all pooled and recycled. Lower quality levels cut shadows, effects and resolution, never the number of robots.
-
-- **Total download: 17.0 MB** of the 40 MB budget (models 8.7, textures 4.9, sound 2.0, code 1.3).
-- **Time to the title screen**: 3.5 s from local files; 3.8 s at 100 Mbps, 4.9 s at 50 Mbps, 7.7 s at 25 Mbps (simulated).
-
-## Not verified
-
-- **Why today's frame rates are lower than Stage 1's report.** See the performance section: measured like for like on the same day there is little difference, and what difference there is comes from the heaviest moment itself having changed. I have not found out why the machine as a whole was faster on the day Stage 1 was measured, nor what causes the occasional single slow frame at 4K.
-- **How it sounds.** I cannot hear. The 6 new sounds and the two rebuilt stings were built and levelled by measuring them. In particular, "the number lands on the sting's opening burst" is true of the timing (both start on the same instruction, and the burst is in the first twentieth of a second of the file) and unheard.
-- **How the announcement feels in motion.** Its stages were looked at as frozen pictures, and its timings measured. I have not watched it move.
-- **Mission pacing for a real player.** The spec asks for 15 to 20 minutes, around round 10 to 12, for a focused player. The scripted run proves every step works and takes under three minutes with god mode; it says nothing about how long a person takes. The Custodian's round (8) and the 75 seconds are my best estimate. If the final stand comes too early or too late for you, those are two numbers in `src/config.ts` under `MISSION`.
-- **Whether the final stand is the right difficulty.** Nothing has fought it without god mode. The autopilot does not know how to do the mission.
-- **Balance for a real first-time player.** The first-timer model usually goes down in rounds 5 to 7; about one run in sixteen ends in round 4. A model is not a person.
-- **Slower hardware, browsers other than Chromium, and how bright it is on your screen**: as at the end of Stage 1.
-
-## Known rough edges
-
-- **The final stand can be survived by running laps** of the lobby, hall and power room loop until the clock runs out, then walking back to the switch. It is allowed by the rules as written (decision 61). If you want the stand held in the core, that is a small change.
-- **The Proxy is slower than you walk**, so on open floor it is a threat to your space more than to your health. Its job is to push you off the dais into the runners.
-- **You can open an empty-handed prompt at the kill switch while it is arming** ("Kill switch: arming"); pressing F plays the refusal sound. Deliberate, but it is one more beep in a loud minute.
-- **The autopilot cannot do the mission.** It still plays rounds. A pilot that restores power and collects keys by itself would let the balance tool measure mission time; it is the obvious next test tool.
-- **Nothing to spend scrap on once you own two guns and three doors** (Stage 4), **every ordinary robot is the same Drudge** (Stage 3), and **the music does not build through a round** (later): unchanged from Stage 1.
-- **The sidearm and shotgun have no hands on them**, and their reloads are a simple dip: unchanged.
-- **Auto never raises quality again by itself**, and **changing level pauses the picture for about a second**: unchanged.
 
 ## Stage 1: what is built
 
@@ -390,10 +586,11 @@ npm run dev            play it (opens the browser)
 npm run build          type-check and production build
 npm test               unit tests
 npm run e2e            end-to-end check of the built game
-npm run shots          re-take this stage's screenshots (media/stage-2)
-npm run balance        whole runs played by a model of a first-time player
+npm run shots          re-take this stage's screenshots (media/stage-3)
+npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
+npm run mission        the whole mission with no god mode, played by a model of a skilled player
 npm run perf           performance and smoothness report
 npm run check:credits  licensing check
 ```
 
-The last five need `npm run build` first. The headless browser they use is installed inside `node_modules` (the scripts point at it themselves).
+`npm run balance -- 16 firstTimer` and `npm run mission -- 16 skilled` (or `firstTimer`, or `expert`) choose how many runs and which model. Everything from `npm run e2e` down needs `npm run build` first. The headless browser they use is installed inside `node_modules` (the scripts point at it themselves).
