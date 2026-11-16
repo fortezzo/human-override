@@ -1,7 +1,7 @@
 // The server hall: rows of server racks either side of a central aisle,
-// under cold light, with the loading dock on the west side, the service
-// door to the power room on the east, and the sealed core door at the far
-// end. ARGUS lives in these machines: most racks blink a calm green and
+// under cold light, with the shutter to the loading dock on the west side,
+// the service door to the power room and the door to the robotics lab on
+// the east, and the sealed core door at the far end. ARGUS lives in these machines: most racks blink a calm green and
 // blue, and clusters of red mark the ones it has taken.
 
 import type { Assets } from '../../core/assets';
@@ -10,10 +10,10 @@ import type { LightDef } from '../../render/lighting';
 import type { MaterialLibrary } from '../../render/materials';
 import { LedBank } from '../build/LedBank';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, column, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
+import { column, ibeam, vent, wall, weaponRack, type AreaBuild, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
-import { DOCK, DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, WALL } from '../plan';
+import { DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, WALL } from '../plan';
 
 type Vec3 = [number, number, number];
 
@@ -30,23 +30,25 @@ const RACK = { width: 0.62, depth: 1.0, height: 2.15 };
 /**
  * Rows of racks: [first rack's west edge, row centre z, number of racks, label].
  *
- * The west rows stand almost against the wall and stop well short of the
- * columns by the central aisle. Both matter: a robot is wider than the
+ * Every row stops well short of the outer wall, which leaves a walkway
+ * down each side of the hall: every aisle between two rows is open at both
+ * ends, and there is a way round every block of racks. (The rows used to
+ * run to the walls, so each aisle was a dead end a few steps deep, and with
+ * a horde in the hall there was nowhere to take it.) They also stop well
+ * short of the columns by the central aisle: a robot is wider than the
  * player, so a gap the player can squeeze through and a robot cannot turns
- * the aisle beyond it into a place where nothing can reach them. (With one
- * more rack per row, a column sat in the mouth of the aisle between rows A
- * and B and sealed it off: nine square metres of perfect safety.)
+ * whatever is beyond it into a place where nothing can reach them.
  */
 const ROWS: Array<[number, number, number, string]> = [
-  [-10.55, 9.7, 8, 'A'],
-  [-10.55, 13.1, 8, 'B'],
+  [-9.3, 9.7, 6, 'A'],
+  [-9.3, 13.1, 6, 'B'],
   [-7.72, 16.5, 5, 'C'],
-  [-10.55, 19.9, 8, 'D'],
-  [-10.55, 23.3, 8, 'E'],
+  [-9.3, 19.9, 6, 'D'],
+  [-9.3, 23.3, 6, 'E'],
   [2.62, 9.5, 7, 'F'],
-  [2.62, 13.9, 9, 'G'],
-  [2.62, 17.3, 9, 'H'],
-  [2.62, 20.7, 9, 'J'],
+  [2.62, 13.9, 7, 'G'],
+  [2.62, 17.3, 7, 'H'],
+  [2.62, 20.7, 7, 'J'],
 ];
 
 export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild {
@@ -62,6 +64,8 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   const door = (id: string) => DOOR_PLANS.find((d) => d.id === id)!;
   const servicePlan = door('hallPower');
   const corePlan = door('hallCore');
+  const dockPlan = door('hallDock');
+  const labPlan = door('hallLab');
 
   // ---- Structure
   b.box('floor', [x0 - t, -0.4, z0], [x1 + t, 0, z1 + t], { collide: false, cast: false });
@@ -75,26 +79,48 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   // not the lobby is being drawn.
   const blast = DOOR_PLANS.find((d) => d.id === 'lobbyHall')!;
   wall(b, { ...walls, height: LOBBY.height, along: 'x', near: z0, far: z0 + SKIN, from: LOBBY.x0 - t, to: x1, solid: false, openings: [{ from: blast.from, to: blast.to, top: blast.top }] });
-  wall(b, { ...walls, along: 'z', near: x0 - t, far: x0, from: z0 - t, to: z1 + t, openings: [{ from: DOCK.z0, to: DOCK.z1, top: DOCK.top }] });
-  wall(b, { ...walls, along: 'z', near: x1, far: x1 + t, from: z0, to: z1 + t, openings: [{ from: servicePlan.from, to: servicePlan.to, top: servicePlan.top }] });
+  wall(b, { ...walls, along: 'z', near: x0 - t, far: x0, from: z0 - t, to: z1 + t, openings: [{ from: dockPlan.from, to: dockPlan.to, top: dockPlan.top }] });
+  wall(b, {
+    ...walls,
+    along: 'z',
+    near: x1,
+    far: x1 + t,
+    from: z0,
+    to: z1 + t,
+    openings: [
+      { from: servicePlan.from, to: servicePlan.to, top: servicePlan.top },
+      { from: labPlan.from, to: labPlan.to, top: labPlan.top },
+    ],
+  });
   wall(b, { ...walls, along: 'x', near: z1, far: z1 + t, from: x0, to: x1, openings: [{ from: corePlan.from, to: corePlan.to, top: corePlan.top }] });
   // A steel rail caps the cladding. It stops at the frame of each opening
   // and starts again on the far side. (It once ran straight across all
   // four, and showed through every open door as a dark bar at waist height.)
-  const rails: Array<{ along: 'x' | 'z'; near: number; far: number; from: number; to: number; gap: [number, number] }> = [
-    { along: 'x', near: z0 + 0.03, far: z0 + 0.06, from: x0, to: x1, gap: [blast.from - 0.34, blast.to + 0.34] },
-    { along: 'x', near: z1 - 0.03, far: z1, from: x0, to: x1, gap: [corePlan.from - 0.3, corePlan.to + 0.3] },
-    { along: 'z', near: x0, far: x0 + 0.03, from: z0, to: z1, gap: [DOCK.z0 - 0.28, DOCK.z1 + 0.28] },
-    { along: 'z', near: x1 - 0.03, far: x1, from: z0, to: z1, gap: [servicePlan.from - 0.3, servicePlan.to + 0.3] },
+  const rails: Array<{ along: 'x' | 'z'; near: number; far: number; from: number; to: number; gaps: Array<[number, number]> }> = [
+    { along: 'x', near: z0 + 0.03, far: z0 + 0.06, from: x0, to: x1, gaps: [[blast.from - 0.34, blast.to + 0.34]] },
+    { along: 'x', near: z1 - 0.03, far: z1, from: x0, to: x1, gaps: [[corePlan.from - 0.3, corePlan.to + 0.3]] },
+    { along: 'z', near: x0, far: x0 + 0.03, from: z0, to: z1, gaps: [[dockPlan.from - 0.3, dockPlan.to + 0.3]] },
+    {
+      along: 'z',
+      near: x1 - 0.03,
+      far: x1,
+      from: z0,
+      to: z1,
+      gaps: [
+        [servicePlan.from - 0.3, servicePlan.to + 0.3],
+        [labPlan.from - 0.3, labPlan.to + 0.3],
+      ],
+    },
   ];
   for (const rail of rails) {
-    for (const [u0, u1] of [
-      [rail.from, rail.gap[0]],
-      [rail.gap[1], rail.to],
-    ]) {
-      const min: Vec3 = rail.along === 'x' ? [u0, paintLine - 0.03, rail.near] : [rail.near, paintLine - 0.03, u0];
-      const max: Vec3 = rail.along === 'x' ? [u1, paintLine + 0.03, rail.far] : [rail.far, paintLine + 0.03, u1];
-      b.box('darkSteel', min, max, { collide: false, cast: false });
+    let cursor = rail.from;
+    for (const [g0, g1] of [...rail.gaps, [rail.to, rail.to] as [number, number]]) {
+      if (g0 - cursor > 0.001) {
+        const min: Vec3 = rail.along === 'x' ? [cursor, paintLine - 0.03, rail.near] : [rail.near, paintLine - 0.03, cursor];
+        const max: Vec3 = rail.along === 'x' ? [g0, paintLine + 0.03, rail.far] : [rail.far, paintLine + 0.03, g0];
+        b.box('darkSteel', min, max, { collide: false, cast: false });
+      }
+      cursor = g1;
     }
   }
 
@@ -193,21 +219,14 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   b.prop('utility_box_02', { at: [4.6, 0, z0 + 0.26], rotY: 0 });
   b.prop('power_box_01', { at: [6.2, 1.55, z0 + 0.08], rotY: 0, collide: false });
   b.prop('korean_fire_extinguisher_01', { at: [-2.6, 0, z0 + 0.22], rotY: 0 });
-  // (Parked across the dead end of the aisle between rows D and E. It used
-  // to stand a pace inside the loading dock, where, on the map of the floor
-  // the robots steer by, it closed the dock off from the rest of the hall.)
-  b.prop('industrial_storage_cart', { at: [-10.4, 0, 21.6], rotY: HALF_PI });
-  b.prop('cardboard_box_01', { at: [-9.9, 0, 18.4], rotY: 0.5, kind: 'soft' });
-  b.prop('Barrel_01', { at: [-10.3, 0, 14.3], rotY: 0.8 });
-  b.prop('hand_truck', { at: [8.5, 0, 14.6], rotY: -HALF_PI });
+  // (Nothing stands in the walkways down the two sides of the hall: the
+  // cart, the boxes and the hand truck that used to are in the loading dock.)
   b.prop('security_camera_01', { at: [x1 - 0.3, 4.6, z0 + 0.3], rotY: -Math.PI / 4, collide: false });
   b.prop('security_camera_01', { at: [x0 + 0.3, 4.6, z1 - 0.3], rotY: (Math.PI * 3) / 4, collide: false });
 
-  // ---- Loading dock: the opening, its jammed shutter, and the yard outside
-  b.prop('rollershutter_door', { at: [x0 - 0.3, 2.3, (DOCK.z0 + DOCK.z1) / 2], scale: [2.75, 1.05, 1], rot: [0, HALF_PI, -0.04], collide: false });
-  approach(b, { area: 'hall', out: -1, wallX: x0 - t, z0: DOCK.z0, z1: DOCK.z1, top: DOCK.top, depth: DOCK.depth, name: 'dock' }, lights, haze, dustBeams);
+  // (The shutter to the loading dock, and the lab's door, are moving parts: see world/Door.ts.)
 
-  // ---- Ceiling vent the robots drop from
+  // ---- Ceiling vents the robots drop from
   for (const entry of ENTRY_PLANS) if (entry.area === 'hall' && entry.kind === 'drop') vent(b, entry.at[0], entry.at[1], h);
 
   // ---- The carbine's rack
@@ -223,7 +242,8 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   put(atlas.text('SERVER HALL', { size: 60, wear: 0.45 }), [5.6, 3.02, z0 + SKIN], N, 2.1, { opacity: 0.7 });
   put(atlas.eye(300, PAINT.white, 0.45), [-6.3, 3.3, z0 + SKIN], N, 1.3, { opacity: 0.7 });
   put(atlas.text(['ANTI-STATIC ZONE', 'NO OPEN FLAME'], { size: 50, box: true, wear: 0.45 }), [-6.3, 2.2, z0 + SKIN], N, 1.8, { opacity: 0.75 });
-  put(atlas.text('LOADING DOCK', { size: 70, color: PAINT.yellow, wear: 0.45 }), [x0, DOCK.top + 0.55, (DOCK.z0 + DOCK.z1) / 2], W, 1.9, { opacity: 0.9 });
+  put(atlas.text('LOADING DOCK', { size: 70, color: PAINT.yellow, wear: 0.45 }), [x0, dockPlan.top + 0.55, (dockPlan.from + dockPlan.to) / 2], W, 1.9, { opacity: 0.9 });
+  put(atlas.text('ROBOTICS LAB', { size: 70, color: PAINT.yellow, wear: 0.4 }), [x1, labPlan.top + 0.5, (labPlan.from + labPlan.to) / 2], E, 1.7, { opacity: 0.9 });
   put(atlas.text('POWER ROOM', { size: 70, color: PAINT.yellow, wear: 0.4 }), [x1, servicePlan.top + 0.5, (servicePlan.from + servicePlan.to) / 2], E, 1.6, { opacity: 0.9 });
   const coreMid = (corePlan.from + corePlan.to) / 2;
   const coreSign = atlas.text('CORE', { size: 130, color: PAINT.amber, plate: '#0d0f11', wear: 0 });
@@ -241,7 +261,8 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
     put(guide, [-1, 0, (za + zb) / 2], FLOOR, zb - za, { roll: HALF_PI, opacity: 0.7 });
   }
   b.decalImage('RoadLines022A', [coreMid, 0, z1 - 1.0], FLOOR, 4.6, 1.7, { opacity: 0.6 });
-  b.decalImage('RoadLines022A', [x0 + 1.0, 0, (DOCK.z0 + DOCK.z1) / 2], FLOOR, 1.8, 3.2, { opacity: 0.5 });
+  b.decalImage('RoadLines022A', [x0 + 1.0, 0, (dockPlan.from + dockPlan.to) / 2], FLOOR, 1.8, 3.2, { opacity: 0.5 });
+  b.decalImage('RoadLines022A', [x1 - 0.9, 0, (labPlan.from + labPlan.to) / 2], FLOOR, 1.6, 2.4, { opacity: 0.5 });
   put(atlas.arrow('down', PAINT.yellow, 200, 0.6), [-1, 0, 21.8], FLOOR, 0.9, { opacity: 0.7 });
   // Stains.
   const stain = (id: 'Leaking003' | 'Leaking004', centre: Vec3, normal: Vec3, w: number, hgt: number, opacity = 0.7) => b.decalImage(id, centre, normal, w, hgt, { opacity, tint: 0x5b5a52 });
@@ -303,6 +324,7 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
   lights.push({ name: 'hallDockSide', area: 'hall', kind: 'point', color: 0xd6e4ff, intensity: 8, position: [-9.2, 2.7, 16.5], distance: 8 });
   lights.push({ name: 'hallRacksSW', area: 'hall', kind: 'point', color: 0xff5a3a, intensity: 3, position: [-7.4, 1.3, 21.6], distance: 7 });
   lights.push({ name: 'hallServiceDoor', area: 'hall', kind: 'point', color: 0xffe2b8, intensity: 4, position: [x1 - 0.7, 2.8, (servicePlan.from + servicePlan.to) / 2], distance: 4.5 });
+  lights.push({ name: 'hallLabDoor', area: 'hall', kind: 'point', color: 0xc8fff0, intensity: 4, position: [x1 - 0.7, 2.9, (labPlan.from + labPlan.to) / 2], distance: 4.5 });
   // The uplink corner: warm light from the console, cold from above.
   lights.push({ name: 'hallUplink', area: 'hall', kind: 'point', color: AMBER, intensity: 4.5, position: [ux, 1.9, uz - 1.0], distance: 6 });
   // Red lamps either side of the core door and of the dock.
@@ -311,7 +333,7 @@ export function buildHall(assets: Assets, materials: MaterialLibrary): AreaBuild
     const fixture = b.prop('industrial_wall_lamp', { at, rotY: Math.PI, collide: false, cast: false, unique: true });
     lights.push({ name: `coreLamp${side}`, area: 'hall', kind: 'point', color: RED, intensity: 7, position: [at[0], at[1], at[2] - 0.35], distance: 6, flicker: 'pulse', glow: { materials: fixture, color: RED, intensity: 9 } });
   }
-  const dockLamp: Vec3 = [x0 + 0.002, 3.5, DOCK.z1 + 0.8];
+  const dockLamp: Vec3 = [x0 + 0.002, 3.5, dockPlan.to + 0.8];
   const dockFixture = b.prop('industrial_wall_lamp', { at: dockLamp, rotY: HALF_PI, collide: false, cast: false, unique: true });
   lights.push({ name: 'dockLamp', area: 'hall', kind: 'point', color: RED, intensity: 6, position: [dockLamp[0] + 0.35, dockLamp[1], dockLamp[2]], distance: 6, flicker: 'beacon', glow: { materials: dockFixture, color: RED, intensity: 9 } });
 

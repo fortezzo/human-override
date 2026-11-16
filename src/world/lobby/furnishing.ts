@@ -104,16 +104,16 @@ function buildClutter(b: LevelBuilder): void {
   b.prop('metal_stool_02', { at: [x0 + 0.7, 0, 1.3], rotY: 0.3 });
   b.prop('metal_stool_02', { at: [x0 + 2.6, 0.22, 1.5], rot: [HALF_PI, 0.9, 0] });
 
-  // South-west corner: shelving, crates and a parts cart.
+  // South wall, west of the blast door: shelving, and a stack of crates.
+  // (The crates and the parts cart that stood in the south-west corner made
+  // way for the goods door to the loading dock, which is where they went.)
   b.prop('worn_metal_rack', { at: [x0 + 2.2, 0, z1 - 0.34], rotY: Math.PI });
   b.prop('worn_metal_rack', { at: [x0 + 3.15, 0, z1 - 0.34], rotY: Math.PI });
   b.prop('cardboard_box_01', { at: [x0 + 2.2, 0.48, z1 - 0.36], rotY: 3.3, kind: 'soft', collide: false, scale: 0.85 });
   b.prop('ammo_box', { at: [x0 + 3.2, 0.98, z1 - 0.34], rotY: 1.6, collide: false });
-  b.prop('wooden_military_crate', { at: [x0 + 1.0, 0, z1 - 1.9], rotY: HALF_PI + 0.1, kind: 'wood' });
-  b.prop('wooden_military_crate', { at: [x0 + 1.02, 0.46, z1 - 1.95], rotY: HALF_PI - 0.12, kind: 'wood', collide: false });
-  b.blocker([x0 + 0.7, 0.46, z1 - 2.6], [x0 + 1.3, 0.92, z1 - 1.3]);
-  b.prop('wooden_military_crate', { at: [x0 + 1.9, 0, z1 - 3.4], rotY: 0.35, kind: 'wood' });
-  b.prop('industrial_storage_cart', { at: [x0 + 3.3, 0, 3.9], rotY: 0.25 });
+  b.prop('wooden_military_crate', { at: [x0 + 4.6, 0, z1 - 0.5], rotY: 0.06, kind: 'wood' });
+  b.prop('wooden_military_crate', { at: [x0 + 4.62, 0.46, z1 - 0.52], rotY: -0.1, kind: 'wood', collide: false });
+  b.blocker([x0 + 4.05, 0.46, z1 - 0.85], [x0 + 5.15, 0.92, z1 - 0.15]);
 
   // South-east: steel shelving beside the blast door.
   // (Far enough east that they do not stand in front of the warning sign.)

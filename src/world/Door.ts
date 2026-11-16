@@ -103,14 +103,14 @@ export class Door {
     };
 
     const width = to - from;
-    if (plan.id === 'lobbyHall' || plan.id === 'hallCore') {
+    if (plan.id === 'lobbyHall' || plan.id === 'hallCore' || plan.id === 'lobbyDock' || plan.id === 'hallDock') {
       // Two heavy leaves that part in the middle. The first carries a seal
       // set back in the gap between them, so the seam reads as a dark
       // groove and nothing can be seen through it.
       leaf(from, mid - 0.012, -(width / 2 - 0.04), true, (put) => put('darkSteel', mid - 0.012, 0, -h + 0.025, mid + 0.012, top, h - 0.025));
       leaf(mid + 0.012, to, width / 2 - 0.04, true);
     } else {
-      leaf(from, to, width - 0.05, false);
+      leaf(from, to, (plan.slides ?? 1) * (width - 0.05), false);
     }
 
     // The fixed frame the leaves slide in (see doorFrames.ts for why it is

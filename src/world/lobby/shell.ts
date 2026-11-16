@@ -3,7 +3,7 @@
 // steel beams.
 
 import type { LevelBuilder } from '../build/LevelBuilder';
-import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, PIER, PIERS, POWER_DOOR, RING_BEAM, ROOM, WINDOW, WINDOWS } from './plan';
+import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, GOODS_DOOR, PIER, PIERS, POWER_DOOR, RING_BEAM, ROOM, WINDOW, WINDOWS } from './plan';
 
 type Vec3 = [number, number, number];
 
@@ -64,7 +64,10 @@ export function buildShell(b: LevelBuilder): void {
     wall(b, [x0 - t, win.z - WINDOW.halfWidth], [x0, win.z + WINDOW.halfWidth], WINDOW.head);
     from = win.z + WINDOW.halfWidth;
   }
-  wall(b, [x0 - t, from], [x0, z1]);
+  // ... and, south of them, the goods door to the loading dock.
+  wall(b, [x0 - t, from], [x0, GOODS_DOOR.z0]);
+  wall(b, [x0 - t, GOODS_DOOR.z0], [x0, GOODS_DOOR.z1], GOODS_DOOR.top);
+  wall(b, [x0 - t, GOODS_DOOR.z1], [x0, z1]);
 
   // A concrete ring beam runs round the top of the walls, and shallow piers
   // stand under it between the signs and openings. Together with the rail
@@ -103,7 +106,8 @@ export function buildShell(b: LevelBuilder): void {
     { axis: 'x', at: z1, from: BLAST_DOOR.x1 + 0.35, to: x1, inward: -1 },
     { axis: 'z', at: x1, from: z0, to: POWER_DOOR.z0 - 0.12, inward: -1 },
     { axis: 'z', at: x1, from: POWER_DOOR.z1 + 0.12, to: z1, inward: -1 },
-    { axis: 'z', at: x0, from: z0, to: z1, inward: 1 },
+    { axis: 'z', at: x0, from: z0, to: GOODS_DOOR.z0 - 0.3, inward: 1 },
+    { axis: 'z', at: x0, from: GOODS_DOOR.z1 + 0.3, to: z1, inward: 1 },
   ];
   for (const run of runs) {
     const a = run.at;

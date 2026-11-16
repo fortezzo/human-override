@@ -49,6 +49,20 @@ const DEFS = {
   wallPower: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xd8cfbe, roughness: 0.82, normalScale: 0.9, weathering: { rail: 1.25, ceiling: 4.7 } },
   rackSteel: { surface: 'Metal046B', tile: 1.3, kind: 'metal', tint: 0x9aa1aa, roughness: 1.0 },
   coreSteel: { surface: 'metal_plate_02', tile: 2.4, kind: 'metal', tint: 0x8b929b, roughness: 0.9, normalScale: 1.2 },
+  // The loading dock: corrugated cladding above a concrete plinth, the
+  // faded paint of its containers, and the truck's cab and glass. (The
+  // containers are the one place the tints are strong: they are painted.)
+  wallDock: { surface: 'corrugated_iron_02', tile: 2.2, kind: 'metal', tint: 0xc6cbc8, roughness: 0.9 },
+  containerRust: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0xb9583a, roughness: 0.95 },
+  containerBlue: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0x547a9e, roughness: 0.95 },
+  containerGreen: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0x628569, roughness: 0.95 },
+  containerOchre: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0xc7a54c, roughness: 0.95 },
+  truckPaint: { surface: 'Metal046B', tile: 1.6, kind: 'metal', tint: 0xdfe3e6, roughness: 0.55, metalness: 0.25 },
+  darkGlass: { surface: 'Metal046B', tile: 1.0, kind: 'glass', tint: 0x1c232a, roughness: 0.22, metalness: 0.7, envIntensity: 1.5 },
+  // The robotics lab: pale panels and a cleaner floor.
+  wallLab: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xdfeae6, roughness: 0.8, normalScale: 0.8 },
+  labPanel: { surface: 'metal_plate_02', tile: 2.0, kind: 'metal', tint: 0xe6ecee, gain: 1.9, roughness: 0.75, normalScale: 1.0 },
+  labFloor: { surface: 'concrete_floor_worn_001', tile: 3.2, kind: 'concrete', tint: 0xe8f0ee, gain: 1.9, roughness: 0.8, normalScale: 0.8 },
 } satisfies Record<string, MaterialDef>;
 
 export type MaterialKey = keyof typeof DEFS;

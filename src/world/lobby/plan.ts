@@ -34,8 +34,11 @@ export const WINDOWS = [
 /** Blast door to the server hall, in the south wall. */
 export const BLAST_DOOR = { x0: -1.8, x1: 1.8, top: 3.1 } as const;
 
-/** Door to the power room, in the east wall. */
-export const POWER_DOOR = { z0: 2.7, z1: 4.5, top: 2.45 } as const;
+/** Door to the power room, in the east wall. (Widened from 1.8 m when the map grew: a horde went through it in single file.) */
+export const POWER_DOOR = { z0: 2.5, z1: 4.9, top: 2.45 } as const;
+
+/** Goods door to the loading dock, in the west wall south of the windows. */
+export const GOODS_DOOR = { z0: 4.0, z1: 6.2, top: 3.0 } as const;
 
 /** Concrete beam running round the top of the walls. */
 export const RING_BEAM = { depth: 0.5, proud: 0.1 } as const;
@@ -50,7 +53,7 @@ export const PIERS = {
   north: [-7.5, -3.75, 6.5],
   south: [-6.7, -3.25, 5.75],
   east: [-6.45, -3.6, 6.7],
-  west: [-5.9, -2.2, 3.2, 5.9],
+  west: [-5.9, -2.2, 3.2],
 } as const;
 
 export const COLUMNS: ReadonlyArray<readonly [number, number]> = [

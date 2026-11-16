@@ -114,6 +114,23 @@ export class RobotModel {
     this.glowTexture = glowTexture();
   }
 
+  /**
+   * The robot as the separate rigid pieces it breaks into, each where it
+   * sits while the robot stands in the pose it was built in (arms out).
+   * For showing a robot's parts where there is no robot: the lab's racks
+   * and jigs. Positions are in metres, with the floor at y = 0.
+   */
+  restPieces(): Array<{ bone: string; geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }> {
+    this.template.updateMatrixWorld(true);
+    const out: Array<{ bone: string; geometry: THREE.BufferGeometry; matrix: THREE.Matrix4 }> = [];
+    for (const chunk of this.chunks) {
+      const bone = this.template.getObjectByName(chunk.bone);
+      if (!bone) continue;
+      out.push({ bone: chunk.bone, geometry: chunk.geometry, matrix: bone.matrixWorld.clone().multiply(new THREE.Matrix4().makeTranslation(chunk.offset.x, chunk.offset.y, chunk.offset.z)) });
+    }
+    return out;
+  }
+
   /** A fresh copy of the robot with its own skeleton. */
   instantiate(): THREE.Object3D {
     const copy = cloneSkinned(this.template);

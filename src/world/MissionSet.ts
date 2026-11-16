@@ -75,7 +75,7 @@ class OverrideKey {
 
 export class MissionSet {
   /** The pieces that stand in each area, to be drawn with it. */
-  readonly groups: Record<AreaId, THREE.Group> = { lobby: new THREE.Group(), hall: new THREE.Group(), power: new THREE.Group(), core: new THREE.Group() };
+  readonly groups: Record<AreaId, THREE.Group> = { lobby: new THREE.Group(), hall: new THREE.Group(), power: new THREE.Group(), core: new THREE.Group(), dock: new THREE.Group(), lab: new THREE.Group() };
   /** Pieces that can be anywhere (a key dropped on the floor): always drawn. */
   readonly loose = new THREE.Group();
   /** The lights that go with them. */
@@ -145,19 +145,19 @@ export class MissionSet {
         b.box('hazard', [-0.03, 0.95, 0.3], [0.03, 1.25, 0.7], { collide: false, cast: false });
       },
       [x0 + 0.05, 0, gate.z0],
-      this.groups.power,
+      this.groups[KEY_CAGE.area],
     );
     // Its lock: a lamp on the post, red while it holds and green once it has let go.
     this.lockLamp = new THREE.MeshBasicMaterial({ color: 0xff2a12, toneMapped: false, fog: false });
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.035, 0.035), this.lockLamp);
     lamp.position.set(x0 - 0.05, 1.5, gate.z0 - 0.04);
-    this.groups.power.add(lamp);
+    this.groups[KEY_CAGE.area].add(lamp);
 
     // ---- The key in the cage, on its stand just inside the gate.
     this.cageKey = new OverrideKey(this.shared);
     this.cageKey.object.position.set(stand.x, stand.top + 0.17, stand.z);
-    this.groups.power.add(this.cageKey.object);
-    this.cageKeyLight = { name: 'cageKey', area: 'power', kind: 'point', color: MISSION_COLOR, intensity: 4, position: [stand.x - 0.3, stand.top + 0.5, stand.z], distance: 3.4, when: 'powerOn' };
+    this.groups[KEY_CAGE.area].add(this.cageKey.object);
+    this.cageKeyLight = { name: 'cageKey', area: KEY_CAGE.area, kind: 'point', color: MISSION_COLOR, intensity: 4, position: [stand.x - 0.3, stand.top + 0.5, stand.z], distance: 3.4, when: 'powerOn' };
     this.lights.push(this.cageKeyLight);
 
     // ---- The Custodian's key, where it fell: turning in the air under a thin shaft of light.

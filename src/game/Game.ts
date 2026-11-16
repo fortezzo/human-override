@@ -224,7 +224,14 @@ export class Game {
     lap('download and decode');
 
     this.materials = new MaterialLibrary(this.assets);
-    this.world = new World(this.assets, this.materials);
+    // (The robot types come first: the lab is furnished with their parts.)
+    this.robotModel = new RobotModel(this.assets, DRUDGE);
+    this.custodianModel = new RobotModel(this.assets, CUSTODIAN);
+    this.proxyModel = new RobotModel(this.assets, PROXY);
+    this.droneModel = new RobotModel(this.assets, DRONE);
+    this.bomberModel = new RobotModel(this.assets, BOMBER);
+    this.heavyModel = new RobotModel(this.assets, HEAVY);
+    this.world = new World(this.assets, this.materials, { drudge: this.robotModel, heavy: this.heavyModel });
     this.scene.add(this.world.group);
     this.world.onDoorPassable = () => this.refocus();
 
@@ -237,12 +244,6 @@ export class Game {
     this.scene.add(this.lights.group);
     this.scene.add(this.particles.group, this.decals.group, this.casings.mesh);
 
-    this.robotModel = new RobotModel(this.assets, DRUDGE);
-    this.custodianModel = new RobotModel(this.assets, CUSTODIAN);
-    this.proxyModel = new RobotModel(this.assets, PROXY);
-    this.droneModel = new RobotModel(this.assets, DRONE);
-    this.bomberModel = new RobotModel(this.assets, BOMBER);
-    this.heavyModel = new RobotModel(this.assets, HEAVY);
     this.gibs = new Gibs(this.robotModel);
     this.scene.add(this.gibs.group);
     // A spare robot that is never shown. While it exists the robots' shaders

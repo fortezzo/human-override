@@ -20,7 +20,7 @@ import { remaining } from '../sim/rounds';
 import { findSafeSpots, groupSafeSpots } from '../sim/safeSpots';
 import { cellAt, createNavGrid, floodFrom } from '../sim/navGrid';
 import { BREACH, VESTIBULE } from '../world/lobby/plan';
-import { AREA_IDS, DOCK, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, HALL, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
+import { AREA_IDS, DOCK, DOCK_BAYS, DOCK_PASSAGE, DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LAB, LAB_LINE, LOBBY, MISSION_PLACES, NAV_BOUNDS, POWER, ROOM_RECTS, WALKABLE, WALL, type DoorPlan } from '../world/plan';
 import { PLAYER_START } from '../world/lobby/plan';
 import { Autopilot, PILOTS, type PilotName } from './Autopilot';
 
@@ -619,8 +619,13 @@ export function installDebugApi(game: Game): DebugTools {
         ...game.world.doors.map((door): [[number, number, number, number], boolean] => [[...door.rect] as [number, number, number, number], false]),
         // The entry corridor, from the lobby wall out to its outer doorway.
         [[VESTIBULE.x0, VESTIBULE.z0 - 0.5, VESTIBULE.x1, LOBBY.z0], false],
-        [[HALL.x0 - t, DOCK.z0, HALL.x0, DOCK.z1], false],
+        // The passage from the lobby's goods door to the dock.
+        [[DOCK_PASSAGE.x0, DOCK_PASSAGE.z0, DOCK_PASSAGE.x1, DOCK_PASSAGE.z1], false],
+        // The openings robots walk in through, as far as the outer face of the wall.
         [[POWER.x1, EAST_BREACH.z0, POWER.x1 + t, EAST_BREACH.z1], false],
+        [[DOCK.x0 - t, DOCK_BAYS.north.z0, DOCK.x0, DOCK_BAYS.north.z1], false],
+        [[DOCK.x0 - t, DOCK_BAYS.south.z0, DOCK.x0, DOCK_BAYS.south.z1], false],
+        [[LAB.x1, LAB_LINE.z0, LAB.x1 + t, LAB_LINE.z1], false],
       ];
       const nav = game.world.nav;
       const eyes: THREE.Vector3[] = [];
@@ -668,8 +673,10 @@ export function installDebugApi(game: Game): DebugTools {
         ...DOOR_PLANS.map((d) => ({ name: d.id as string, along: d.along, at: d.at, from: d.from, to: d.to, top: d.top - 0.15 })),
         // The openings robots walk in through, up to head height (a jammed shutter hangs in the top of each).
         { name: 'entrance', along: 'x', at: LOBBY.z0 - WALL / 2, from: BREACH.x0, to: BREACH.x1, top: 1.85 },
-        { name: 'dock', along: 'z', at: HALL.x0 - WALL / 2, from: DOCK.z0, to: DOCK.z1, top: 1.85 },
         { name: 'breachEast', along: 'z', at: POWER.x1 + WALL / 2, from: EAST_BREACH.z0, to: EAST_BREACH.z1, top: 1.85 },
+        { name: 'dockBayNorth', along: 'z', at: DOCK.x0 - WALL / 2, from: DOCK_BAYS.north.z0, to: DOCK_BAYS.north.z1, top: 1.85 },
+        { name: 'dockBaySouth', along: 'z', at: DOCK.x0 - WALL / 2, from: DOCK_BAYS.south.z0, to: DOCK_BAYS.south.z1, top: 1.85 },
+        { name: 'labLine', along: 'z', at: LAB.x1 + WALL / 2, from: LAB_LINE.z0, to: LAB_LINE.z1, top: 1.85 },
       ];
       const origin = new THREE.Vector3();
       const blocked: Record<string, number> = {};

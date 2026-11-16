@@ -1,4 +1,4 @@
-// The whole facility: four areas, the doors between them, and the things
+// The whole facility: six areas, the doors between them, and the things
 // that depend on which doors are open: what is solid, where robots can
 // walk, which areas can be seen, and where robots are let in.
 
@@ -13,11 +13,13 @@ import { neighbours, reachableAreas, type DoorLink } from '../sim/facility';
 import { createNavGrid, refreshRegion, type NavGrid } from '../sim/navGrid';
 import type { AreaBuild } from './build/room';
 import { buildCore } from './core';
+import { buildDock } from './dock';
 import { Door } from './Door';
 import { buildHall } from './hall';
+import { buildLab, type RobotParts } from './lab';
 import { buildLobby } from './lobby';
 import { MissionSet } from './MissionSet';
-import { AREA_IDS, AREA_RECTS, CORE, DOOR_PLANS, ENTRY_PLANS, HALL, LOBBY, NAV_BOUNDS, POWER, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
+import { AREA_BOXES, AREA_IDS, AREA_RECTS, DOOR_PLANS, ENTRY_PLANS, NAV_BOUNDS, WALKABLE, areaAt, type AreaId, type DoorPlan } from './plan';
 import { buildPower } from './power';
 
 export class World {
@@ -42,9 +44,10 @@ export class World {
 
   private readonly fixed: Collider[] = [];
 
-  constructor(assets: Assets, materials: MaterialLibrary) {
+  /** @param robots the robot types whose parts furnish the lab (left out, the lab's racks and jigs stand empty) */
+  constructor(assets: Assets, materials: MaterialLibrary, robots?: RobotParts) {
     this.group.name = 'world';
-    for (const area of [buildLobby(assets, materials), buildHall(assets, materials), buildPower(assets, materials), buildCore(assets, materials)]) {
+    for (const area of [buildLobby(assets, materials), buildHall(assets, materials), buildPower(assets, materials), buildCore(assets, materials), buildDock(assets, materials), buildLab(assets, materials, robots)]) {
       this.areas.set(area.id, area);
       this.group.add(area.group);
       this.fixed.push(...area.colliders);
@@ -65,9 +68,8 @@ export class World {
     }
     this.group.updateMatrixWorld(true);
 
-    const boxes: Record<AreaId, { x0: number; x1: number; z0: number; z1: number; height: number }> = { lobby: { ...LOBBY, z0: LOBBY.z0 - 6 }, hall: HALL, power: POWER, core: CORE };
     for (const id of AREA_IDS) {
-      const box = boxes[id];
+      const box = AREA_BOXES[id];
       const motes = new DustMotes([box.x0, 0.1, box.z0], [box.x1, box.height - 0.4, box.z1], this.areas.get(id)!.dustBeams);
       this.dust.set(id, motes);
       this.areas.get(id)!.group.add(motes.points);

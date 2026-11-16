@@ -11,7 +11,7 @@ import { buildFurnishing } from './furnishing';
 import { buildLights } from './lights';
 import { buildMarkings } from './markings';
 import { buildOpenings } from './openings';
-import { POWER_DOOR, ROOM } from './plan';
+import { GOODS_DOOR, POWER_DOOR, ROOM } from './plan';
 import { ScreenBank } from './ScreenBank';
 import { buildServices } from './services';
 import { buildShell } from './shell';
@@ -35,6 +35,9 @@ export function buildLobby(assets: Assets, materials: MaterialLibrary): AreaBuil
 
   // A small lamp over the power room door, so it can be found and read.
   lights.push({ name: 'powerDoorLamp', area: 'lobby', kind: 'point', color: 0xffe2b8, intensity: 4, position: [ROOM.x1 - 0.7, 2.75, (POWER_DOOR.z0 + POWER_DOOR.z1) / 2], distance: 4.5 });
+
+  // And one over the goods door to the loading dock, in the sodium colour of the dock beyond it.
+  lights.push({ name: 'goodsDoorLamp', area: 'lobby', kind: 'point', color: 0xffb463, intensity: 4, position: [ROOM.x0 + 0.7, 2.9, (GOODS_DOOR.z0 + GOODS_DOOR.z1) / 2], distance: 4.5 });
 
   screens.finish();
   builder.addObject(screens.object);

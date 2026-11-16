@@ -1,6 +1,7 @@
-// The power room: two dead generators, a bank of transformers, the main
-// breaker panel and a locked key cage, lit only by emergency lamps because
-// the power is out. The east wall is breached to the transformer yard.
+// The power room: two dead generators, a bank of transformers and the main
+// breaker panel, lit only by emergency lamps because the power is out. The
+// east wall is breached to the transformer yard, and a door in the
+// south-east corner leads to the robotics lab.
 
 import type { Assets } from '../../core/assets';
 import { createConeShaft, type DustBeam } from '../../render/atmosphere';
@@ -10,7 +11,7 @@ import { LevelBuilder } from '../build/LevelBuilder';
 import { approach, drum, ibeam, vent, wall, type AreaBuild, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
-import { DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, KEY_CAGE, LOBBY, POWER, WALL } from '../plan';
+import { DOOR_PLANS, EAST_BREACH, ENTRY_PLANS, LOBBY, POWER, WALL } from '../plan';
 
 type Vec3 = [number, number, number];
 
@@ -96,13 +97,14 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   const { x0, x1, z0, z1, height: h, paintLine } = POWER;
   const t = WALL;
   const service = DOOR_PLANS.find((d) => d.id === 'hallPower')!;
+  const labDoor = DOOR_PLANS.find((d) => d.id === 'powerLab')!;
 
   // ---- Structure
   b.box('floor', [x0, -0.4, z0 - t], [x1 + t, 0, z1 + t], { collide: false, cast: false });
   b.box('ceilingDeck', [x0 - t, h, z0 - t], [x1 + t, h + 0.25, z1 + t], { collide: false, cast: false });
   const walls = { height: h, lower: 'wallPaint', upper: 'wallPower', paintLine } as const;
   wall(b, { ...walls, along: 'x', near: z0 - t, far: z0, from: x0, to: x1 + t });
-  wall(b, { ...walls, along: 'x', near: z1, far: z1 + t, from: x0, to: x1 + t });
+  wall(b, { ...walls, along: 'x', near: z1, far: z1 + t, from: x0, to: x1 + t, openings: [{ from: labDoor.from, to: labDoor.to, top: labDoor.top }] });
   wall(b, { ...walls, along: 'z', near: x1, far: x1 + t, from: z0, to: z1, openings: [{ from: EAST_BREACH.z0, to: EAST_BREACH.z1, top: EAST_BREACH.top }] });
   // West: the lobby's and the server hall's walls already stand here. Fill
   // in above the lobby's, and face the whole side with a skin of this
@@ -125,7 +127,8 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   });
   // Rail capping the painted band.
   b.box('darkSteel', [x0, paintLine - 0.03, z0], [x1, paintLine + 0.03, z0 + 0.03], { collide: false, cast: false });
-  b.box('darkSteel', [x0, paintLine - 0.03, z1 - 0.03], [x1, paintLine + 0.03, z1], { collide: false, cast: false });
+  b.box('darkSteel', [x0, paintLine - 0.03, z1 - 0.03], [labDoor.from - 0.3, paintLine + 0.03, z1], { collide: false, cast: false });
+  b.box('darkSteel', [labDoor.to + 0.3, paintLine - 0.03, z1 - 0.03], [x1, paintLine + 0.03, z1], { collide: false, cast: false });
   b.box('darkSteel', [x1 - 0.03, paintLine - 0.03, z0], [x1, paintLine + 0.03, EAST_BREACH.z0 - 0.3], { collide: false, cast: false });
   b.box('darkSteel', [x1 - 0.03, paintLine - 0.03, EAST_BREACH.z1 + 0.3], [x1, paintLine + 0.03, z1], { collide: false, cast: false });
 
@@ -162,43 +165,8 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   b.box('steelPlate', [bx - 1.3, 3.0, z1 - 0.26], [bx + 1.3, 3.04, z1 - 0.02], { collide: false, cast: false });
   for (const dx of [-0.9, 0.9]) b.box('darkSteel', [bx + dx - 0.03, 3.04, z1 - 0.1], [bx + dx + 0.03, 3.5, z1 - 0.02], { collide: false, cast: false });
 
-  // The key cage in the south-east corner: steel bars, and a stand just
-  // inside the gate for the override key. (The gate, its lock and the key
-  // are moving parts: see world/MissionSet.ts.)
-  const cx0 = KEY_CAGE.x0;
-  const cz0 = KEY_CAGE.z0;
-  const gate = KEY_CAGE.gate;
-  const bars = (along: 'x' | 'z', from: number, to: number, at: number) => {
-    for (let u = from; u <= to + 0.001; u += 0.13) {
-      const p: Vec3 = along === 'x' ? [u, 0, at] : [at, 0, u];
-      b.tube('darkSteel', p, [p[0], 2.6, p[2]], 0.012, false);
-    }
-    for (const y of [0.08, 1.3, 2.6]) {
-      const a: Vec3 = along === 'x' ? [from, y, at] : [at, y, from];
-      const c: Vec3 = along === 'x' ? [to, y, at] : [at, y, to];
-      b.tube('rustedSteel', a, c, 0.022, false);
-    }
-  };
-  bars('x', cx0, x1, cz0);
-  bars('z', cz0, gate.z0, cx0);
-  bars('z', gate.z1, z1, cx0);
-  for (const [px, pz] of [
-    [cx0, cz0],
-    [x1 - 0.05, cz0],
-    [cx0, z1 - 0.05],
-    [cx0, 12.0],
-    [cx0, 13.0],
-  ] as const) {
-    b.box('rustedSteel', [px - 0.04, 0, pz - 0.04], [px + 0.04, 2.7, pz + 0.04], { collide: false });
-  }
-  // Nobody gets into the cage, open or shut: the key is taken through the gateway.
-  b.blocker([cx0 - 0.05, 0, cz0 - 0.05], [x1, 2.7, cz0 + 0.05]);
-  b.blocker([cx0 - 0.05, 0, cz0], [cx0 + 0.05, 2.7, z1]);
-  const stand = KEY_CAGE.stand;
-  b.box('steelPlate', [stand.x - 0.26, 0, stand.z - 0.26], [stand.x + 0.26, stand.top - 0.05, stand.z + 0.26], { collide: false });
-  b.box('darkSteel', [stand.x - 0.32, stand.top - 0.05, stand.z - 0.32], [stand.x + 0.32, stand.top, stand.z + 0.32], { collide: false });
-  b.prop('ammo_box', { at: [21.4, 0, 11.6], rotY: 0.6, collide: false });
-  b.prop('steel_frame_shelves_03', { at: [21.1, 0, z1 - 0.4], rotY: Math.PI, collide: false });
+  // (The key cage that stood in the south-east corner is in the robotics
+  // lab now, and the lab's door is where it was: see world/lab.)
 
   // ---- Pipes and clutter
   for (const [px, r, key] of [
@@ -251,7 +219,8 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   const breaker = atlas.text('MAIN BREAKER', { size: 100, color: PAINT.amber, plate: '#0d0f11', wear: 0 });
   put(breaker, [bx, 2.75, z1 - 0.302], S, 2.3, { emissive: 2.6, tint: 0xffb060 });
   put(atlas.text(['DANGER', 'HIGH VOLTAGE'], { size: 60, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.4 }), [bx - 3.1, 2.0, z1], S, 1.2, { opacity: 0.9 });
-  put(atlas.text(['KEY STORAGE', 'AUTHORISED STAFF ONLY'], { size: 46, box: true, wear: 0.45 }), [x1, 3.1, 12.4], E, 1.7, { opacity: 0.75 });
+  put(atlas.text('ROBOTICS LAB', { size: 70, color: PAINT.yellow, wear: 0.4 }), [(labDoor.from + labDoor.to) / 2, labDoor.top + 0.5, z1], S, 1.7, { opacity: 0.9 });
+  b.decalImage('RoadLines022A', [(labDoor.from + labDoor.to) / 2, 0, z1 - 0.9], FLOOR, 2.4, 1.6, { opacity: 0.5 });
   put(atlas.text('TRANSFORMER YARD', { size: 64, color: PAINT.yellow, wear: 0.45 }), [x1, EAST_BREACH.top + 0.55, (EAST_BREACH.z0 + EAST_BREACH.z1) / 2], E, 2.4, { opacity: 0.9 });
   put(atlas.eye(300, PAINT.white, 0.5), [12.4, 3.2, z1], S, 1.4, { opacity: 0.6 });
   b.decalImage('RoadLines022A', [15.9, 0, 0.4], FLOOR, 2.0, 4.4, { opacity: 0.45 });
@@ -330,7 +299,8 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   // The breaker's lamp: red and pulsing while the power is out, steady green once it is back.
   lights.push({ name: 'breakerLamp', area: 'power', kind: 'point', color: RED, intensity: 6, position: [bx + 1.26, 2.2, z1 - 1.0], distance: 5, flicker: 'pulse', when: 'powerOut' });
   lights.push({ name: 'breakerLampOn', area: 'power', kind: 'point', color: 0x8dffa8, intensity: 1.8, position: [bx + 1.26, 2.3, z1 - 1.1], distance: 4, when: 'powerOn' });
-  lights.push({ name: 'cageLamp', area: 'power', kind: 'point', color: AMBER, intensity: 9, position: [21.0, 2.1, 12.5], distance: 5.5 });
+  // Over the lab's door, in the lab's own colder colour.
+  lights.push({ name: 'powerLabDoor', area: 'power', kind: 'point', color: 0xc8fff0, intensity: 5, position: [(labDoor.from + labDoor.to) / 2, 2.9, z1 - 0.7], distance: 5 });
   // With the power back, the room's own lighting comes up over the
   // machines: cooler than the emergency lamps, and not much of it.
   lights.push({ name: 'powerMainsNorth', area: 'power', kind: 'point', color: 0xdfe8ff, intensity: 22, position: [15.9, h - 0.9, -0.8], distance: 11, when: 'powerOn' });

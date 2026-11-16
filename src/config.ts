@@ -335,7 +335,7 @@ export const MISSION = {
    * walks in through the core's door, which gives the player the length of
    * the room to see it coming.
    */
-  proxyEntries: ['dock', 'yard'],
+  proxyEntries: ['dockBaySouth', 'dockBayNorth', 'yard'],
   /**
    * During the final stand a robot is sent in this often (seconds), up to
    * this many of them on the map. The horde of the stand is a heavy one
@@ -496,6 +496,11 @@ export const DOORS = {
   lobbyHall: 750,
   lobbyPower: 1000,
   hallPower: 1250,
+  /** The loading dock's two doors, and the lab's two. */
+  lobbyDock: 1000,
+  hallDock: 1000,
+  powerLab: 1000,
+  hallLab: 1250,
   /** Seconds a door takes to slide open. */
   openTime: 1.6,
 };

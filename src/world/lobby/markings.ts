@@ -3,7 +3,7 @@
 
 import type { LevelBuilder } from '../build/LevelBuilder';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
-import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, POWER_DOOR, ROOM, VESTIBULE, WINDOWS } from './plan';
+import { BLAST_DOOR, BREACH, COLUMNS, COLUMN_SIZE, GOODS_DOOR, POWER_DOOR, ROOM, VESTIBULE, WINDOWS } from './plan';
 
 type Vec3 = [number, number, number];
 
@@ -46,7 +46,8 @@ export function buildMarkings(b: LevelBuilder, atlas: SignAtlas): void {
 
   // ---- West wall, between the windows.
   put(atlas.text(['KEEP SHUTTERS CLOSED', 'AFTER 2200'], { size: 50, box: true, wear: 0.55 }), [x0, 2.35, -1.0], W, 1.7, { opacity: 0.75 });
-  put(atlas.text('A-01', { size: 190, wear: 0.55 }), [x0, 3.6, WINDOWS[1].z + 2.9], W, 1.5, { opacity: 0.6 });
+  put(atlas.text('LOADING DOCK', { size: 70, color: PAINT.yellow, wear: 0.45 }), [x0, GOODS_DOOR.top + 0.5, (GOODS_DOOR.z0 + GOODS_DOOR.z1) / 2], W, 1.9, { opacity: 0.9 });
+  put(atlas.text('A-01', { size: 190, wear: 0.55 }), [x0, 3.75, -0.9], W, 1.3, { opacity: 0.6 });
 
   // ---- Columns carry grid numbers on the faces toward the aisle.
   const half = COLUMN_SIZE / 2 + 0.001;

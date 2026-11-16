@@ -285,7 +285,7 @@ export function weaponRack(b: LevelBuilder, atlas: SignAtlas, assets: Assets, pl
   const lamp = new THREE.Mesh(new THREE.BoxGeometry(Math.abs(nx) > 0.5 ? 0.05 : 0.34, 0.03, Math.abs(nx) > 0.5 ? 0.34 : 0.05), lampMaterial);
   lamp.position.set(...point(0.07, 0.6, 0));
   b.addObject(lamp);
-  lights.push({ name: `rack-${plan.weapon}`, area: plan.area, kind: 'point', color: 0xffa53a, intensity: 5, position: point(0.42, 0.3, 0), distance: 4 });
+  lights.push({ name: `rack-${plan.area}-${plan.weapon}`, area: plan.area, kind: 'point', color: 0xffa53a, intensity: 5, position: point(0.42, 0.3, 0), distance: 4 });
 }
 
 /** A round drum, tank or disc of any size, lying along the given axis. */

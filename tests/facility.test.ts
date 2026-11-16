@@ -18,18 +18,39 @@ describe('areas and doors', () => {
     // The service door alone does not connect the lobby to anything.
     expect(reachableAreas<AreaId>('lobby', doors(['hallPower']))).toEqual(new Set(['lobby']));
     expect(reachableAreas<AreaId>('lobby', doors(['lobbyHall', 'hallPower']))).toEqual(new Set(['lobby', 'hall', 'power']));
-    expect(reachableAreas<AreaId>('core', doors(['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']))).toEqual(new Set(AREA_IDS));
+    expect(reachableAreas<AreaId>('core', doors(['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']))).toEqual(new Set(['lobby', 'hall', 'power', 'core']));
+    // The two new areas each open from two sides.
+    expect(reachableAreas<AreaId>('lobby', doors(['lobbyDock']))).toEqual(new Set(['lobby', 'dock']));
+    expect(reachableAreas<AreaId>('lobby', doors(['lobbyHall', 'hallDock']))).toEqual(new Set(['lobby', 'hall', 'dock']));
+    expect(reachableAreas<AreaId>('lobby', doors(['lobbyPower', 'powerLab']))).toEqual(new Set(['lobby', 'power', 'lab']));
+    expect(reachableAreas<AreaId>('lobby', doors(['lobbyHall', 'hallLab']))).toEqual(new Set(['lobby', 'hall', 'lab']));
+    expect(reachableAreas<AreaId>('core', doors(DOOR_PLANS.map((d) => d.id)))).toEqual(new Set(AREA_IDS));
   });
 
   it('knows which areas are next to each other', () => {
-    expect(neighbours<AreaId>('hall', doors([])).sort()).toEqual(['core', 'lobby', 'power']);
+    expect(neighbours<AreaId>('hall', doors([])).sort()).toEqual(['core', 'dock', 'lab', 'lobby', 'power']);
     expect(neighbours<AreaId>('core', doors([]))).toEqual(['hall']);
+    expect(neighbours<AreaId>('dock', doors([])).sort()).toEqual(['hall', 'lobby']);
+    expect(neighbours<AreaId>('lab', doors([])).sort()).toEqual(['hall', 'power']);
   });
 
-  it('has a lobby-hall-power loop to run round', () => {
-    expect(DOOR_PLANS.filter((d) => d.cost !== null).map((d) => [d.a, d.b].sort().join('-')).sort()).toEqual(['hall-lobby', 'hall-power', 'lobby-power']);
+  it('has three loops to run a horde round, and no dead end but the core', () => {
+    const bought = DOOR_PLANS.filter((d) => d.cost !== null);
+    expect(bought.map((d) => [d.a, d.b].sort().join('-')).sort()).toEqual(['dock-hall', 'dock-lobby', 'hall-lab', 'hall-lobby', 'hall-power', 'lab-power', 'lobby-power']);
     // The core cannot be bought: the mission opens it.
     expect(DOOR_PLANS.find((d) => d.b === 'core')!.cost).toBeNull();
+    // Every other area has at least two doors, so there is always another way out.
+    const open = AREA_IDS.filter((id) => id !== 'core');
+    for (const area of open) expect(bought.filter((d) => d.a === area || d.b === area).length, area).toBeGreaterThanOrEqual(2);
+    // Independent loops in a connected map: doors, less areas, plus one.
+    expect(bought.length - open.length + 1).toBe(3);
+    // And each of the two new areas is on a loop of its own with the rooms either side of it.
+    for (const loop of [
+      ['lobbyDock', 'hallDock', 'lobbyHall'],
+      ['hallLab', 'powerLab', 'hallPower'],
+    ]) {
+      for (const id of loop) expect(bought.some((d) => d.id === id), id).toBe(true);
+    }
   });
 });
 
@@ -73,7 +94,7 @@ describe('robots never come in where the player would see them appear', () => {
   });
 
   it('never uses an entry the player could see a robot appear at', () => {
-    const watched = new Set(['yard', 'hallVent', 'dock']);
+    const watched = new Set(['yard', 'hallVent', 'dockBayNorth']);
     for (const roll of rolls) {
       const entry = pickUnseenEntry(entries, 5, 'hall', everywhere, (e) => !watched.has(e.id), roll)!;
       expect(watched.has(entry.id), entry.id).toBe(false);
@@ -83,8 +104,8 @@ describe('robots never come in where the player would see them appear', () => {
   it('still favours the area the player is in, among the entries left', () => {
     let own = 0;
     for (const roll of rolls) if (pickUnseenEntry(entries, 5, 'hall', everywhere, (e) => e.id !== 'hallVent', roll)!.area === 'hall') own++;
-    // The dock is the only way left into the hall: likelier than any one other entry, but not the only one used.
-    expect(own / rolls.length).toBeGreaterThan(0.25);
+    // The other vent is the only way left into the hall: likelier than any one other entry, but not the only one used.
+    expect(own / rolls.length).toBeGreaterThan(0.15);
     expect(own / rolls.length).toBeLessThan(0.75);
   });
 
