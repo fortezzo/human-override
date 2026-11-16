@@ -10,6 +10,7 @@
 
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialKey } from '../../render/materials';
@@ -24,11 +25,35 @@ const RED = 0xff2a12;
 const HEADLAMP = 0xfff0d2;
 const HALF_PI = Math.PI / 2;
 
-/** A lit lens: a small shape that glows whatever light falls on it. */
-function lens(b: LevelBuilder, geometry: THREE.BufferGeometry, at: Vec3, color: number, strength: number): void {
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: strength, roughness: 0.4 }));
-  mesh.position.set(...at);
-  b.addObject(mesh);
+/**
+ * Lit lenses: small shapes that glow whatever light falls on them. However
+ * many there are, they are drawn as one shape for each colour and strength
+ * (the truck's eleven were eleven things to draw; they are five).
+ */
+class Lenses {
+  private readonly kinds = new Map<string, { color: number; strength: number; shapes: THREE.BufferGeometry[] }>();
+
+  add(geometry: THREE.BufferGeometry, at: Vec3, color: number, strength: number): void {
+    geometry.translate(...at);
+    const key = `${color}:${strength}`;
+    let kind = this.kinds.get(key);
+    if (!kind) {
+      kind = { color, strength, shapes: [] };
+      this.kinds.set(key, kind);
+    }
+    kind.shapes.push(geometry);
+  }
+
+  build(b: LevelBuilder): void {
+    for (const { color, strength, shapes } of this.kinds.values()) {
+      const merged = mergeGeometries(shapes, false);
+      if (!merged) throw new Error('Could not merge the truck\'s lenses');
+      for (const shape of shapes) shape.dispose();
+      const mesh = new THREE.Mesh(merged, new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: strength, roughness: 0.4 }));
+      mesh.name = 'truck-lenses';
+      b.addObject(mesh);
+    }
+  }
 }
 
 /** A box with every edge rounded, between two corners. */
@@ -46,6 +71,9 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   const nose = rear + 8.3;
   const half = 1.22;
   const W: Vec3 = [1, 0, 0];
+  const lenses = new Lenses();
+  /** What years of road have left on it: one setting for every stain, so that they are one layer for each image and not one each. */
+  const GRIME = { opacity: 0.45, tint: 0x4a4740 };
 
   // ---- Chassis: two rails, the cross-members between them, a fuel tank and an air tank slung under the box.
   for (const dz of [-0.45, 0.45]) b.box('darkSteel', [rear + 0.25, 0.62, z + dz - 0.06], [nose - 0.5, 0.86, z + dz + 0.06], { collide: false });
@@ -60,7 +88,9 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   const wheel = (x: number, side: number, inner: boolean): void => {
     const offset = inner ? half - 0.5 : half - 0.17;
     const at: Vec3 = [x, TYRE, z + side * offset];
-    b.prop('old_tyre', { at, scale: [TYRE / 0.3, TYRE / 0.3, 1.85], collide: false, kind: 'soft' });
+    // (They cast no shadow of their own: they stand in the shadow of the truck, and ten tyres drawn again for
+    // every lamp that casts one were a sixth of everything the dock drew.)
+    b.prop('old_tyre', { at, scale: [TYRE / 0.3, TYRE / 0.3, 1.85], collide: false, cast: false, kind: 'soft' });
     // The rim: a dished steel disc with its hub and a ring of nuts, on the side that shows.
     drum(b, 'steelPlate', at, 0.31, 0.24, 'z', 18, false);
     if (inner) return;
@@ -115,15 +145,15 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   b.tube('darkSteel', [rear + 0.02, 0.62, z - half + 0.1], [rear + 0.02, 0.62, z + half - 0.1], 0.04, false);
   for (const side of [-1, 1]) {
     b.tube('darkSteel', [rear + 0.05, 0.62, z + side * 0.7], [rear + 0.3, 0.86, z + side * 0.7], 0.03, false);
-    lens(b, new THREE.BoxGeometry(0.04, 0.14, 0.18), [rear + 0.05, 0.99, z + side * (half - 0.32)], RED, 2.2);
+    lenses.add(new THREE.BoxGeometry(0.04, 0.14, 0.18), [rear + 0.05, 0.99, z + side * (half - 0.32)], RED, 2.2);
   }
   // Its name on both sides of the box, and what years of road have left under it.
   const name = atlas.text(['SITE 04', 'LOGISTICS'], { size: 90, color: PAINT.black, wear: 0.45 });
   for (const side of [-1, 1]) {
     const N: Vec3 = [0, 0, side];
     b.decal(atlas.texture, [(bx0 + bx1) / 2, 2.5, z + side * (half + 0.014)], N, 2.6, 2.6 / name.aspect, { uvRect: name.uv, opacity: 0.75 });
-    b.decalImage('Leaking004', [bx0 + 1.4, 2.2, z + side * (half + 0.016)], N, 2.2, 2.6, { opacity: 0.45, tint: 0x4a4740 });
-    b.decalImage('Leaking003', [bx1 - 1.3, 2.3, z + side * (half + 0.016)], N, 2.0, 2.4, { opacity: 0.4, tint: 0x4a4740 });
+    b.decalImage('Leaking004', [bx0 + 1.4, 2.2, z + side * (half + 0.016)], N, 2.2, 2.6, GRIME);
+    b.decalImage('Leaking003', [bx1 - 1.3, 2.3, z + side * (half + 0.016)], N, 2.0, 2.4, GRIME);
   }
 
   // ---- The cab. A lower body with rounded corners, a narrower glazed top set on it, and a roof cap.
@@ -147,7 +177,7 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   b.box('darkSteel', [nose - 0.34, roof - 0.19, z - half + 0.16], [nose - 0.02, roof - 0.14, z + half - 0.16], { collide: false, cast: false });
   for (const side of [-1, 1]) b.tube('darkSteel', [nose - 0.04, sill + 0.1, z + side * 0.62], [nose - 0.1, sill + 0.5, z + side * 0.16], 0.012, false);
   // Amber marker lamps along the front of the roof, and the dish of an aerial behind them.
-  for (const dz of [-0.9, -0.45, 0, 0.45, 0.9]) lens(b, new THREE.BoxGeometry(0.06, 0.045, 0.1), [nose - 0.2, roof + 0.05, z + dz], AMBER, Math.abs(dz) > 0.8 ? 2.6 : 1.4);
+  for (const dz of [-0.9, -0.45, 0, 0.45, 0.9]) lenses.add(new THREE.BoxGeometry(0.06, 0.045, 0.1), [nose - 0.2, roof + 0.05, z + dz], AMBER, Math.abs(dz) > 0.8 ? 2.6 : 1.4);
   b.tube('darkSteel', [cx0 + 0.3, roof + 0.02, z - 0.8], [cx0 + 0.22, roof + 1.0, z - 0.8], 0.008, false);
   // An air deflector on the roof, sloping up to the height of the box.
   const fairing = new RoundedBoxGeometry(1.55, 0.07, 2.12, 2, 0.03);
@@ -193,7 +223,7 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
     // Its name on the door, and its number behind it.
     const door = atlas.text('SITE 04', { size: 60, color: PAINT.white, wear: 0.5 });
     b.decal(atlas.texture, [nose - 0.79, 1.4, out(0.008)], N, 0.8, 0.8 / door.aspect, { uvRect: door.uv, opacity: 0.8 });
-    b.decalImage('Leaking003', [nose - 1.2, 1.45, out(0.01)], N, 1.6, 1.0, { opacity: 0.5, tint: 0x3d3a33 });
+    b.decalImage('Leaking003', [nose - 1.2, 1.45, out(0.01)], N, 1.6, 1.0, GRIME);
   }
 
   // ---- The front. A grille set into the cab, a lamp housing either side of it, and a steel bumper below.
@@ -206,7 +236,7 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   b.box('steelPlate', [nose + 0.04, 1.78, z - 0.2], [nose + 0.052, 1.9, z + 0.2], { collide: false, cast: false });
   const unit = atlas.text('UNIT 17', { size: 50, color: PAINT.black, wear: 0.35 });
   b.decal(atlas.texture, [nose + 0.053, 1.84, z], W, 0.34, 0.34 / unit.aspect, { uvRect: unit.uv, opacity: 0.9 });
-  b.decalImage('Leaking004', [nose + 0.012, 1.55, z + 0.5], W, 1.3, 1.4, { opacity: 0.45, tint: 0x3d3a33 });
+  b.decalImage('Leaking004', [nose + 0.012, 1.55, z + 0.5], W, 1.3, 1.4, GRIME);
   // Bumper: a rounded steel beam, with a towing eye and the number plate.
   rounded(b, 'darkSteel', [nose - 0.06, 0.5, z - half + 0.01], [nose + 0.17, 0.84, z + half - 0.01], 0.07);
   b.box('steelPlate', [nose + 0.17, 0.57, z - half + 0.2], [nose + 0.178, 0.6, z + half - 0.2], { collide: false, cast: false });
@@ -222,13 +252,14 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
   for (const side of [-1, 1]) {
     const lampZ = z + side * 0.9;
     rounded(b, 'darkSteel', [nose - 0.02, 1.02, lampZ - 0.21], [nose + 0.06, 1.42, lampZ + 0.21], 0.05, false);
-    lens(b, new THREE.CylinderGeometry(0.115, 0.115, 0.03, 20).rotateZ(HALF_PI), [nose + 0.07, 1.22, lampZ - side * 0.045], HEADLAMP, 9);
+    lenses.add(new THREE.CylinderGeometry(0.115, 0.115, 0.03, 20).rotateZ(HALF_PI), [nose + 0.07, 1.22, lampZ - side * 0.045], HEADLAMP, 9);
     drum(b, 'steelPlate', [nose + 0.06, 1.22, lampZ - side * 0.045], 0.135, 0.03, 'x', 20, false);
-    lens(b, new THREE.BoxGeometry(0.03, 0.12, 0.07), [nose + 0.065, 1.22, lampZ + side * 0.14], AMBER, 0.9);
+    lenses.add(new THREE.BoxGeometry(0.03, 0.12, 0.07), [nose + 0.065, 1.22, lampZ + side * 0.14], AMBER, 0.9);
     const from: Vec3 = [nose + 0.09, 1.22, lampZ - side * 0.045];
     const to: Vec3 = [nose + 9.5, 0.3, z + side * 1.5];
     lights.push({ name: `truckLamp${side}`, area: 'dock', kind: 'spot', color: HEADLAMP, intensity: 150, position: from, target: to, angle: 0.5, penumbra: 0.7, distance: 17, shadow: side === 1 ? 2 : undefined });
     haze.push({ effect: createConeShaft([from[0] + 0.1, from[1], from[2]], [from[0] + 7.5, 0.7, to[2] - side * 0.3], 0.12, 1.5, HEADLAMP, 0.1) });
     dustBeams.push({ position: from, target: to, angle: 0.42, color: HEADLAMP, strength: 0.6 });
   }
+  lenses.build(b);
 }

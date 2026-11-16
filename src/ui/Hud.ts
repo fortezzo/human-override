@@ -360,6 +360,15 @@ export class Hud {
    * HUD is drawn once here at two hundredths of full strength, with the
    * banner, the corner panel, a remark and the RESISTED word all up, and
    * taken down again well before a round can start.
+   *
+   * Two more things are up with them, for the same reason. The wedge that
+   * shows where a blow came from is blurred, and the first blow a player
+   * ever took stopped the picture for 67 ms (it had done since the first
+   * stage; the speed report never saw it, because its player cannot be
+   * hurt). And the fail-safe's lettering and its line, which cost a slow
+   * frame or two the first time, at the one moment that must not stutter.
+   * The line takes three quarters of a second to run flat, so all of this
+   * stays up a little longer than that.
    */
   prewarm(): void {
     if (this.warming) return;
@@ -370,6 +379,8 @@ export class Hud {
     this.analysisPanel.classList.add('show');
     this.remark('...');
     this.hit(false, false, 'resisted', 0x4f8dff);
+    this.damageArc.style.opacity = '1';
+    this.failsafe('down');
     window.setTimeout(() => {
       this.warming = false;
       this.root.classList.remove('prewarm');
@@ -378,7 +389,7 @@ export class Hud {
         this.reset();
         this.root.classList.add('hidden');
       }
-    }, 700);
+    }, 900);
   }
 
   /** A new run: clear everything left over from the last one. */
@@ -393,6 +404,7 @@ export class Hud {
     this.scrapPops.textContent = '';
     this.shownScrap = -1;
     this.damageTimer = 0;
+    this.damageArc.style.opacity = '0';
     this.hitTimer = 0;
     this.hitMarker.className = 'hitmarker';
     this.hitNoteUntil = 0;

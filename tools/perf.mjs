@@ -227,6 +227,10 @@ await paced(3840, 2160);
   await fresh.page.evaluate(() => window.__HO.randomDrops?.(false));
   // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
   await fresh.page.evaluate(() => window.__HO.hints?.(false));
+  // A moment on the start screen, as every visitor has before they can press Play: the HUD paints the parts of
+  // itself that are costly to paint for the first time there, unseen (Hud.prewarm), and a tool that starts a run
+  // in the same instant the page is ready cuts that short.
+  await fresh.page.waitForTimeout(1500);
   await fresh.page.evaluate(() => {
     const ho = window.__HO;
     ho.play();

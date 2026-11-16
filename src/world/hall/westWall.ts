@@ -21,6 +21,13 @@ type Vec3 = [number, number, number];
 
 const HALF_PI = Math.PI / 2;
 const COLD = 0xd6e4ff;
+/**
+ * Decals that share a picture, a strength and a colour are drawn as one layer. So what glows on this wall borrows
+ * its settings: the temperature panel's amber (the one cooling unit that is not running well shows it too), and,
+ * for the lamp on the power-off button, the red of the sign over the core's door at the far end of the hall.
+ */
+const PANEL_GLOW = { emissive: 2.2, tint: 0xffb060 };
+const CORE_SIGN_GLOW = { emissive: 2.6, tint: 0xff5a3a };
 
 export function buildWestWall(b: LevelBuilder, atlas: SignAtlas, lights: LightDef[]): void {
   const { x0, z0, z1 } = HALL;
@@ -67,7 +74,8 @@ export function buildWestWall(b: LevelBuilder, atlas: SignAtlas, lights: LightDe
     b.decalImage('Leaking003', [x0, 1.95, z + 0.46], W, 0.7, 1.5, { opacity: ok ? 0.35 : 0.6, tint: 0x5b5a52 });
     // Its lamp: green for running, amber for the one that is not keeping up.
     b.box('darkSteel', [x0, base - 0.14, z - 0.06], [x0 + 0.05, base - 0.04, z + 0.06], { collide: false, cast: false });
-    b.decal(atlas.texture, [x0 + 0.052, base - 0.09, z], W, 0.07, 0.045, { uvRect: running.uv, emissive: 3.4, tint: ok ? 0x6dffa8 : 0xffb347 });
+    // (The one that is not running well shows the same amber, at the same strength, as the temperature panel: decals that share their settings are drawn as one layer.)
+    b.decal(atlas.texture, [x0 + 0.052, base - 0.09, z], W, 0.07, 0.045, { uvRect: running.uv, ...(ok ? { emissive: 3.4, tint: 0x6dffa8 } : PANEL_GLOW) });
   }
 
   // ---- Conduit at shoulder height, with a junction box every few metres.
@@ -91,19 +99,20 @@ export function buildWestWall(b: LevelBuilder, atlas: SignAtlas, lights: LightDe
   // (Each in the clear stretch between two cooling units, under that stretch's lamp.)
   const bayNorth = (units[0]!.z + units[1]!.z) / 2;
   const baySouth = (units[2]!.z + units[3]!.z) / 2;
-  put(atlas.text('COOLING LOOP 02', { size: 96, wear: 0.5 }), [x0, 3.3, bayNorth], 2.3, { opacity: 0.62 });
-  put(atlas.text('ROWS A - E', { size: 80, color: PAINT.yellow, wear: 0.45 }), [x0, 2.3, bayNorth - 0.45], 1.5, { opacity: 0.8 });
-  put(atlas.arrow('right', PAINT.yellow, 160, 0.45), [x0, 2.3, bayNorth + 0.75], 0.42, { opacity: 0.8 });
+  // (Each strength of paint is one the hall's other lettering already uses, so that this wall adds no layers of its own.)
+  put(atlas.text('COOLING LOOP 02', { size: 96, wear: 0.5 }), [x0, 3.3, bayNorth], 2.3, { opacity: 0.7 });
+  put(atlas.text('ROWS A - E', { size: 80, color: PAINT.yellow, wear: 0.45 }), [x0, 2.3, bayNorth - 0.45], 1.5, { opacity: 0.75 });
+  put(atlas.arrow('right', PAINT.yellow, 160, 0.45), [x0, 2.3, bayNorth + 0.75], 0.42, { opacity: 0.75 });
   put(atlas.text(['GAS SUPPRESSION ZONE', 'LEAVE THE HALL ON ALARM'], { size: 50, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.4 }), [x0, 2.2, baySouth], 1.9, { opacity: 0.9 });
   // An emergency power-off point by the dock's shutter: a striped plate, and the button on it.
   const epo = dock.from - 0.95;
   b.box('hazard', [x0, 1.98, epo - 0.16], [x0 + 0.06, 2.4, epo + 0.16], { collide: false, cast: false });
   put(atlas.text(['EMERGENCY', 'POWER OFF'], { size: 40, color: PAINT.black, plate: PAINT.yellow, wear: 0.25 }), [x0 + 0.061, 2.3, epo], 0.27, { opacity: 0.95 });
   b.tube('rustedSteel', [x0 + 0.06, 2.1, epo], [x0 + 0.1, 2.1, epo], 0.05, false);
-  b.decal(atlas.texture, [x0 + 0.101, 2.1, epo], W, 0.085, 0.085, { uvRect: running.uv, emissive: 1.6, tint: 0xff2a12 });
+  b.decal(atlas.texture, [x0 + 0.101, 2.1, epo], W, 0.085, 0.085, { uvRect: running.uv, ...CORE_SIGN_GLOW });
   // The hall's temperature, on a lit panel: it is warmer in here than it should be.
   b.box('darkSteel', [x0, 2.86, baySouth - 0.56], [x0 + 0.06, 3.24, baySouth + 0.56], { collide: false, cast: false });
-  put(atlas.text('HALL B   31.4 C', { size: 90, color: PAINT.amber, plate: '#0d0f11', wear: 0 }), [x0 + 0.061, 3.05, baySouth], 1.04, { emissive: 2.2, tint: 0xffb060 });
+  put(atlas.text('HALL B   31.4 C', { size: 90, color: PAINT.amber, plate: '#0d0f11', wear: 0 }), [x0 + 0.061, 3.05, baySouth], 1.04, PANEL_GLOW);
 
   // ---- Two lamps on the wall, cold like the rest of the hall's.
   [bayNorth, baySouth].forEach((z, i) => {
