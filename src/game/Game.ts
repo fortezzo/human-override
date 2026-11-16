@@ -822,6 +822,11 @@ export class Game {
     this.music.setTone(MUSIC.lullTone, 0.01);
   }
 
+  /** Where the music bed has been sent: how loud, and how open (for the debug tools). */
+  get musicNow(): MusicLevel {
+    return this.musicLevel;
+  }
+
   /** The music bed follows the fight: low between rounds, building as a round goes on (the rule is in sim/music.ts). */
   private updateMusic(dt: number): void {
     this.musicIn -= dt;

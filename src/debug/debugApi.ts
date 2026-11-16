@@ -344,6 +344,8 @@ export interface DebugApi {
   dropPickup(id: PickupId, x: number, z: number): void;
   /** Whether destroyed robots leave pickups by chance (they do, unless this is told otherwise); false also clears any lying about. */
   randomDrops(on: boolean): void;
+  /** How loud and how open the music bed is being played, each 0 to 1. */
+  music(): { gain: number; tone: number };
   /** The first-minute hints: off, or on and starting again from the first of them (as the setting does). */
   hints(on: boolean): void;
   /** Force a shutter up or run it down, at once and for nothing (every one of them if no id is given). */
@@ -971,6 +973,9 @@ export function installDebugApi(game: Game): DebugTools {
     randomDrops(on) {
       game.randomDrops = on;
       if (!on) game.pickups.clear();
+    },
+    music() {
+      return { ...game.musicNow };
     },
     hints(on) {
       settings.set(on ? { hints: true, learned: [] } : { hints: false });

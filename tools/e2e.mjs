@@ -3732,7 +3732,7 @@ try {
   const titleAgain = await page.locator('.screen.title').isVisible();
   check(
     'the start screen offers Settings: graphics quality, mouse sensitivity, brightness, volume, sound off, and reduced shake and flashing. What is chosen is remembered',
-    settingsShown && ['Graphics quality', 'Mouse sensitivity', 'Brightness', 'Volume', 'Sound off', 'Reduce screen shake and flashing'].every((label) => labels.some((text) => text.includes(label))) && Math.abs(stored.volume - 0.3) < 0.011 && titleAgain,
+    settingsShown && ['Graphics quality', 'Mouse sensitivity', 'Brightness', 'Volume', 'Sound off', 'Show frame rate', 'Show hints for new players', 'Reduce screen shake and flashing'].every((label) => labels.some((text) => text.includes(label))) && Math.abs(stored.volume - 0.3) < 0.011 && titleAgain,
     `${labels.length} settings; the volume, moved to 30%, was stored as ${stored.volume}`,
   );
   await ev(() => window.__HO.play());
@@ -3745,6 +3745,261 @@ try {
   });
 } catch (error) {
   check('the Stage 4 checks ran to the end', false, String(error.message ?? error).split('\n')[0]);
+}
+
+// ---- Stage 5: polish. The first-minute hints, the fail-safe as a moment,
+// the Turncoat in a full horde, what was merged for speed, the music, and
+// the server hall's west walk.
+try {
+  const coachNow = () =>
+    ev(() => {
+      const el = document.querySelector('.hud-coach');
+      return { shown: el.classList.contains('show'), done: el.classList.contains('done'), text: el.querySelector('.hud-coach-text').textContent, keys: [...el.querySelectorAll('kbd')].map((key) => key.textContent).join(' '), strip: !document.querySelector('.hud-hint').classList.contains('faded') };
+    });
+  /** Let the game run at about real speed for a while (the hints keep real time, and want to see the player move a little at a time). */
+  const live = async (seconds) => {
+    for (let t = 0; t < seconds; t += 0.1) {
+      await ev(() => window.__HO.step(1 / 60, 6));
+      await page.waitForTimeout(60);
+    }
+  };
+  const freshRun = (hints) =>
+    ev((hints) => {
+      const ho = window.__HO;
+      if (hints !== null) ho.hints(hints);
+      // (By way of the start screen, as a player comes to a new run: that is what clears the HUD.)
+      ho.game.toTitle();
+      ho.play();
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.step(1 / 60, 3);
+    }, hints);
+
+  // ---- The hints: one at a time, in order, each gone once done; never for what has been done already.
+  await freshRun(true);
+  await live(1.6);
+  const move = await coachNow();
+  await ev(() => window.__HO.press('forward', true));
+  await live(0.9);
+  await ev(() => window.__HO.press('forward', false));
+  const moveDone = await coachNow();
+  // (A jump now, before its hint has come up: it should never be asked for.)
+  await ev(() => window.__HO.tap('jump'));
+  await live(2.4);
+  const fire = await coachNow();
+  await ev(() => window.__HO.tap('fire'));
+  await live(2.4);
+  const aim = await coachNow();
+  await ev(() => window.__HO.press('aim', true));
+  await live(1.0);
+  await ev(() => window.__HO.press('aim', false));
+  await live(2.4);
+  const marker = await coachNow();
+  const learned = await ev(() => JSON.parse(localStorage.getItem('human-override.settings.v1')).learned);
+  check(
+    'a new player is shown one hint at a time during the first rounds (move, then fire, then aim), each turning green and going once they have done it; a jump made before its hint came up is never asked for, and the next is to follow the marker',
+    move.shown && move.text === 'MOVE' && move.keys === 'W A S D' && !move.strip && moveDone.done && fire.text === 'FIRE' && fire.shown && !fire.done && aim.text === 'AIM' && aim.shown && /MARKER/.test(marker.text) && marker.shown && ['move', 'jump', 'fire', 'aim'].every((id) => learned.includes(id)) && !learned.includes('marker'),
+    `shown in turn: "${move.keys} ${move.text}", "${fire.keys} ${fire.text}", "${aim.keys} ${aim.text}", "${marker.text}"; remembered as done: ${learned.join(', ')}`,
+  );
+  // Following the marker: walk toward where it points (the power room is to the east).
+  await ev(() => {
+    const ho = window.__HO;
+    ho.place(0, 3.6, -90, 0);
+    ho.step(1 / 60, 4);
+  });
+  await live(0.4);
+  await ev(() => window.__HO.press('forward', true));
+  await live(2.4);
+  await ev(() => window.__HO.press('forward', false));
+  const followed = await ev(() => JSON.parse(localStorage.getItem('human-override.settings.v1')).learned.includes('marker'));
+  // Buying waits until there is scrap to buy with.
+  await live(2.6);
+  const broke = await coachNow();
+  await ev(() => window.__HO.scrap(900));
+  await live(1.6);
+  const buy = await coachNow();
+  check(
+    'walking toward the marker ends its hint; the hint about buying waits until the player has the scrap for the weapon on the wall',
+    followed && !broke.shown && buy.shown && /BUY/.test(buy.text) && buy.keys === 'F',
+    `after ten metres toward the marker its hint was ${followed ? 'done' : 'not done'}; with no scrap: ${broke.shown ? `"${broke.text}"` : 'nothing shown'}; with 900: "${buy.keys} ${buy.text}"`,
+  );
+  // A second run: nothing already learned is taught again (only buying is left, and that waits for scrap).
+  // And with the hints off there are none at all, and the old strip of controls is back.
+  await freshRun(null);
+  await live(2.4);
+  const second = await coachNow();
+  await ev(() => window.__HO.scrap(900));
+  await live(1.6);
+  const secondBuy = await coachNow();
+  await freshRun(false);
+  await live(1.8);
+  const off = await coachNow();
+  check(
+    'on the next run nothing already done is taught again; with the hints switched off there are none, and the strip listing every control shows as it used to',
+    !second.shown && !second.strip && secondBuy.shown && /BUY/.test(secondBuy.text) && !off.shown && off.strip,
+    `second run: ${second.shown ? `"${second.text}"` : 'nothing'} until there was scrap, then "${secondBuy.text}"; hints off: ${off.shown ? 'a hint' : 'no hint'}, the strip ${off.strip ? 'showing' : 'hidden'}`,
+  );
+
+  // ---- The fail-safe as a moment.
+  const moment = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.hints(false);
+    ho.restart();
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.missionJump('keys');
+    ho.setBoost('failsafe', true);
+    ho.place(0, 2.5, 0, 0);
+    ho.step(1 / 60, 20);
+    for (const [x, z] of [[-1.1, 0.9], [1.0, 0.8], [0, 0.6]]) ho.spawnRobot(x, z, 0, false, 2.2, 400);
+    ho.god(false);
+    game.player.health = 15;
+    ho.sounds();
+    let frames = 0;
+    while (game.player.health > 0 && frames++ < 900) ho.step(1 / 60, 1);
+    const hud = () => ({ cls: document.querySelector('.hud-failsafe').className, title: document.querySelector('.fs-title').textContent });
+    const p = game.player;
+    const blow = { frozen: p.frozen, state: ho.run().state, ...hud(), revives: ho.economy().revives };
+    // Half a second on the floor, pressing everything.
+    const clock = game.time;
+    const from = { x: p.position.x, z: p.position.z, ammo: game.weapons.state.ammo, eye: game.camera.position.y };
+    ho.press('forward', true);
+    ho.tap('fire');
+    ho.step(1 / 60, 30);
+    const down = { clock: game.time - clock, moved: Math.hypot(p.position.x - from.x, p.position.z - from.z), fired: from.ammo - game.weapons.state.ammo, eyeFell: from.eye - game.camera.position.y, pose: p.downPose, health: p.health, state: ho.run().state };
+    // And on past the moment it fires.
+    ho.step(1 / 60, 45);
+    ho.press('forward', false);
+    const up = { frozen: p.frozen, health: p.health, grace: p.grace, ...hud(), sounds: ho.sounds(), staggered: game.robots.filter((r) => r.mind.state === 'stagger').length, state: ho.run().state };
+    ho.step(1 / 60, 30);
+    const stood = { pose: p.downPose, eye: game.camera.position.y - p.position.y };
+    ho.god(true);
+    ho.clearRobots();
+    return { blow, down, up, stood, seconds: game.director ? ho.economy().rules.boosts.failsafe.down : 0, pace: ho.economy().rules.boosts.failsafe.downPace };
+  });
+  await page.waitForTimeout(150);
+  check(
+    'going down with a fail-safe is a moment of its own: for a little over a second the player is on the floor with DOWN across the view, the world runs slow, and nothing they press does anything; then it fires, FAILSAFE ENGAGED, and they are on their feet',
+    moment.blow.frozen && moment.blow.state === 'playing' && /show down/.test(moment.blow.cls) && moment.blow.title === 'DOWN' && Math.abs(moment.down.clock - 0.5 * moment.pace) < 0.03 && moment.down.moved < 0.05 && moment.down.fired === 0 && moment.down.eyeFell > 0.8 && moment.down.health === 0 && moment.down.state === 'playing' && !moment.up.frozen && Math.abs(moment.up.health - 60) < 1 && moment.up.grace > 2 && /show up/.test(moment.up.cls) && moment.up.title === 'FAILSAFE ENGAGED' && moment.up.sounds.includes('revive') && moment.stood.pose === 0 && Math.abs(moment.stood.eye - 1.64) < 0.08,
+    `down for ${moment.seconds} s with the clock at ${Math.round(moment.pace * 100)}% (half a second of it lasted ${moment.down.clock.toFixed(2)} s of game time); the view fell ${moment.down.eyeFell.toFixed(2)} m; pressing forward and fire moved the player ${moment.down.moved.toFixed(2)} m and fired ${moment.down.fired} shots; then "${moment.up.title}", health ${moment.up.health.toFixed(0)}, ${moment.up.staggered} robots knocked back`,
+  );
+
+  // ---- The Turncoat, fired into a full horde.
+  const hordes = [];
+  for (const place of [{ name: 'the server hall', at: [-1, 16.5], yaw: 180 }, { name: 'the robotics lab', at: [11.4, 21.8], yaw: -90 }]) {
+    hordes.push(
+      await ev((place) => {
+        const ho = window.__HO;
+        const game = ho.game;
+        ho.restart();
+        ho.god(true);
+        for (let i = 0; i < 9000 && game.stats.round < 8; i++) {
+          ho.simulate(1 / 60, 20);
+          if (game.director.rounds.phase === 'active' && game.stats.round < 8) {
+            ho.clearRobots();
+            ho.skipRound();
+          }
+        }
+        ho.holdRounds(true);
+        ho.clearRobots();
+        for (const door of game.world.doors) ho.openDoor(door.plan.id);
+        ho.giveWeapon('turncoat');
+        ho.place(place.at[0], place.at[1], place.yaw, 0);
+        ho.step(1 / 60, 40);
+        let placed = 0;
+        for (let ring = 0; placed < 24 && ring < 8; ring++) {
+          const radius = 3.2 + ring * 1.3;
+          const count = 8 + ring * 2;
+          for (let k = 0; k < count && placed < 24; k++) {
+            const a = (k / count) * Math.PI * 2 + ring * 0.4;
+            const x = place.at[0] + Math.cos(a) * radius;
+            const z = place.at[1] + Math.sin(a) * radius;
+            if (ho.strikeGap(x, z) > 0.2) continue;
+            ho.spawnKind(x, z, 0, {});
+            placed++;
+          }
+        }
+        ho.step(1 / 60, 20);
+        const before = game.stats.kills;
+        const rig = game.camera.getObjectByName('turncoat-rig') !== undefined;
+        ho.aimAtRobot('chest');
+        ho.step(1 / 60, 2);
+        ho.tap('fire');
+        ho.step(1 / 60, 3);
+        const turned = game.robots.find((r) => r.turned > 0);
+        let frames = 0;
+        let slowest = 0;
+        for (; turned && frames < 60 * 11 && turned.alive; frames++) {
+          const t0 = performance.now();
+          ho.step(1 / 60, 1);
+          slowest = Math.max(slowest, performance.now() - t0);
+        }
+        const out = { name: place.name, placed, rig, turned: !!turned, seconds: frames / 60, kills: game.stats.kills - before, left: game.robots.filter((r) => r.alive).length, slowest };
+        ho.clearRobots();
+        return out;
+      }, place),
+    );
+  }
+  check(
+    'the Turncoat fired into a full horde of twenty-four: the robot it turns fights the ones round it for its ten seconds and destroys several, wherever it is tried; and the weapon carries the lab rig that was bolted onto it',
+    hordes.every((h) => h.placed === 24 && h.rig && h.turned && h.seconds > 9.5 && h.kills >= 4 && h.left === 24 - h.kills),
+    hordes.map((h) => `${h.name}: ${h.kills} destroyed in ${h.seconds.toFixed(0)} s (${h.left} left), slowest frame ${h.slowest.toFixed(0)} ms`).join('; '),
+  );
+
+  // ---- Fewer things to draw: the stations are part of their rooms now.
+  const pieces = await ev(() => {
+    const ho = window.__HO;
+    let meshes = 0;
+    for (const group of Object.values(ho.game.world.stations.groups)) group.traverse((node) => (meshes += node.isMesh || node.isSprite ? 1 : 0));
+    return { meshes, stations: ho.economy().stations.length };
+  });
+  check('the six stations are a few lit shapes each, the rest of each being built into its room (they were 114 separate shapes)', pieces.stations === 6 && pieces.meshes > 0 && pieces.meshes <= 40, `${pieces.meshes} shapes of their own between the six of them`);
+
+  // ---- The music bed is low between rounds and builds as a round is fought.
+  const music = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.step(1 / 60, 60);
+    const lull = ho.music();
+    ho.holdRounds(false);
+    for (let i = 0; i < 1200 && game.director.rounds.phase !== 'active'; i++) ho.step(1 / 60, 1);
+    ho.step(1 / 60, 45);
+    const start = ho.music();
+    // Destroy the round's robots as they come (an EMP for each), and note how high the bed gets before the round is over.
+    let late = start;
+    for (let i = 0; i < 60 * 90 && game.director.rounds.phase === 'active'; i++) {
+      ho.step(1 / 60, 1);
+      if (i % 50 === 0 && game.robots.some((r) => r.alive && r.grounded) && game.director.remaining > 1) game.collect('emp');
+      const now = ho.music();
+      if (now.gain > late.gain) late = now;
+      if (game.director.remaining <= 1 && i % 50 === 49) break;
+    }
+    return { lull, start, late, remaining: game.director.remaining };
+  });
+  check(
+    'the music bed is low and muffled between rounds, comes up when a round starts, and has built to its full level by the end of it (never above the level it always played at)',
+    music.lull.gain < music.start.gain && music.start.gain < music.late.gain && music.late.gain <= 1.0001 && music.lull.tone < music.late.tone,
+    `loudness ${music.lull.gain.toFixed(2)} in the lull, ${music.start.gain.toFixed(2)} as round 1 starts, ${music.late.gain.toFixed(2)} with one robot of it left; tone ${music.lull.tone.toFixed(2)} to ${music.late.tone.toFixed(2)}`,
+  );
+
+  // ---- The server hall's west walk: its wall is dressed, and nothing on it is in the way.
+  const walk = await ev(() => {
+    const ho = window.__HO;
+    let worst = 0;
+    for (let z = 8.2; z <= 24.8; z += 0.3) worst = Math.max(worst, ho.strikeGap(-10.15, z));
+    const hall = ho.game.world.areas.get('hall');
+    return { worst, lamps: hall.lights.filter((light) => light.name.startsWith('hallWestWall')).length };
+  });
+  check("what is on the server hall's west wall leaves the walkway beside it clear from end to end", walk.worst < 0.3 && walk.lamps === 2, `a robot can stand all the way along it (never more than ${walk.worst.toFixed(2)} m from where one fits); ${walk.lamps} wall lamps`);
+  await freshRun(false);
+} catch (error) {
+  check('the Stage 5 checks ran to the end', false, String(error.message ?? error).split('\n')[0]);
 }
 
 // ---- The real interface: real clicks and real mouse capture, no shortcuts
@@ -4028,6 +4283,70 @@ try {
   await phone.close();
 } catch (error) {
   check('touch devices get the "use a computer" screen', false, String(error.message ?? error).split('\n')[0]);
+}
+
+// ---- A visitor's own page: no debug flag in the address. Nothing of the
+// test tools, no counters, and everything a shared link needs.
+try {
+  const visit = await page.context().newPage();
+  visit.on('console', (m) => m.type() === 'error' && problems.push(`visitor: ${m.text()}`));
+  visit.on('pageerror', (e) => problems.push(`visitor exception: ${e.message}`));
+  // (As a first-time visitor: nothing remembered from the checks above.)
+  await visit.addInitScript(() => {
+    if (!sessionStorage.getItem('fresh')) {
+      localStorage.clear();
+      sessionStorage.setItem('fresh', '1');
+    }
+  });
+  await visit.goto(site.url);
+  await visit.waitForSelector('.screen.title:not(.hidden)', { timeout: 120000 });
+  const head = await visit.evaluate(async () => {
+    const meta = (key) => document.querySelector(`meta[property="${key}"], meta[name="${key}"]`)?.getAttribute('content') ?? null;
+    const icons = [...document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')].map((link) => link.href);
+    const fetched = await Promise.all(icons.map((href) => fetch(href).then((r) => r.ok)));
+    const picture = await new Promise((resolve) => {
+      const image = new Image();
+      image.onload = () => resolve([image.naturalWidth, image.naturalHeight]);
+      image.onerror = () => resolve([0, 0]);
+      image.src = new URL(meta('og:image'), location.href).href;
+    });
+    return {
+      title: document.title,
+      description: meta('description'),
+      og: ['og:title', 'og:description', 'og:image', 'og:url', 'twitter:card', 'twitter:image'].map((key) => meta(key)),
+      icons: icons.length,
+      iconsLoad: fetched.every(Boolean),
+      picture,
+      tools: typeof window.__HO,
+      words: document.body.innerText,
+    };
+  });
+  check(
+    'the page a visitor loads has a title, a description, the tags other sites read when the link is shared, a preview picture 1200 by 630, and its icons',
+    /^HUMAN OVERRIDE/.test(head.title) && (head.description ?? '').length > 80 && head.og.every(Boolean) && head.icons >= 3 && head.iconsLoad && head.picture[0] === 1200 && head.picture[1] === 630,
+    `"${head.title}"; preview picture ${head.picture.join(' x ')}; ${head.icons} icons`,
+  );
+  await visit.click('.screen.title [data-action="start"]');
+  await visit.waitForFunction(() => !document.querySelector('.hud').classList.contains('hidden') && document.querySelector('.hud-coach').classList.contains('show'), null, { timeout: 15000 });
+  const playing = await visit.evaluate(() => {
+    const seen = (selector) => {
+      const el = document.querySelector(selector);
+      if (!el) return false;
+      const style = getComputedStyle(el);
+      return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0.01 && el.getBoundingClientRect().width > 0;
+    };
+    return { counter: seen('.hud-fps'), debug: seen('.hud-debug'), hint: document.querySelector('.hud-coach-text').textContent, words: document.body.innerText, locked: document.pointerLockElement !== null };
+  });
+  const leftovers = (head.words + ' ' + playing.words).match(/debug|autopilot|god mode|\bfps\b|localhost|127\.0\.0\.1|\btest\b|todo/gi) ?? [];
+  check(
+    'a visitor sees nothing of the test tools: no debug panel, no frame-rate counter, no word of either on the start screen or in play; and their first hint is waiting for them',
+    head.tools === 'undefined' && !playing.counter && !playing.debug && leftovers.length === 0 && playing.hint === 'MOVE',
+    leftovers.length ? `found on screen: ${[...new Set(leftovers)].join(', ')}` : `no debug tools on the page; counter ${playing.counter ? 'showing' : 'hidden'}; first hint: "${playing.hint}"`,
+  );
+  await visit.evaluate(() => document.exitPointerLock());
+  await visit.close();
+} catch (error) {
+  check("a visitor's own page is clean and carries what a shared link needs", false, String(error.message ?? error).split('\n')[0]);
 }
 
 // Shader translation warnings from the graphics driver are not errors.

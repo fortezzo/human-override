@@ -51,24 +51,26 @@ await page.evaluate(() => {
   ho.holdRounds(true);
   ho.clearRobots();
   ho.setShutter(false, 'yard');
+  // (The camera first, and time for the lamps round it to come up; then the robots, caught a few strides in.)
+  ho.place(0.4, 3.4, 0, 0);
+  ho.game.hideWeapon = true;
+  ho.view(0.7, 0.78, 3.6, 3, 8, 56);
+  ho.step(1 / 60, 150);
   const places = [
-    [-0.2, -2.6, 0, 1.4],
-    [-2.3, -3.9, 12, 1.2],
-    [2.1, -4.4, -10, 1.3],
-    [-4.4, -5.6, 20, 1.5],
-    [4.3, -6.0, -22, 1.2],
-    [0.9, -6.2, -4, 1.6],
-    [-1.6, -7.6, 8, 1.3],
-    [2.9, -8.4, -8, 1.4],
-    [-0.4, -9.6, 0, 1.5],
-    [-6.2, -3.2, 34, 1.1],
-    [6.4, -3.4, -36, 1.2],
+    [0.3, -0.9, 0, 1.3],
+    [-1.9, -1.9, 10, 1.2],
+    [2.4, -2.3, -12, 1.3],
+    [-3.9, -3.4, 22, 1.4],
+    [4.4, -3.9, -26, 1.2],
+    [1.0, -3.9, -4, 1.5],
+    [-1.2, -5.2, 6, 1.3],
+    [2.9, -6.0, -10, 1.4],
+    [-0.3, -6.9, 0, 1.5],
+    [-5.9, -1.4, 40, 1.1],
+    [6.3, -1.8, -42, 1.2],
   ];
   for (const [x, z, heading, speed] of places) ho.spawnRobot(x, z, heading, false, speed, 4000);
-  ho.place(0, 4.6, 0, 0);
-  ho.step(1 / 60, 150);
-  ho.view(0.9, 0.82, 3.1, 4, 9, 58);
-  ho.step(1 / 60, 40);
+  ho.step(1 / 60, 34);
   // The picture has the title on it and nothing of the game's own screen furniture.
   document.querySelector('.hud').style.display = 'none';
   const poster = document.createElement('div');

@@ -76,7 +76,12 @@ export interface HudState {
   debug: string[] | null;
   /** The first-minute hint to show, and whether the player has just done it; null for none. */
   coach: { hint: HintId; done: boolean } | null;
+  /** There are hints still to come this run (so the strip listing every control stays away: one thing at a time). */
+  coachWaiting: boolean;
 }
+
+/** Seconds the strip listing every control stays up at the start of a run (for a player who is not being shown the hints). */
+const STRIP_SECONDS = 16;
 
 /** The first-minute hints as they are shown: the key or keys, and what they do, in as few words as will do. */
 const COACH_TEXT: Record<HintId, { keys: string[]; text: string }> = {
@@ -196,7 +201,8 @@ export class Hud {
   private damageTimer = 0;
   private damageAngle = 0;
   private toastTimer = 0;
-  private hintTimer = 16;
+  /** When the strip listing every control comes down (real time, in milliseconds). */
+  private hintUntil = performance.now() + STRIP_SECONDS * 1000;
   private shownScrap = -1;
   private last = { ammo: -1, reserve: -1, weapon: '', sub: '', slots: '', fps: '', prompt: '', debug: '', scrap: '', objective: '', keys: '', boss: '', bossHealth: '', markerAt: '', markerDistance: '', markerLook: '', grenades: '', boosts: '', effects: '' };
 
@@ -377,7 +383,7 @@ export class Hud {
 
   /** A new run: clear everything left over from the last one. */
   reset(): void {
-    this.hintTimer = 16;
+    this.hintUntil = performance.now() + STRIP_SECONDS * 1000;
     this.hint.classList.remove('faded');
     this.coach.classList.remove('show', 'done');
     this.coachShown = '';
@@ -795,7 +801,8 @@ export class Hud {
       this.coach.classList.toggle('done', !!state.coach?.done);
     }
     // The control reminder gives way to a prompt, and waits its turn behind the hints.
-    this.hint.classList.toggle('faded', this.hintTimer <= 0 || !!prompt || !!state.coach);
+    if (state.coach || state.coachWaiting) this.hintUntil = 0;
+    this.hint.classList.toggle('faded', performance.now() >= this.hintUntil || !!prompt);
 
     // Markers on the last few robots (placed the same way as the objective's marker).
     for (let i = 0; i < MAX_MARKERS; i++) {
@@ -832,7 +839,6 @@ export class Hud {
       this.debug.textContent = debugText;
     }
 
-    if (this.hintTimer > 0 && !state.coach) this.hintTimer -= dt;
     const now = performance.now();
     if (this.failsafeUntil && now >= this.failsafeUntil) {
       this.failsafeUntil = 0;

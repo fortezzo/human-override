@@ -14,9 +14,10 @@ import { createConeShaft, type DustBeam } from '../../render/atmosphere';
 import type { LightDef } from '../../render/lighting';
 import type { MaterialKey, MaterialLibrary } from '../../render/materials';
 import { LevelBuilder } from '../build/LevelBuilder';
-import { approach, column, drum, ibeam, stackedDrums, vent, wall, weaponRack, type AreaBuild, type Fixtures, type Haze } from '../build/room';
+import { approach, column, ibeam, stackedDrums, vent, wall, weaponRack, type AreaBuild, type Fixtures, type Haze } from '../build/room';
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { DOCK, DOCK_BAYS, DOCK_COLUMNS, DOCK_PASSAGE, DOOR_PLANS, ENTRY_PLANS, HALL, LOBBY, RACK_PLANS, WALL } from '../plan';
+import { truck } from './truck';
 
 type Vec3 = [number, number, number];
 
@@ -24,7 +25,6 @@ type Vec3 = [number, number, number];
 const SODIUM = 0xffa245;
 const AMBER = 0xff9a2e;
 const RED = 0xff2a12;
-const HEADLAMP = 0xfff0d2;
 const HALF_PI = Math.PI / 2;
 /** Thickness of the facing laid over the back of the server hall's wall. */
 const SKIN = 0.03;
@@ -89,126 +89,6 @@ function container(b: LevelBuilder, atlas: SignAtlas, key: MaterialKey, at: Vec3
   } else {
     b.decal(atlas.texture, [x + 0.035, top - 0.5, z + 1.2], [-1, 0, 0], lw, lw / label.aspect, { uvRect: label.uv, opacity: 0.8 });
     b.decal(atlas.texture, [x + sx - 0.035, top - 0.5, z + sz - 1.2], [1, 0, 0], lw, lw / label.aspect, { uvRect: label.uv, opacity: 0.8 });
-  }
-}
-
-/** A lit lens: a small box that glows whatever light falls on it. */
-function lens(b: LevelBuilder, min: Vec3, max: Vec3, color: number, strength: number): void {
-  const material = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: color, emissiveIntensity: strength, roughness: 0.4 });
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(max[0] - min[0], max[1] - min[1], max[2] - min[2]), material);
-  mesh.position.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
-  b.addObject(mesh);
-}
-
-/**
- * A box truck backed up to the shut bay, its nose pointing east into the
- * room: cab, cargo box, six wheels, and its headlamps left on. `rear` is
- * the x of its back end, `z` its centre line.
- */
-function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number, lights: LightDef[], haze: Haze[], dustBeams: DustBeam[]): void {
-  const nose = rear + 8.3;
-  const half = 1.22;
-  // Chassis rails, and the cross-members between them.
-  for (const dz of [-0.45, 0.45]) b.box('darkSteel', [rear + 0.25, 0.62, z + dz - 0.06], [nose - 0.3, 0.86, z + dz + 0.06], { collide: false });
-  for (let x = rear + 0.6; x < nose - 0.6; x += 1.5) b.box('darkSteel', [x - 0.05, 0.66, z - 0.45], [x + 0.05, 0.8, z + 0.45], { collide: false, cast: false });
-  // Wheels: one axle under the cab, two under the box (doubled).
-  const wheel = (x: number, dz: number, wide: number) => {
-    drum(b, 'cable', [x, 0.5, z + dz], 0.5, wide, 'z', 20);
-    drum(b, 'steelPlate', [x, 0.5, z + dz + Math.sign(dz) * (wide / 2 + 0.005)], 0.27, 0.02, 'z', 16, false);
-    drum(b, 'darkSteel', [x, 0.5, z + dz + Math.sign(dz) * (wide / 2 + 0.012)], 0.1, 0.03, 'z', 10, false);
-  };
-  for (const side of [-1, 1]) {
-    wheel(nose - 1.35, side * (half - 0.17), 0.3);
-    wheel(rear + 1.25, side * (half - 0.3), 0.56);
-    wheel(rear + 2.4, side * (half - 0.3), 0.56);
-    // Mudguards over the rear pair, and a flap behind them.
-    b.box('darkSteel', [rear + 0.6, 1.06, z + side * (half - 0.6) - 0.3], [rear + 3.05, 1.1, z + side * (half - 0.6) + 0.3], { collide: false, cast: false });
-    b.box('cable', [rear + 0.56, 0.3, z + side * (half - 0.3) - 0.28], [rear + 0.6, 1.0, z + side * (half - 0.3) + 0.28], { collide: false, cast: false });
-  }
-  // The cargo box: pale panels in a steel frame, a roller door at the back.
-  const bx0 = rear + 0.08;
-  const bx1 = nose - 2.45;
-  const by0 = 1.12;
-  const by1 = 3.62;
-  b.box('wallDock', [bx0 + 0.03, by0 + 0.08, z - half + 0.03], [bx1 - 0.03, by1 - 0.06, z + half - 0.03], { collide: false });
-  for (const [y0, y1] of [
-    [by0, by0 + 0.12],
-    [by1 - 0.1, by1],
-  ] as const) {
-    b.box('steelPlate', [bx0, y0, z - half], [bx1, y1, z - half + 0.08], { collide: false, cast: false });
-    b.box('steelPlate', [bx0, y0, z + half - 0.08], [bx1, y1, z + half], { collide: false, cast: false });
-    b.box('steelPlate', [bx1 - 0.08, y0, z - half], [bx1, y1, z + half], { collide: false, cast: false });
-  }
-  for (const px of [bx0, bx1 - 0.1]) for (const pz of [z - half, z + half - 0.1]) b.box('steelPlate', [px, by0, pz], [px + 0.1, by1, pz + 0.1], { collide: false });
-  for (let x = bx0 + 1.1; x < bx1 - 0.5; x += 1.1) {
-    b.box('steelPlate', [x - 0.02, by0 + 0.12, z - half - 0.012], [x + 0.02, by1 - 0.1, z - half + 0.03], { collide: false, cast: false });
-    b.box('steelPlate', [x - 0.02, by0 + 0.12, z + half - 0.03], [x + 0.02, by1 - 0.1, z + half + 0.012], { collide: false, cast: false });
-  }
-  // Rear: the door, its handle, an underride bar and the tail lamps.
-  b.box('ceilingDeck', [bx0 - 0.02, by0 + 0.14, z - half + 0.12], [bx0 + 0.03, by1 - 0.12, z + half - 0.12], { collide: false, cast: false });
-  b.tube('darkSteel', [rear + 0.02, 0.62, z - half + 0.1], [rear + 0.02, 0.62, z + half - 0.1], 0.04, false);
-  for (const side of [-1, 1]) {
-    b.tube('darkSteel', [rear + 0.05, 0.62, z + side * 0.7], [rear + 0.3, 0.86, z + side * 0.7], 0.03, false);
-    lens(b, [rear + 0.03, 0.92, z + side * (half - 0.32) - 0.09], [rear + 0.07, 1.06, z + side * (half - 0.32) + 0.09], RED, 2.2);
-  }
-  // Under the box: a fuel tank on one side and a tool locker on the other.
-  drum(b, 'steelPlate', [rear + 4.3, 0.72, z - half + 0.32], 0.3, 1.3, 'x', 18);
-  for (const dx of [-0.45, 0.45]) drum(b, 'darkSteel', [rear + 4.3 + dx, 0.72, z - half + 0.32], 0.31, 0.05, 'x', 18, false);
-  b.box('darkSteel', [rear + 3.7, 0.42, z + half - 0.62], [rear + 4.9, 1.02, z + half - 0.04], { collide: false });
-  b.box('steelPlate', [rear + 3.76, 0.5, z + half - 0.045], [rear + 4.84, 0.94, z + half - 0.03], { collide: false, cast: false });
-
-  // The cab: a tall flat-fronted box with a raked top, glass in front and at the sides.
-  const cx0 = nose - 2.25;
-  const cy0 = 0.86;
-  const cy1 = 3.0;
-  b.box('truckPaint', [cx0, cy0, z - half + 0.06], [nose, cy1 - 0.25, z + half - 0.06], { collide: false });
-  b.box('truckPaint', [cx0, cy1 - 0.25, z - half + 0.1], [nose - 0.22, cy1, z + half - 0.1], { collide: false });
-  // Air deflector on the roof, sloping up to the height of the box.
-  const fairing = new THREE.BoxGeometry(1.5, 0.05, 2.1);
-  fairing.rotateZ(0.42).translate(cx0 + 0.75, cy1 + 0.3, z);
-  b.mesh('truckPaint', fairing, true, false);
-  for (const side of [-1, 1]) b.box('truckPaint', [cx0 + 0.1, cy1, z + side * 1.03 - 0.02], [cx0 + 1.3, cy1 + 0.34, z + side * 1.03 + 0.02], { collide: false, cast: false });
-  // Windscreen, side windows, a visor over the screen and two wipers.
-  b.box('darkGlass', [nose - 0.01, 1.85, z - half + 0.2], [nose + 0.02, 2.66, z + half - 0.2], { collide: false, cast: false });
-  b.box('darkSteel', [nose - 0.02, 2.66, z - half + 0.14], [nose + 0.16, 2.74, z + half - 0.14], { collide: false, cast: false });
-  b.box('darkSteel', [nose + 0.02, 1.83, z - 0.02], [nose + 0.04, 2.66, z + 0.02], { collide: false, cast: false });
-  for (const side of [-1, 1]) {
-    b.box('darkGlass', [nose - 1.25, 1.9, z + side * (half - 0.06) - 0.012], [nose - 0.22, 2.6, z + side * (half - 0.06) + 0.012], { collide: false, cast: false });
-    b.tube('darkSteel', [nose + 0.03, 1.86, z + side * 0.5], [nose + 0.035, 2.3, z + side * 0.2], 0.012, false);
-    // Door seam, handle, a step and a grab rail.
-    b.box('darkSteel', [nose - 1.4, 1.0, z + side * (half - 0.055) - 0.008], [nose - 1.37, 2.7, z + side * (half - 0.055) + 0.008], { collide: false, cast: false });
-    b.box('steelPlate', [nose - 1.3, 1.7, z + side * (half - 0.04) - 0.012], [nose - 1.1, 1.75, z + side * (half - 0.04) + 0.012], { collide: false, cast: false });
-    b.box('treadPlate', [nose - 1.25, 0.5, z + side * (half - 0.1) - 0.14], [nose - 0.55, 0.55, z + side * (half - 0.1) + 0.14], { collide: false, cast: false });
-    b.tube('steelPlate', [nose - 1.48, 1.2, z + side * (half - 0.02)], [nose - 1.48, 2.5, z + side * (half - 0.02)], 0.018, false);
-    // Mirror on two arms.
-    b.tube('darkSteel', [nose - 0.12, 2.5, z + side * (half - 0.05)], [nose + 0.1, 2.55, z + side * (half + 0.32)], 0.014, false);
-    b.tube('darkSteel', [nose - 0.12, 1.95, z + side * (half - 0.05)], [nose + 0.1, 2.0, z + side * (half + 0.32)], 0.014, false);
-    b.box('darkSteel', [nose + 0.06, 1.92, z + side * (half + 0.32) - 0.05], [nose + 0.13, 2.6, z + side * (half + 0.32) + 0.05], { collide: false, cast: false });
-    // Front mudguard.
-    b.box('darkSteel', [nose - 1.95, 1.04, z + side * (half - 0.17) - 0.2], [nose - 0.75, 1.08, z + side * (half - 0.17) + 0.2], { collide: false, cast: false });
-    // Amber marker lamps on the roof corners.
-    lens(b, [nose - 0.3, cy1 - 0.01, z + side * 0.85 - 0.05], [nose - 0.22, cy1 + 0.04, z + side * 0.85 + 0.05], AMBER, 2.5);
-  }
-  // Front: a ribbed grille between the headlamps, and a steel bumper.
-  b.box('darkSteel', [nose, 0.98, z - 0.62], [nose + 0.03, 1.68, z + 0.62], { collide: false, cast: false });
-  for (let y = 1.05; y < 1.66; y += 0.1) b.box('steelPlate', [nose + 0.03, y, z - 0.58], [nose + 0.045, y + 0.035, z + 0.58], { collide: false, cast: false });
-  b.box('steelPlate', [nose - 0.05, 0.5, z - half + 0.02], [nose + 0.16, 0.86, z + half - 0.02], { collide: false });
-  b.box('hazard', [nose + 0.16, 0.54, z - half + 0.06], [nose + 0.172, 0.82, z + half - 0.06], { collide: false, cast: false });
-  const plate = atlas.text('S4 0417', { size: 60, color: PAINT.black, plate: PAINT.white, wear: 0.3 });
-  b.decal(atlas.texture, [nose + 0.175, 0.68, z], [1, 0, 0], 0.5, 0.5 / plate.aspect, { uvRect: plate.uv, opacity: 0.95 });
-  const name = atlas.text(['SITE 04', 'LOGISTICS'], { size: 90, color: PAINT.black, wear: 0.45 });
-  for (const side of [-1, 1]) b.decal(atlas.texture, [(bx0 + bx1) / 2, 2.5, z + side * (half + 0.014)], [0, 0, side], 2.6, 2.6 / name.aspect, { uvRect: name.uv, opacity: 0.75 });
-  // Nothing walks through it, or under it.
-  b.blocker([rear, 0, z - half], [nose + 0.16, by1, z + half]);
-
-  // Its headlamps, left on: two beams across the floor toward the server hall's shutter.
-  for (const side of [-1, 1]) {
-    const from: Vec3 = [nose + 0.06, 1.22, z + side * 0.86];
-    const to: Vec3 = [nose + 9.5, 0.3, z + side * 1.5];
-    lens(b, [nose + 0.02, 1.08, from[2] - 0.15], [nose + 0.06, 1.36, from[2] + 0.15], HEADLAMP, 9);
-    lights.push({ name: `truckLamp${side}`, area: 'dock', kind: 'spot', color: HEADLAMP, intensity: 150, position: from, target: to, angle: 0.5, penumbra: 0.7, distance: 17, shadow: side === 1 ? 2 : undefined });
-    haze.push({ effect: createConeShaft([from[0] + 0.1, from[1], from[2]], [from[0] + 7.5, 0.7, to[2] - side * 0.3], 0.12, 1.5, HEADLAMP, 0.1) });
-    dustBeams.push({ position: from, target: to, angle: 0.42, color: HEADLAMP, strength: 0.6 });
   }
 }
 

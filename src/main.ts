@@ -242,6 +242,7 @@ async function boot(): Promise<void> {
         objective: { ...game.mission.objective, keys: KEY_IDS.map((id) => game.mission.state.keys[id]) },
         objectiveMarker,
         coach: coaching(objectiveMarker),
+        coachWaiting: settings.value.hints && director.rounds.round <= COACH.lastRound && HINTS.some((id) => !coach.learned[id]),
         boss: game.mission.boss,
         spread: weapons.spread(player),
         fov: game.camera.fov,

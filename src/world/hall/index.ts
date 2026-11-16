@@ -14,6 +14,7 @@ import { column, ibeam, vent, wall, weaponRack, type AreaBuild, type Fixtures, t
 import { PAINT, SignAtlas, type Sign } from '../build/SignAtlas';
 import { ScreenBank } from '../lobby/ScreenBank';
 import { DOOR_PLANS, ENTRY_PLANS, HALL, HALL_COLUMNS, LOBBY, RACK_PLANS, WALL } from '../plan';
+import { buildWestWall } from './westWall';
 
 type Vec3 = [number, number, number];
 
@@ -227,6 +228,9 @@ export function buildHall(assets: Assets, materials: MaterialLibrary, stations?:
   b.prop('security_camera_01', { at: [x0 + 0.3, 4.6, z1 - 0.3], rotY: (Math.PI * 3) / 4, collide: false });
 
   // (The shutter to the loading dock, and the lab's door, are moving parts: see world/Door.ts.)
+
+  // ---- The west wall, beside the walkway: cooling units, pipes, conduit, notices and two lamps.
+  buildWestWall(b, atlas, lights);
 
   // ---- Ceiling vents the robots drop from
   for (const entry of ENTRY_PLANS) if (entry.area === 'hall' && entry.kind === 'drop') vent(b, entry.at[0], entry.at[1], h);

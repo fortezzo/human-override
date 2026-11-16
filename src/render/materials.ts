@@ -57,7 +57,8 @@ const DEFS = {
   containerBlue: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0x547a9e, roughness: 0.95 },
   containerGreen: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0x628569, roughness: 0.95 },
   containerOchre: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0xc7a54c, roughness: 0.95 },
-  truckPaint: { surface: 'Metal046B', tile: 1.6, kind: 'metal', tint: 0xdfe3e6, roughness: 0.55, metalness: 0.25 },
+  // (Worn green paint going to rust. It was a dark steel once, and the cab was a black box in its own headlamps' glare.)
+  truckPaint: { surface: 'green_metal_rust', tile: 2.4, kind: 'metal', tint: 0xd6d8c8, gain: 1.25, roughness: 0.85, metalness: 0.1 },
   darkGlass: { surface: 'Metal046B', tile: 1.0, kind: 'glass', tint: 0x1c232a, roughness: 0.22, metalness: 0.7, envIntensity: 1.5 },
   // The stations. Painted, not bare: bare steel in a dark room is a black
   // shape, and paint takes the light of the station's own lamp.
