@@ -3735,6 +3735,9 @@ try {
     settingsShown && ['Graphics quality', 'Mouse sensitivity', 'Brightness', 'Volume', 'Sound off', 'Show frame rate', 'Show hints for new players', 'Reduce screen shake and flashing'].every((label) => labels.some((text) => text.includes(label))) && Math.abs(stored.volume - 0.3) < 0.011 && titleAgain,
     `${labels.length} settings; the volume, moved to 30%, was stored as ${stored.volume}`,
   );
+  // (Those were real clicks, on a page whose mouse the debug tools hold as captured: each was also a pull of the
+  // trigger, waiting for the next frame of play. A frame here, on the start screen, where it does nothing.)
+  await ev(() => window.__HO.step(1 / 60, 1));
   await ev(() => window.__HO.play());
   await page.waitForTimeout(100);
   await ev(() => {
@@ -3756,19 +3759,28 @@ try {
       const el = document.querySelector('.hud-coach');
       return { shown: el.classList.contains('show'), done: el.classList.contains('done'), text: el.querySelector('.hud-coach-text').textContent, keys: [...el.querySelectorAll('kbd')].map((key) => key.textContent).join(' '), strip: !document.querySelector('.hud-hint').classList.contains('faded') };
     });
-  /** Let the game run at about real speed for a while (the hints keep real time, and want to see the player move a little at a time). */
+  /**
+   * Let the game run at real speed for a while: a tenth of a second of the game for each tenth of a second that
+   * really passes, and never less than really passes. (The hints keep real time, and want to see the player
+   * move a little at a time. This used to wait 60 ms for each tenth of a second, and the waits between one hint
+   * and the next only came out long enough when the computer was busy: the check passed in the full run and
+   * failed by itself.)
+   */
   const live = async (seconds) => {
     for (let t = 0; t < seconds; t += 0.1) {
+      const started = Date.now();
       await ev(() => window.__HO.step(1 / 60, 6));
-      await page.waitForTimeout(60);
+      await page.waitForTimeout(Math.max(20, 100 - (Date.now() - started)));
     }
   };
   const freshRun = (hints) =>
     ev((hints) => {
       const ho = window.__HO;
       if (hints !== null) ho.hints(hints);
-      // (By way of the start screen, as a player comes to a new run: that is what clears the HUD.)
+      // (By way of the start screen, as a player comes to a new run: that is what clears the HUD. A frame
+      // passes there, so that nothing pressed before this is still waiting to happen when the run begins.)
       ho.game.toTitle();
+      ho.step(1 / 60, 1);
       ho.play();
       ho.god(true);
       ho.holdRounds(true);
@@ -3884,6 +3896,48 @@ try {
     'going down with a fail-safe is a moment of its own: for a little over a second the player is on the floor with DOWN across the view, the world runs slow, and nothing they press does anything; then it fires, FAILSAFE ENGAGED, and they are on their feet',
     moment.blow.frozen && moment.blow.state === 'playing' && /show down/.test(moment.blow.cls) && moment.blow.title === 'DOWN' && Math.abs(moment.down.clock - 0.5 * moment.pace) < 0.03 && moment.down.moved < 0.05 && moment.down.fired === 0 && moment.down.eyeFell > 0.8 && moment.down.health === 0 && moment.down.state === 'playing' && !moment.up.frozen && Math.abs(moment.up.health - 60) < 1 && moment.up.grace > 2 && /show up/.test(moment.up.cls) && moment.up.title === 'FAILSAFE ENGAGED' && moment.up.sounds.includes('revive') && moment.stood.pose === 0 && Math.abs(moment.stood.eye - 1.64) < 0.08,
     `down for ${moment.seconds} s with the clock at ${Math.round(moment.pace * 100)}% (half a second of it lasted ${moment.down.clock.toFixed(2)} s of game time); the view fell ${moment.down.eyeFell.toFixed(2)} m; pressing forward and fire moved the player ${moment.down.moved.toFixed(2)} m and fired ${moment.down.fired} shots; then "${moment.up.title}", health ${moment.up.health.toFixed(0)}, ${moment.up.staggered} robots knocked back`,
+  );
+
+  // ---- The fail-safe's throw, in slow frames. Robots are thrown back from the player at seven metres a second;
+  // in a frame of a tenth of a second (the longest the game allows) that would be 70 cm in one step, and a shut
+  // door is 26 cm thick. Two robots stand touching the power room's shut door (it is at x 9.12 to 9.38) with the
+  // player a pace from them, and the fail-safe fires in frames that long. (Before the throw was taken in short
+  // steps, both of them ended in the power room.)
+  const thrown = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.game.toTitle();
+    ho.step(1 / 60, 1);
+    ho.play();
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.setBoost('failsafe', true);
+    ho.god(true);
+    ho.place(7.61, 3.7, -90, 0);
+    ho.step(1 / 60, 10);
+    for (const z of [3.3, 4.1]) ho.spawnRobot(8.76, z, -90, false, 2.2, 4000);
+    ho.step(1 / 60, 2);
+    ho.god(false);
+    game.player.health = 1;
+    let steps = 0;
+    while (!game.player.frozen && steps++ < 400) ho.step(1 / 60, 1);
+    const before = ho.economy().revives;
+    const down = game.robots.filter((r) => r.alive).map((r) => r.position.x);
+    let furthest = -Infinity;
+    for (let i = 0; i < 26; i++) {
+      ho.step(0.1, 1);
+      for (const r of game.robots) if (r.alive) furthest = Math.max(furthest, r.position.x);
+    }
+    const end = game.robots.filter((r) => r.alive).map((r) => r.position.x);
+    const shut = !ho.run().doors.lobbyPower;
+    ho.god(true);
+    ho.clearRobots();
+    return { went: steps < 400, fired: ho.economy().revives - before, nearest: Math.max(...down), furthest, end, shut };
+  });
+  check(
+    'thrown back by the fail-safe in the slowest frames the game allows, robots standing against a shut door stay on their own side of it',
+    thrown.went && thrown.shut && thrown.fired === 1 && thrown.end.length === 2 && thrown.nearest > 8.6 && thrown.furthest < 9.12 && thrown.end.every((x) => x < 9.12),
+    `two robots ${(9.12 - thrown.nearest).toFixed(2)} m from the door when the player went down; in frames of a tenth of a second the furthest east either got was x = ${thrown.furthest.toFixed(2)} (the door is at 9.12)`,
   );
 
   // ---- The Turncoat, fired into a full horde.
@@ -4017,15 +4071,17 @@ try {
   await real.evaluate(() => window.__HO.randomDrops(false));
   // (And no first-minute hints: they would be in every picture and under every measurement. The checks that are about them switch them on.)
   await real.evaluate(() => window.__HO.hints?.(false));
-  const at = () => real.evaluate(() => ({ ...window.__HO.run(), quality: window.__HO.stats().quality, ammo: window.__HO.stats().ammo, locked: document.pointerLockElement !== null }));
+  const at = () => real.evaluate(() => ({ ...window.__HO.run(), quality: window.__HO.stats().quality, ammo: window.__HO.stats().ammo, shots: window.__HO.game.stats.shots, locked: document.pointerLockElement !== null }));
   const until = (state) => real.waitForFunction((state) => window.__HO.stats().state === state, state, { timeout: 8000 }).catch(() => {});
   /** What the browser does when the player presses Esc: it takes the mouse back. */
   const letGoOfMouse = () => real.evaluate(() => document.exitPointerLock());
 
   await real.click('button[data-action="start"]');
   await until('playing');
+  // (A few frames of play: a click that was also a shot would have fired by now.)
+  await real.waitForTimeout(250);
   let s = await at();
-  check('the Play button captures the mouse and starts a run', s.state === 'playing' && s.locked);
+  check('the Play button captures the mouse and starts a run, and the click that started it is not also a shot', s.state === 'playing' && s.locked && s.shots === 0 && s.ammo === 12, `${s.shots} shots fired, ${s.ammo} rounds in the sidearm`);
 
   await real.mouse.down();
   await real.waitForTimeout(60);

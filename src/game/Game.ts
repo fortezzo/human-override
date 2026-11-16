@@ -1107,7 +1107,7 @@ export class Game {
     this.weapons.raise();
     player.revive(rule.health, rule.grace);
     for (const robot of this.robots) {
-      if (Math.hypot(robot.position.x - player.position.x, robot.position.z - player.position.z) < rule.shove) robot.shove();
+      if (Math.hypot(robot.position.x - player.position.x, robot.position.z - player.position.z) < rule.shove) robot.shove(player.position.x, player.position.z, rule.knock);
     }
     const color = new THREE.Color(STATION_COLOR.failsafe);
     this.effects.revive(player.position, { r: color.r * 6, g: color.g * 6, b: color.b * 6 }, settings.value.reducedMotion);

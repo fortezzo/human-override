@@ -140,6 +140,9 @@ export class Robot {
 
   private heading = 0;
   private speed = 0;
+  /** Thrown back by the fail-safe: the speed it is still sliding at, which dies away in a fraction of a second. */
+  private knockX = 0;
+  private knockZ = 0;
   private stride = 0;
   private lastHalfStride = 0;
   private collapse = 0;
@@ -325,12 +328,21 @@ export class Robot {
     this.mind.cooldown = 0;
   }
 
-  /** Knocked off balance without being hurt (the fail-safe's shove). ARGUS's own machines stand their ground. */
-  shove(): void {
+  /**
+   * Knocked off balance without being hurt, and thrown back from the point
+   * (x, z) at `speed` metres a second (the fail-safe's shove). ARGUS's own
+   * machines stand their ground.
+   */
+  shove(x: number, z: number, speed = 0): void {
     if (!this.alive || this.role || this.falling) return;
     this.mind.state = 'stagger';
     this.mind.timer = 0;
     this.play('hit', 0.08, true);
+    const dx = this.root.position.x - x;
+    const dz = this.root.position.z - z;
+    const length = Math.hypot(dx, dz) || 1;
+    this.knockX = (dx / length) * speed;
+    this.knockZ = (dz / length) * speed;
   }
 
   /** Which weapon it is shielded against, or null. */
@@ -526,8 +538,14 @@ export class Robot {
       }
       this.speed = damp(this.speed, wantSpeed, 6, dt);
 
-      p.x += Math.sin(this.heading) * this.speed * dt;
-      p.z += Math.cos(this.heading) * this.speed * dt;
+      // (Thrown back in steps shorter than a robot is wide, however slow the
+      // frame: a throw of most of a metre in one step could put it through
+      // the wall it was standing against.)
+      const slide = Math.min(dt, ROBOT.knockStep);
+      p.x += Math.sin(this.heading) * this.speed * dt + this.knockX * slide;
+      p.z += Math.cos(this.heading) * this.speed * dt + this.knockZ * slide;
+      this.knockX = damp(this.knockX, 0, 6, dt);
+      this.knockZ = damp(this.knockZ, 0, 6, dt);
       // Robots are solid to each other: never let two overlap.
       for (const other of others) {
         if (other === this || !other.alive || other.falling) continue;

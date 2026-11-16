@@ -27,7 +27,7 @@ const CONTROLS: Array<[string, string]> = [
   ['F', 'Use / buy / open / repair'],
   ['1  2  wheel', 'Switch weapon'],
   ['Shift', 'Sprint'],
-  ['Space', 'Jump'],
+  ['Space', 'Jump over low things'],
   ['Esc', 'Pause and settings'],
   ['M', 'Mute'],
 ];

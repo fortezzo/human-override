@@ -519,11 +519,13 @@ export const BOOSTS = {
    * One self-revive. It is used up when it saves the player, and can be
    * bought again for `priceStep` more each time. Getting back up: with
    * this share of full health, untouchable for `grace` seconds, and every
-   * robot within `shove` metres knocked off balance. First the player is
+   * robot within `shove` metres knocked off balance and thrown back from
+   * them (at `knock` metres a second to begin with, which carries it a
+   * little over a metre). First the player is
    * down, for `down` seconds, in which nothing can touch them and the
    * world runs at `downPace` of its speed; then it fires.
    */
-  failsafe: { name: 'FAILSAFE', effect: 'One self-revive', price: 1500, priceStep: 1000, health: 0.6, grace: 3, shove: 5, down: 1.15, downPace: 0.3 },
+  failsafe: { name: 'FAILSAFE', effect: 'One self-revive', price: 1500, priceStep: 1000, health: 0.6, grace: 3, shove: 5, knock: 7, down: 1.15, downPace: 0.3 },
 } as const;
 
 /**
@@ -812,6 +814,13 @@ export const ROBOT = {
   separationForce: 2.2,
   /** A robot that has made no headway for this long is sent round again. */
   stuckTime: 7,
+  /**
+   * The longest step, in seconds, that a robot thrown back by the fail-safe
+   * is moved by in one frame. At the speed it is thrown at that is under
+   * 30 cm, less than a robot's radius, so however slow the frame it cannot
+   * be carried through the wall it stood against.
+   */
+  knockStep: 0.04,
   /** Seconds a robot dropping from a vent takes to find its feet. */
   landingTime: 0.55,
   /**

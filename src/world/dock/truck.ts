@@ -81,7 +81,7 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
     b.mesh('darkSteel', arch, true, false);
   };
   for (const side of [-1, 1]) {
-    wheel(nose - 1.35, side, false);
+    wheel(nose - 1.55, side, false);
     for (const x of [rear + 1.25, rear + 2.4]) {
       wheel(x, side, false);
       wheel(x, side, true);
@@ -165,17 +165,22 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
     const out = (d: number) => face + side * d;
     const N: Vec3 = [0, 0, side];
     // Window, in its rubber.
-    b.box('cable', [nose - 1.42, sill + 0.03, Math.min(out(-0.07), out(-0.045))], [nose - 0.3, roof - 0.22, Math.max(out(-0.07), out(-0.045))], { collide: false, cast: false });
-    b.box('darkGlass', [nose - 1.37, sill + 0.08, Math.min(out(-0.075), out(-0.035))], [nose - 0.35, roof - 0.27, Math.max(out(-0.075), out(-0.035))], { collide: false, cast: false });
+    b.box('cable', [nose - 1.3, sill + 0.03, Math.min(out(-0.07), out(-0.045))], [nose - 0.3, roof - 0.22, Math.max(out(-0.07), out(-0.045))], { collide: false, cast: false });
+    b.box('darkGlass', [nose - 1.25, sill + 0.08, Math.min(out(-0.075), out(-0.035))], [nose - 0.35, roof - 0.27, Math.max(out(-0.075), out(-0.035))], { collide: false, cast: false });
     // The door: its seams, a handle, and the hinges.
-    for (const x of [nose - 1.52, nose - 0.24]) b.box('cable', [x, 0.98, Math.min(out(0), out(0.006))], [x + 0.016, sill, Math.max(out(0), out(0.006))], { collide: false, cast: false });
-    b.box('cable', [nose - 1.52, 0.98, Math.min(out(0), out(0.006))], [nose - 0.24, 0.996, Math.max(out(0), out(0.006))], { collide: false, cast: false });
-    b.box('steelPlate', [nose - 1.44, 1.62, Math.min(out(0.004), out(0.03))], [nose - 1.24, 1.67, Math.max(out(0.004), out(0.03))], { collide: false, cast: false });
-    for (const y of [1.2, 1.8]) b.box('darkSteel', [nose - 0.27, y, Math.min(out(0.004), out(0.022))], [nose - 0.22, y + 0.1, Math.max(out(0.004), out(0.022))], { collide: false, cast: false });
-    // Steps, and a grab rail behind the door.
-    for (const y of [0.42, 0.74]) b.box('treadPlate', [nose - 1.5, y, Math.min(out(-0.12), out(0.1))], [nose - 0.95, y + 0.045, Math.max(out(-0.12), out(0.1))], { collide: false, cast: false });
-    b.tube('steelPlate', [nose - 1.6, 1.15, out(0.035)], [nose - 1.6, 2.55, out(0.035)], 0.017, false);
-    for (const y of [1.15, 2.55]) b.tube('steelPlate', [nose - 1.6, y, out(0)], [nose - 1.6, y, out(0.035)], 0.014, false);
+    for (const x of [nose - 1.36, nose - 0.22]) b.box('cable', [x, 1.02, Math.min(out(0), out(0.006))], [x + 0.016, sill, Math.max(out(0), out(0.006))], { collide: false, cast: false });
+    b.box('cable', [nose - 1.36, 1.02, Math.min(out(0), out(0.006))], [nose - 0.22, 1.036, Math.max(out(0), out(0.006))], { collide: false, cast: false });
+    b.box('steelPlate', [nose - 1.3, 1.62, Math.min(out(0.004), out(0.03))], [nose - 1.1, 1.67, Math.max(out(0.004), out(0.03))], { collide: false, cast: false });
+    for (const y of [1.2, 1.8]) b.box('darkSteel', [nose - 0.25, y, Math.min(out(0.004), out(0.022))], [nose - 0.2, y + 0.1, Math.max(out(0.004), out(0.022))], { collide: false, cast: false });
+    // The cab's skirts, which come down in front of the wheel and behind it and leave an arch for it between them.
+    rounded(b, 'truckPaint', [nose - 0.92, 0.4, Math.min(out(-0.34), out(0))], [nose - 0.03, 0.9, Math.max(out(-0.34), out(0))], 0.05);
+    rounded(b, 'truckPaint', [cx0, 0.44, Math.min(out(-0.3), out(0))], [cx0 + 0.16, 0.9, Math.max(out(-0.3), out(0))], 0.04);
+    // The step up to the door, let into the front skirt: a dark well with a tread plate at the foot of it.
+    b.box('cable', [nose - 0.84, 0.48, Math.min(out(-0.02), out(0.008))], [nose - 0.36, 0.84, Math.max(out(-0.02), out(0.008))], { collide: false, cast: false });
+    b.box('treadPlate', [nose - 0.86, 0.43, Math.min(out(-0.1), out(0.09))], [nose - 0.34, 0.475, Math.max(out(-0.1), out(0.09))], { collide: false, cast: false });
+    // A grab rail behind the door.
+    b.tube('steelPlate', [nose - 1.46, 1.15, out(0.035)], [nose - 1.46, 2.55, out(0.035)], 0.017, false);
+    for (const y of [1.15, 2.55]) b.tube('steelPlate', [nose - 1.46, y, out(0)], [nose - 1.46, y, out(0.035)], 0.014, false);
     // Mirror, on two arms.
     b.tube('darkSteel', [nose - 0.14, 2.52, out(0)], [nose + 0.06, 2.56, out(0.36)], 0.014, false);
     b.tube('darkSteel', [nose - 0.14, 2.0, out(0)], [nose + 0.06, 2.04, out(0.36)], 0.014, false);
@@ -183,12 +188,12 @@ export function truck(b: LevelBuilder, atlas: SignAtlas, rear: number, z: number
     // The arch over the front wheel, standing a little proud of the cab's side.
     const flare = new THREE.RingGeometry(TYRE + 0.04, TYRE + 0.2, 18, 1, 0, Math.PI);
     if (side < 0) flare.rotateY(Math.PI);
-    flare.translate(nose - 1.35, TYRE + 0.02, out(0.004));
+    flare.translate(nose - 1.55, TYRE + 0.02, out(0.004));
     b.mesh('darkSteel', flare, true, false);
     // Its name on the door, and its number behind it.
     const door = atlas.text('SITE 04', { size: 60, color: PAINT.white, wear: 0.5 });
-    b.decal(atlas.texture, [nose - 0.88, 1.36, out(0.008)], N, 0.86, 0.86 / door.aspect, { uvRect: door.uv, opacity: 0.8 });
-    b.decalImage('Leaking003', [nose - 1.2, 1.3, out(0.01)], N, 1.6, 1.3, { opacity: 0.5, tint: 0x3d3a33 });
+    b.decal(atlas.texture, [nose - 0.79, 1.4, out(0.008)], N, 0.8, 0.8 / door.aspect, { uvRect: door.uv, opacity: 0.8 });
+    b.decalImage('Leaking003', [nose - 1.2, 1.45, out(0.01)], N, 1.6, 1.0, { opacity: 0.5, tint: 0x3d3a33 });
   }
 
   // ---- The front. A grille set into the cab, a lamp housing either side of it, and a steel bumper below.

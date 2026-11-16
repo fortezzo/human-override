@@ -326,6 +326,7 @@ await paced(3840, 2160);
   }, 2400);
   await first('the analysis shrinking into its corner', () => window.__HO.analysisBanner.hold('corner'));
   // Stage 4: the things the economy puts on screen for the first time. (Not in an earlier stage's build.)
+  let stage5 = null;
   if (!process.env.HO_DIST) {
   await first('a timed pickup lying on the floor', () => {
     const ho = window.__HO;
@@ -369,6 +370,52 @@ await paced(3840, 2160);
     },
     5000,
   );
+  // Stage 5: the fail-safe's moment (the picture drained and darkened, and then flooded with its colour), and a
+  // first-minute hint. (Not in an earlier stage's build either.)
+  await first(
+    'going down with the fail-safe',
+    () => {
+      const ho = window.__HO;
+      ho.clearRobots();
+      ho.setShutter(false);
+      ho.place(0, 4.4, 0, 0);
+      for (const x of [-1.3, 0, 1.3]) ho.spawnKind(x, 2.7, 0, { hold: true });
+      ho.setBoost('failsafe', true);
+      ho.god(false);
+      ho.game.player.health = 1;
+      // (The blow itself, as a robot's lands.)
+      ho.game.hurtPlayer(20, 0, 2.7);
+    },
+    1050,
+  );
+  // (It fires a little over a second after the blow: a tenth of a second into this one's second.)
+  await first('the fail-safe firing: back on their feet', () => {}, 2400);
+  const revived = await fresh.page.evaluate(() => {
+    const ho = window.__HO;
+    const revives = ho.economy().revives;
+    ho.god(true);
+    ho.clearRobots();
+    // The hints, from the first of them: it comes up a little over a second from now.
+    ho.hints(true);
+    return revives;
+  });
+  await fresh.page.waitForTimeout(600);
+  await first('a first-minute hint coming up', () => {}, 1500);
+  await first(
+    'the hint done: it turns green, and goes',
+    () => {
+      const ho = window.__HO;
+      ho.press('forward', true);
+      setTimeout(() => ho.press('forward', false), 1000);
+    },
+    1800,
+  );
+  const hinted = await fresh.page.evaluate(() => {
+    const learned = JSON.parse(localStorage.getItem('human-override.settings.v1') ?? '{}').learned ?? [];
+    window.__HO.hints(false);
+    return learned;
+  });
+  stage5 = { revived, hinted };
   }
   const { frames, marks } = await fresh.page.evaluate(() => ({ frames: window.__frames, marks: window.__marks }));
   const ordered = frames.map((frame) => frame[1]).sort((a, b) => a - b);
@@ -376,7 +423,14 @@ await paced(3840, 2160);
   console.log('first time on screen                     slowest frame in the next second   frames over 25 ms');
   for (const [name, at] of marks) {
     const after = frames.filter(([time]) => time >= at && time < at + 1000);
-    const note = name === 'the bomber going off' && !wentOff ? '   (it did not go off)' : '';
+    const note =
+      name === 'the bomber going off' && !wentOff
+        ? '   (it did not go off)'
+        : name === 'the fail-safe firing: back on their feet' && stage5 && stage5.revived !== 1
+          ? '   (it did not fire)'
+          : name === 'the hint done: it turns green, and goes' && stage5 && !stage5.hinted.includes('move')
+            ? '   (the hint was not done)'
+            : '';
     console.log(`${name.padEnd(40)} ${Math.max(...after.map((frame) => frame[1])).toFixed(1).padStart(9)} ms ${String(after.filter((frame) => frame[1] > 25).length).padStart(27)}${note}`);
   }
   await fresh.browser.close();

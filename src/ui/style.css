@@ -789,8 +789,11 @@ body {
 }
 .title-note {
   margin-top: 18px;
+  /* (No wider than the dark side of the start screen: it ran on over the lit scene, where it could not be read.) */
+  max-width: min(360px, 27vw);
   font-family: var(--mono);
   font-size: 12px;
+  line-height: 1.6;
   letter-spacing: 0.1em;
   color: var(--ink-dim);
 }

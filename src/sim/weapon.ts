@@ -9,8 +9,6 @@ export interface WeaponSpec {
   reloadTime: number;
   /** Fraction of the reload after which the new magazine counts as loaded. */
   reloadCommit: number;
-  /** Stage 0 only: spare ammunition never runs out. */
-  infiniteReserve?: boolean;
 }
 
 export interface WeaponState {
@@ -47,7 +45,7 @@ export function fire(state: WeaponState, spec: WeaponSpec): boolean {
 }
 
 export function canReload(state: WeaponState, spec: WeaponSpec): boolean {
-  return !state.reloading && state.ammo < spec.magazine && (state.reserve > 0 || !!spec.infiniteReserve);
+  return !state.reloading && state.ammo < spec.magazine && state.reserve > 0;
 }
 
 export function startReload(state: WeaponState, spec: WeaponSpec): boolean {
@@ -81,9 +79,9 @@ export function updateWeapon(state: WeaponState, spec: WeaponSpec, dt: number): 
     state.reloadTimer += dt;
     if (!state.reloadCommitted && state.reloadTimer >= spec.reloadTime * spec.reloadCommit) {
       const wanted = spec.magazine - state.ammo;
-      const taken = spec.infiniteReserve ? wanted : Math.min(wanted, state.reserve);
+      const taken = Math.min(wanted, state.reserve);
       state.ammo += taken;
-      if (!spec.infiniteReserve) state.reserve -= taken;
+      state.reserve -= taken;
       state.reloadCommitted = true;
       tick.loaded = true;
     }

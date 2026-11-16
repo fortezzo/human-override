@@ -77,16 +77,6 @@ describe('weapon rules', () => {
     expect(startReload(w, spec)).toBe(false);
   });
 
-  it('never drains reserve when it is marked infinite', () => {
-    const endless: WeaponSpec = { ...spec, reserve: 0, infiniteReserve: true };
-    const w = createWeapon(endless);
-    w.ammo = 0;
-    expect(startReload(w, endless)).toBe(true);
-    updateWeapon(w, endless, 2);
-    expect(w.ammo).toBe(30);
-    expect(w.reserve).toBe(0);
-  });
-
   it('reports reload progress from 0 to 1', () => {
     const w = createWeapon(spec);
     w.ammo = 1;

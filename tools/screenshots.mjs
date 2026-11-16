@@ -1,6 +1,6 @@
 // Takes the project's screenshots from the production build.
 //
-//   npm run build && npm run shots              -> media/stage-4
+//   npm run build && npm run shots              -> media/stage-5
 //   npm run shots -- media/some-other-folder
 //
 // Every shot is staged through the debug tools with time stepped by hand
@@ -11,9 +11,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { gpuName, launch } from './lib/browser.mjs';
+import { parseSiteAddress } from './lib/site-address.mjs';
 import { serve } from './lib/static-server.mjs';
 
-const outDir = process.argv[2] ?? 'media/stage-4';
+const outDir = process.argv[2] ?? 'media/stage-5';
 if (!fs.existsSync('dist/index.html')) {
   console.error('No production build found. Run "npm run build" first.');
   process.exit(1);
@@ -868,6 +869,16 @@ const ended = await run(() => {
 });
 await shoot(ended === 'saved' ? '36-run-ends-humanity-saved' : '36-run-ends-game-over');
 await page.click(`.screen.${ended === 'saved' ? 'saved' : 'over'} [data-action="profile"]`);
+// The card prints the page's own address, which here is this tool's local
+// test server. In the picture it carries the game's public address if
+// site-address.txt has one, and otherwise none.
+{
+  const address = fs.existsSync('site-address.txt') ? parseSiteAddress(fs.readFileSync('site-address.txt', 'utf8')) : '';
+  await run((shown) => {
+    const line = document.querySelector('.profile-url');
+    if (line) line.textContent = shown;
+  }, address.replace(/^https?:\/\//, ''));
+}
 await shoot('37-argus-profile');
 await page.click('.screen.profile [data-action="profile-back"]');
 
@@ -1083,6 +1094,130 @@ await page.click('.screen.profile [data-action="profile-back"]');
   await page.click('.screen.title [data-action="settings"]');
   await shoot('63-settings');
   await page.click('.screen.settings [data-action="back"]');
+}
+
+// ---- Stage 5: polish. The first-minute hints, the fail-safe as a moment, jumping, and the two corners that were plain.
+{
+  /** Let the game run at about real speed for a while (the HUD's own animations and the hints keep real time). */
+  const live = async (seconds) => {
+    for (let t = 0; t < seconds; t += 0.1) {
+      await run(() => window.__HO.step(1 / 60, 6));
+      await page.waitForTimeout(60);
+    }
+  };
+  const fresh = (hints) =>
+    run((hints) => {
+      const ho = window.__HO;
+      ho.autopilot(false);
+      ho.hints(hints);
+      ho.game.toTitle();
+      ho.play();
+      ho.god(true);
+      ho.holdRounds(true);
+      ho.clearRobots();
+      ho.steadyLights(true);
+      ho.announcement.clear();
+      // (The strip listing every control comes up at the start of a run for a player who has the hints off. These pictures are of other things.)
+      document.querySelector('.hud-hint').style.visibility = hints ? 'visible' : 'hidden';
+    }, hints);
+
+  // 65. A first-time player's first hint, and (66) the same hint done.
+  await fresh(true);
+  await overlay(false);
+  await live(1.8);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: path.join(outDir, '65-first-hint.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  65-first-hint.jpg');
+  await run(() => window.__HO.press('forward', true));
+  await live(0.9);
+  await run(() => window.__HO.press('forward', false));
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: path.join(outDir, '66-first-hint-done.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  66-first-hint-done.jpg');
+
+  // 67 and 68. The fail-safe: down, and back up.
+  await fresh(false);
+  await run(() => {
+    const ho = window.__HO;
+    for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
+    ho.missionJump('keys');
+    ho.setBoost('failsafe', true);
+    ho.place(0.3, 1.2, 0, 0);
+    ho.step(1 / 60, 150);
+    ho.announcement.clear();
+    for (const [x, z] of [[-1.2, -0.6], [1.3, -0.8], [0.1, -1.2], [-2.6, -1.9], [2.8, -2.2], [0.6, -3.4]]) ho.spawnKind(x, z, 180, {});
+    ho.god(false);
+    ho.game.player.health = 15;
+  });
+  for (let i = 0; i < 900; i++) {
+    const down = await run(() => {
+      window.__HO.step(1 / 60, 1);
+      return window.__HO.game.player.health <= 0;
+    });
+    if (down) break;
+  }
+  await live(0.7);
+  await page.screenshot({ path: path.join(outDir, '67-failsafe-down.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  67-failsafe-down.jpg');
+  await live(0.75);
+  await page.screenshot({ path: path.join(outDir, '68-failsafe-engaged.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  68-failsafe-engaged.jpg');
+  await run(() => {
+    const ho = window.__HO;
+    ho.god(true);
+    ho.clearRobots();
+  });
+
+  // 69. Over the fence: inside the lab's assembly cell, with the robots coming round to its gateways.
+  await fresh(false);
+  await run(() => {
+    const ho = window.__HO;
+    for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
+    ho.missionJump('keys');
+    ho.giveWeapon('shotgun');
+    ho.place(17.0, 20.25, 104, -3);
+    ho.step(1 / 60, 150);
+    ho.announcement.clear();
+    // Some coming in by the west gateway, the rest held up at the fence.
+    for (const [x, z] of [[12.3, 21.7], [11.4, 22.2], [10.6, 21.5], [9.9, 22.0]]) ho.spawnKind(x, z, 90, {});
+    for (const [x, z] of [[14.6, 18.3], [16.6, 18.2], [12.4, 19.6]]) ho.spawnKind(x, z, 0, { speed: 0.4 });
+    ho.step(1 / 60, 62);
+  });
+  await shoot('69-inside-the-fence');
+
+  // 70. Up on the drums in the lobby corner (the corner a player once hid in), looking down at what has come for them.
+  await run(() => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.place(-7.94, -5.92, -128, -24, 0.87);
+    ho.step(1 / 60, 150);
+    for (const [x, z] of [[-5.2, -4.4], [-6.0, -2.9], [-4.1, -5.8], [-3.6, -3.2]]) ho.spawnKind(x, z, -120, {});
+    ho.step(1 / 60, 80);
+  });
+  await shoot('70-on-the-drums');
+  await run(() => window.__HO.clearRobots());
+
+  // 71 and 72. The truck in the loading dock, close up and from its side.
+  await run(() => {
+    const ho = window.__HO;
+    ho.place(-22.6, 15.9, 62, 2);
+    ho.step(1 / 60, 150);
+  });
+  await shoot('71-truck-front');
+  await run(() => {
+    const ho = window.__HO;
+    ho.place(-21.8, 10.4, 131, 0);
+    ho.step(1 / 60, 150);
+  });
+  await shoot('72-truck-side');
+
+  // 73. The server hall's west wall, from between two rows of racks.
+  await run(() => {
+    const ho = window.__HO;
+    ho.place(-7.2, 11.4, 90, 6);
+    ho.step(1 / 60, 150);
+  });
+  await shoot('73-server-hall-west-wall');
 }
 
 // 64. A phone: the title scene and a friendly note.
