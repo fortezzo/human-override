@@ -341,6 +341,8 @@ export interface DebugApi {
   };
   /** Leave a timed pickup on the floor. */
   dropPickup(id: PickupId, x: number, z: number): void;
+  /** Whether destroyed robots leave pickups by chance (they do, unless this is told otherwise); false also clears any lying about. */
+  randomDrops(on: boolean): void;
   /** Force a shutter up or run it down, at once and for nothing (every one of them if no id is given). */
   setShutter(shut: boolean, id?: string): void;
   /** The crate's next rolls use these numbers for dice, in order; after them, real ones again. */
@@ -962,6 +964,10 @@ export function installDebugApi(game: Game): DebugTools {
     },
     dropPickup(id, x, z) {
       game.pickups.drop(id, x, z);
+    },
+    randomDrops(on) {
+      game.randomDrops = on;
+      if (!on) game.pickups.clear();
     },
     setShutter(shut, id) {
       for (const gate of game.world.shutters.gates) {

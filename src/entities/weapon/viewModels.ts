@@ -27,6 +27,8 @@ export interface PartPaint {
   roughness: number;
   /** One of the game's own tiling surfaces, laid over it. */
   surface?: SurfaceId;
+  /** Brightens the surface beyond its photographed value (1 = as is): the steel surfaces are dark, and paint is not. */
+  gain?: number;
   /** It glows this colour, this strongly. */
   emissive?: number;
   glow?: number;
@@ -121,7 +123,7 @@ export const VIEW_MODELS: Record<WeaponId, ViewModelDef> = {
     paint: 1,
     roughness: 1,
     parts: {
-      body: { color: 0x9aa3ad, metalness: 1, roughness: 0.8, surface: 'Metal046B' },
+      body: { color: 0xd8d4c6, gain: 2.6, metalness: 0.3, roughness: 0.5, surface: 'Metal046B' },
       coil: { color: 0xc9a25a, metalness: 1, roughness: 0.42 },
       cell: { color: 0x0a1418, metalness: 0.2, roughness: 0.3, emissive: 0x4fe6ff, glow: 3.2 },
     },
@@ -153,6 +155,7 @@ export function dressGun(model: THREE.Object3D, def: ViewModelDef, assets: Asset
     material.envMapIntensity = look.env ?? 1.3;
     if (part) {
       material.color.setHex(part.color);
+      if (part.gain) material.color.multiplyScalar(part.gain);
       material.metalness = part.metalness;
       material.roughness = part.roughness;
       if (part.surface) {

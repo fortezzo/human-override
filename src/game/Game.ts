@@ -147,6 +147,8 @@ export class Game {
   godMode = false;
   /** Debug only: hide the weapon (for photographs of the room). */
   hideWeapon = false;
+  /** Debug only: false stops destroyed robots leaving pickups (for checks and pictures that must come out the same every time). */
+  randomDrops = true;
   /** Debug only: something that plays the game by itself, called once per frame while playing. */
   autopilot: { update(dt: number): void } | null = null;
 
@@ -940,7 +942,7 @@ export class Game {
    * and only somewhere the player can walk to.
    */
   private maybeDrop(robot: Robot): void {
-    if (robot.role || this.director.swarm || !insideRoom(robot.position.x, robot.position.z)) return;
+    if (!this.randomDrops || robot.role || this.director.swarm || !insideRoom(robot.position.x, robot.position.z)) return;
     const anyBroken = this.world.shutters.gates.some((gate) => gate.state.strength < SHUTTERS.strength);
     const id = rollDrop(this.economy.drops, PICKUPS, Math.random, (kind) => kind !== 'lockdown' || anyBroken);
     if (id) this.pickups.drop(id, robot.position.x, robot.position.z);

@@ -304,9 +304,9 @@ export class Effects {
     const distance = _dir.length();
     if (distance < 0.2) return;
     _dir.divideScalar(distance);
-    const step = Math.max(0.35, distance / 60);
-    for (let d = 0.4; d < distance; d += step) {
-      p.emitGlow({ x: from.x + _dir.x * d, y: from.y + _dir.y * d, z: from.z + _dir.z * d, vx: _dir.x * 6, vy: _dir.y * 6, vz: _dir.z * 6, life: 0.13, size: 0.05, sizeEnd: 0.012, r: color.r, g: color.g, b: color.b, alpha: 0.85, streak: 0.06 });
+    const step = Math.max(0.22, distance / 90);
+    for (let d = 0.3; d < distance; d += step) {
+      p.emitGlow({ x: from.x + _dir.x * d, y: from.y + _dir.y * d, z: from.z + _dir.z * d, vx: _dir.x * 4, vy: _dir.y * 4, vz: _dir.z * 4, life: 0.22, size: 0.09, sizeEnd: 0.02, r: color.r, g: color.g, b: color.b, alpha: 0.95, streak: 0.09 });
     }
     p.emitGlow({ x: to.x, y: to.y, z: to.z, vx: 0, vy: 0, vz: 0, life: 0.16, size: 0.5, sizeEnd: 0.12, r: color.r * 1.6, g: color.g * 1.6, b: color.b * 1.6, alpha: 0.8 });
   }

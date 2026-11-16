@@ -23,13 +23,16 @@ function folderSize(dir) {
   return total;
 }
 
-const site = await serve('dist', '/');
+// (HO_DIST=some-folder measures a copy of the build kept in that folder: an earlier stage's, to compare on the same day.)
+const DIST = process.env.HO_DIST ?? 'dist';
+const site = await serve(DIST, '/');
 const { browser, page } = await launch({ width: 1920, height: 1080 });
 page.on('pageerror', (e) => console.log('exception:', e.message));
 
 const started = Date.now();
 await page.goto(`${site.url}?debug=1`);
 await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+await page.evaluate(() => window.__HO.randomDrops?.(false));
 console.log(`GPU: ${await gpuName(page)}`);
 console.log(`Resolution: 1920 x 1080`);
 console.log(`Start-up: ${((Date.now() - started) / 1000).toFixed(1)} s to title screen (local files, no network delay)`);
@@ -156,6 +159,7 @@ const paced = async (width, height) => {
   const limited = await launch({ width, height, capped: true });
   await limited.page.goto(`${site.url}?debug=1`);
   await limited.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await limited.page.evaluate(() => window.__HO.randomDrops?.(false));
   await limited.page.evaluate(() => {
     const ho = window.__HO;
     ho.play();
@@ -216,6 +220,7 @@ await paced(3840, 2160);
   const fresh = await launch({ width: 1920, height: 1080, capped: true });
   await fresh.page.goto(`${site.url}?debug=1`);
   await fresh.page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await fresh.page.evaluate(() => window.__HO.randomDrops?.(false));
   await fresh.page.evaluate(() => {
     const ho = window.__HO;
     ho.play();
@@ -314,7 +319,8 @@ await paced(3840, 2160);
     });
   }, 2400);
   await first('the analysis shrinking into its corner', () => window.__HO.analysisBanner.hold('corner'));
-  // Stage 4: the things the economy puts on screen for the first time.
+  // Stage 4: the things the economy puts on screen for the first time. (Not in an earlier stage's build.)
+  if (!process.env.HO_DIST) {
   await first('a timed pickup lying on the floor', () => {
     const ho = window.__HO;
     ho.analysisBanner.hold(null);
@@ -357,6 +363,7 @@ await paced(3840, 2160);
     },
     5000,
   );
+  }
   const { frames, marks } = await fresh.page.evaluate(() => ({ frames: window.__frames, marks: window.__marks }));
   const ordered = frames.map((frame) => frame[1]).sort((a, b) => a - b);
   console.log(`\nFirst appearances at 1920 x 1080 on High, frame rate limited to the screen's (usual frame ${ordered[Math.floor(ordered.length / 2)].toFixed(1)} ms)`);
@@ -384,12 +391,12 @@ for (const mbps of [100, 50, 25]) {
   await context.close();
 }
 
-const total = folderSize('dist');
+const total = folderSize(DIST);
 console.log(`\nTotal download (dist/): ${(total / 1024 / 1024).toFixed(1)} MB`);
 for (const part of ['assets/models', 'assets/textures', 'assets/audio', 'assets/fonts', 'assets/env']) {
-  console.log(`  ${part}: ${(folderSize(path.join('dist', part)) / 1024 / 1024).toFixed(2)} MB`);
+  console.log(`  ${part}: ${(folderSize(path.join(DIST, part)) / 1024 / 1024).toFixed(2)} MB`);
 }
-const code = fs.readdirSync('dist/assets').filter((f) => /\.(js|css)$/.test(f)).reduce((n, f) => n + fs.statSync(path.join('dist/assets', f)).size, 0);
+const code = fs.readdirSync(path.join(DIST, 'assets')).filter((f) => /\.(js|css)$/.test(f)).reduce((n, f) => n + fs.statSync(path.join(DIST, 'assets', f)).size, 0);
 console.log(`  code (js + css): ${(code / 1024 / 1024).toFixed(2)} MB`);
 
 await browser.close();

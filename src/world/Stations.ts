@@ -257,6 +257,7 @@ export class StationSet {
   private lidAngle = 0;
   private crateOpen = false;
   private crateGlow!: THREE.MeshBasicMaterial;
+  private crateHalo!: THREE.SpriteMaterial;
   private crateLight!: LightDef;
   private readonly offers = new Map<WeaponId, THREE.Object3D>();
   private readonly offerHolder = new THREE.Group();
@@ -311,7 +312,7 @@ export class StationSet {
 
     this.fixed(plan, (b) => {
       // The cabinet, on a hazard-striped plinth.
-      box(b, 'darkSteel', 0, 0, -w, 0.5, 2.12, w, true, true);
+      box(b, 'stationPaint', 0, 0, -w, 0.5, 2.12, w, true, true);
       box(b, 'hazard', 0, 0, -w - 0.04, 0.54, 0.14, w + 0.04);
       box(b, 'steelPlate', 0.5, 0.2, -w + 0.06, 0.53, 2.04, w - 0.06);
       // Corner posts and a cap, so that it is not one plain box.
@@ -365,6 +366,10 @@ export class StationSet {
       group.add(strip.mesh);
       strips.push(strip.material);
     }
+    // A lamp bar under the sign, which is what lights the cabinet's face and the floor in front of it.
+    const bar = lamp(plan.normal[0] !== 0 ? [0.06, 0.03, 0.9] : [0.9, 0.03, 0.06], point(0.46, 2.215, 0));
+    group.add(bar.mesh);
+    strips.push(bar.material);
     const status = lamp([0.07, 0.07, 0.07], point(0.545, 1.9, -w + 0.16));
     group.add(status.mesh);
 
@@ -373,7 +378,7 @@ export class StationSet {
     cell.position.set(...point(0.585, 1.31, 0));
     group.add(cell);
 
-    const light: LightDef = { name: `station-${id}`, area: plan.area, kind: 'point', color, intensity: 5, position: point(1.0, 1.5, 0), distance: 4.6, when: 'powerOn' };
+    const light: LightDef = { name: `station-${id}`, area: plan.area, kind: 'point', color, intensity: 15, position: point(0.9, 1.8, 0), distance: 5.5, when: 'powerOn' };
     this.lights.push(light);
     this.boosts.set(id, { sign: sign.material, card: card.material, strips, status: status.material, canister: cell, light });
   }
@@ -388,7 +393,7 @@ export class StationSet {
 
     this.fixed(plan, (b) => {
       // The case: a steel tub on skids, strapped and cornered.
-      box(b, 'darkSteel', 0.08, 0.06, -w, 0.78, top, w, true, true);
+      box(b, 'cratePaint', 0.08, 0.06, -w, 0.78, top, w, true, true);
       for (const a of [-0.55, 0.47]) box(b, 'rustedSteel', 0.04, 0, a, 0.82, 0.06, a + 0.1, false, true);
       for (const a of [-w - 0.012, -0.3, 0.26, w - 0.03]) box(b, 'steelPlate', 0.068, 0.06, a, 0.792, top + 0.004, a + 0.042, false, true);
       box(b, 'hazard', 0.78, 0.3, -w + 0.1, 0.792, 0.42, w - 0.1);
@@ -426,7 +431,7 @@ export class StationSet {
     hinge.rotation.y = turn;
     this.lid = new THREE.Group();
     const lidBuilder = new LevelBuilder(this.assets, this.materials);
-    lidBuilder.box('darkSteel', [-w - 0.01, 0, -0.03], [w + 0.01, 0.07, 0.69], { collide: false });
+    lidBuilder.box('cratePaint', [-w - 0.01, 0, -0.03], [w + 0.01, 0.07, 0.69], { collide: false });
     for (const x of [-0.55, 0.47]) lidBuilder.box('steelPlate', [x, 0.07, -0.03], [x + 0.1, 0.082, 0.69], { collide: false, cast: false });
     lidBuilder.box('hazard', [-w + 0.1, 0.07, 0.5], [w - 0.1, 0.078, 0.6], { collide: false, cast: false });
     const lid = lidBuilder.build().group;
@@ -441,8 +446,24 @@ export class StationSet {
     group.add(glow.mesh);
 
     // What it offers: one of each gun, hanging over the open case, one shown at a time.
-    this.offerAt.set(...point(0.43, 1.12, 0));
+    this.offerAt.set(...point(0.43, 1.2, 0));
     this.offerHolder.position.copy(this.offerAt);
+    // A soft glow behind whatever is on offer, so that it stands out from the lid.
+    const halo = document.createElement('canvas');
+    halo.width = halo.height = 64;
+    const hg = halo.getContext('2d')!;
+    const fade = hg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    fade.addColorStop(0, 'rgba(255,255,255,0.9)');
+    fade.addColorStop(0.4, 'rgba(255,255,255,0.3)');
+    fade.addColorStop(1, 'rgba(255,255,255,0)');
+    hg.fillStyle = fade;
+    hg.fillRect(0, 0, 64, 64);
+    this.crateHalo = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(halo), color: 0x000000, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, toneMapped: false });
+    const haloSprite = new THREE.Sprite(this.crateHalo);
+    haloSprite.scale.setScalar(1.7);
+    haloSprite.position.set(...point(0.32, 1.2, 0));
+    haloSprite.userData.treatAsOpaque = true;
+    group.add(haloSprite);
     for (const id of Object.keys(WEAPONS) as WeaponId[]) {
       const view = VIEW_MODELS[id];
       const gun = this.assets.model(view.model).scene.clone(true);
@@ -452,14 +473,14 @@ export class StationSet {
       });
       const holder = new THREE.Group();
       holder.add(gun);
-      holder.scale.setScalar(Math.min(1, 0.72 / view.length));
+      holder.scale.setScalar(Math.min(1.8, 0.95 / view.length));
       holder.visible = false;
       this.offers.set(id, holder);
       this.offerHolder.add(holder);
     }
     group.add(this.offerHolder);
 
-    this.crateLight = { name: 'station-crate', area: plan.area, kind: 'point', color, intensity: 2.2, position: point(0.9, 1.4, 0), distance: 5.5 };
+    this.crateLight = { name: 'station-crate', area: plan.area, kind: 'point', color, intensity: 7, position: point(0.9, 1.5, 0), distance: 6 };
     this.lights.push(this.crateLight);
   }
 
@@ -477,7 +498,7 @@ export class StationSet {
       box(b, 'steelPlate', 0, 0.86, -w, 0.72, 0.92, w, false, true);
       box(b, 'rustedSteel', 0.7, 0.84, -w, 0.73, 0.92, w);
       for (const [a0, a1] of [[-w, -0.45], [0.45, w]] as const) {
-        box(b, 'darkSteel', 0.04, 0, a0 + 0.02, 0.68, 0.86, a1 - 0.02, false, true);
+        box(b, 'stationPaint', 0.04, 0, a0 + 0.02, 0.68, 0.86, a1 - 0.02, false, true);
         for (const u of [0.18, 0.42, 0.66]) {
           box(b, 'steelPlate', 0.68, u - 0.09, a0 + 0.06, 0.69, u + 0.09, a1 - 0.06);
           b.tube('rustedSteel', point(0.71, u, a0 + 0.2), point(0.71, u, a1 - 0.2), 0.012, false);
@@ -485,12 +506,12 @@ export class StationSet {
       }
       box(b, 'steelPlate', 0.06, 0.2, -0.45, 0.62, 0.23, 0.45);
       // The back board: tools on pegs, a shelf, the screen's housing.
-      box(b, 'darkSteel', 0, 0.92, -w, 0.05, 2.0, w, false, true);
+      box(b, 'stationPaint', 0, 0.92, -w, 0.05, 2.0, w, false, true);
       box(b, 'steelPlate', 0.05, 1.62, -w, 0.3, 1.65, w, false, true);
       for (const [a, len] of [[-0.86, 0.34], [-0.72, 0.26], [-0.58, 0.4], [0.56, 0.3], [0.7, 0.42], [0.84, 0.24]] as const) b.tube('rustedSteel', point(0.065, 1.5, a), point(0.065, 1.5 - len, a), 0.014, false);
       for (const a of [-0.86, -0.72, -0.58, 0.56, 0.7, 0.84]) b.tube('darkSteel', point(0.05, 1.53, a), point(0.1, 1.53, a), 0.008, false);
       // The cradle the weapon lies in: two blocks with a notch.
-      for (const a of [-0.22, 0.22]) {
+      for (const a of [0.08, 0.52]) {
         box(b, 'rustedSteel', 0.28, 0.92, a - 0.04, 0.5, 0.98, a + 0.04, false, true);
         box(b, 'darkSteel', 0.28, 0.98, a - 0.04, 0.33, 1.05, a + 0.04, false, true);
         box(b, 'darkSteel', 0.45, 0.98, a - 0.04, 0.5, 1.05, a + 0.04, false, true);
@@ -517,8 +538,8 @@ export class StationSet {
     sign.mesh.rotation.y = turn;
     group.add(sign.mesh);
     this.benchSign = sign.material;
-    const card = panelQuad(this.panels.texture, this.panels.card(['UPGRADES THE', 'WEAPON IN HAND'], `FROM ${BENCH.price}`, css(color), ICONS.bench), 0.92, 0.27);
-    card.mesh.position.set(...point(0.054, 1.84, 0));
+    const card = panelQuad(this.panels.texture, this.panels.card(['UPGRADES THE', 'WEAPON IN HAND'], `FROM ${BENCH.price}`, css(color), ICONS.bench), 0.86, 0.252);
+    card.mesh.position.set(...point(0.054, 1.84, 0.58));
     card.mesh.rotation.y = turn;
     group.add(card.mesh);
     this.benchCard = card.material;
@@ -534,7 +555,7 @@ export class StationSet {
 
     // The arm: two links on a shoulder at the back, with the emitter at its end.
     const shoulder = new THREE.Group();
-    shoulder.position.set(...point(0.12, 1.58, 0.1));
+    shoulder.position.set(...point(0.12, 1.58, 0.3));
     shoulder.rotation.y = turn;
     this.benchArm = new THREE.Group();
     const steel = new THREE.MeshStandardMaterial({ color: 0x2a2e33, metalness: 0.9, roughness: 0.45 });
@@ -553,9 +574,9 @@ export class StationSet {
     this.benchArm.add(upper, elbow, fore, tip);
     shoulder.add(new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), steel), this.benchArm);
     group.add(shoulder);
-    this.benchAt.set(...point(0.4, 1.06, 0.1));
+    this.benchAt.set(...point(0.4, 1.06, 0.3));
 
-    this.benchLight = { name: 'station-bench', area: plan.area, kind: 'point', color, intensity: 5, position: point(1.0, 1.6, 0), distance: 5, when: 'powerOn' };
+    this.benchLight = { name: 'station-bench', area: plan.area, kind: 'point', color, intensity: 16, position: point(0.9, 1.75, 0), distance: 6, when: 'powerOn' };
     this.lights.push(this.benchLight);
   }
 
@@ -610,7 +631,7 @@ export class StationSet {
       else parts.status.color.copy(color).multiplyScalar(2.4);
       parts.canister.visible = !owned;
       (parts.canister.material as THREE.MeshBasicMaterial).color.copy(color).multiplyScalar(this.power ? 2.6 : 0.12);
-      parts.light.intensity = owned ? 2 : 5;
+      parts.light.intensity = owned ? 7 : 15;
     }
     if (this.benchSign) {
       this.benchSign.color.setScalar(this.power ? 2.3 : 0.16);
@@ -626,17 +647,18 @@ export class StationSet {
     this.lid.rotation.x = -this.lidAngle;
     const open = this.lidAngle / 1.42;
     this.crateGlow.color.set(STATION_COLOR.crate).multiplyScalar(0.05 + 3.2 * open);
-    this.crateLight.intensity = 2.2 + 7 * open;
+    this.crateLight.intensity = 7 + 12 * open;
+    this.crateHalo.color.set(STATION_COLOR.crate).multiplyScalar(this.offered ? 0.5 * open : 0);
     this.offerHolder.rotation.y = time * 1.6;
     this.offerHolder.position.y = this.offerAt.y + Math.sin(time * 2.2) * 0.03;
 
     // The bench: its arm folded back at rest, down over the cradle while it works.
     this.working = Math.max(0, this.working - dt);
     const busy = this.working > 0 ? Math.min(1, this.working / 0.25, (1.4 - this.working) / 0.2) : 0;
-    this.benchArm.rotation.x = damp(this.benchArm.rotation.x, busy > 0 ? 0.62 + Math.sin(time * 23) * 0.03 : -0.5, 12, dt);
+    this.benchArm.rotation.x = damp(this.benchArm.rotation.x, busy > 0 ? 0.62 + Math.sin(time * 23) * 0.03 : 0.12, 12, dt);
     const spark = busy > 0 ? 1.2 + 2.6 * Math.abs(Math.sin(time * 37)) : 0;
     this.benchTip.color.set(STATION_COLOR.bench).multiplyScalar(this.power ? 0.25 + spark : 0.02);
     this.benchCoil.forEach((ring, i) => ring.color.set(STATION_COLOR.bench).multiplyScalar(this.power ? (busy > 0 ? 1 + 2.2 * Math.abs(Math.sin(time * 14 - i * 1.1)) : 0.5 + 0.25 * Math.sin(time * 2 - i)) : 0.02));
-    this.benchLight.intensity = 5 + 6 * busy;
+    this.benchLight.intensity = 16 + 10 * busy;
   }
 }

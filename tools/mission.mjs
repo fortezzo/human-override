@@ -75,7 +75,7 @@ const median = (values) => {
 
 const names = { firstTimer: 'first-timer', regular: 'regular player', skilled: 'skilled player', expert: 'expert' };
 console.log(`${runs} missions as the ${names[pilot] ?? pilot}, no god mode\n`);
-console.log('run   outcome                                     time   round   keys   accuracy   destroyed   carrying');
+console.log('run   outcome                                     time   round   keys   accuracy   destroyed   carrying             boosts bought (bench upgrades)   revived   scrap unspent');
 const results = [];
 const started = Date.now();
 for (let n = 0; n < runs; n++) {
@@ -124,6 +124,11 @@ for (let n = 0; n < runs; n++) {
         kills: stats.kills,
         accuracy: stats.shots ? stats.shotsHit / stats.shots : 0,
         slots: run.slots.filter(Boolean).join(' + '),
+        // What it spent its scrap on, beyond guns and doors.
+        boosts: Object.entries(game.economy.boosts.bought).filter(([, times]) => times > 0).map(([id]) => id),
+        upgrades: game.weapons.loadout.slots.reduce((sum, slot) => sum + (slot ? slot.level : 0), 0),
+        revives: stats.revives,
+        unspent: game.wallet.scrap,
         time: stats.time,
         marks: { ...marks },
       };
@@ -135,7 +140,7 @@ for (let n = 0; n < runs; n++) {
   results.push(state);
   const outcome = state.saved ? 'HUMANITY SAVED' : state.timedOut ? `still going: ${state.doing.toLowerCase()}` : `down: ${state.doing.toLowerCase()}`;
   console.log(
-    `${String(n + 1).padStart(3)}   ${outcome.slice(0, 42).padEnd(42)} ${clock(state.saved ? state.marks.saved.time : state.time).padStart(5)}   ${String(state.saved ? state.marks.saved.round : state.round).padStart(5)}   ${`${state.keys}/3`.padStart(4)}   ${`${Math.round(state.accuracy * 100)}%`.padStart(8)}   ${String(state.kills).padStart(9)}   ${state.slots}`,
+    `${String(n + 1).padStart(3)}   ${outcome.slice(0, 42).padEnd(42)} ${clock(state.saved ? state.marks.saved.time : state.time).padStart(5)}   ${String(state.saved ? state.marks.saved.round : state.round).padStart(5)}   ${`${state.keys}/3`.padStart(4)}   ${`${Math.round(state.accuracy * 100)}%`.padStart(8)}   ${String(state.kills).padStart(9)}   ${state.slots.padEnd(20)} ${`${state.boosts.length} (${state.upgrades})`.padEnd(32)} ${String(state.revives).padStart(7)}   ${String(state.unspent).padStart(13)}`,
   );
 }
 
@@ -176,6 +181,11 @@ if (lost.length) {
   console.log(`Went down: ${lost.length} of ${runs}, in round ${median(rounds)} (median; ${Math.min(...rounds)} to ${Math.max(...rounds)}). What they were doing:`);
   for (const [what, count] of Object.entries(where).sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(3)} x  ${what}`);
 }
+// ---- What they spent on.
+const tally = {};
+for (const r of results) for (const id of r.boosts) tally[id] = (tally[id] ?? 0) + 1;
+console.log(`\nBoosts bought (runs out of ${runs}): ${Object.entries(tally).map(([id, count]) => `${id} ${count}`).join(', ') || 'none'}.`);
+console.log(`Bench upgrades: median ${median(results.map((r) => r.upgrades))} a run. The fail-safe brought them back in ${results.filter((r) => r.revives > 0).length} runs. Scrap unspent at the end: median ${median(results.map((r) => r.unspent))}.`);
 const stuck = results.filter((r) => r.timedOut);
 if (stuck.length) console.log(`\n${stuck.length} run(s) were still going after ${MINUTE_CAP} game minutes and were stopped. That is worth a look: something may be out of reach.`);
 console.log(`\n(${((Date.now() - started) / 1000).toFixed(0)} seconds to play them.)`);

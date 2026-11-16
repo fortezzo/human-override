@@ -171,7 +171,7 @@ export function buildCore(assets: Assets, materials: MaterialLibrary): AreaBuild
   const plate = atlas.text('KILL SWITCH', { size: 90, color: PAINT.amber, plate: '#0d0f11', wear: 0 });
   put(plate, [cx, 0.72, cz - 0.002], [0, 0, -1], 1.1, { emissive: 2.4, tint: 0xffb060 });
   put(atlas.text('MANUAL OVERRIDE', { size: 90, color: PAINT.yellow, wear: 0.5 }), [cx, 0.262, cz - 1.25], [0, 1, 0], 2.4, { opacity: 0.8, roll: Math.PI });
-  put(atlas.text(['ARGUS CORE', 'NODE 04'], { size: 70, wear: 0.4 }), [x0, 2.6, 30.5], [1, 0, 0], 1.9, { opacity: 0.7 });
+  put(atlas.text(['ARGUS CORE', 'NODE 04'], { size: 70, wear: 0.4 }), [x0, 2.6, 30.42], [1, 0, 0], 1.7, { opacity: 0.7 });
   put(atlas.text(['NO UNESCORTED', 'ACCESS'], { size: 60, color: PAINT.red, box: true, plate: PAINT.white, wear: 0.35 }), [x1, 2.3, 30.5], [-1, 0, 0], 1.5, { opacity: 0.9 });
 
   // ---- Lighting: one cold shaft on the dais, red from the eye

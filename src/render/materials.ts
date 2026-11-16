@@ -59,6 +59,10 @@ const DEFS = {
   containerOchre: { surface: 'corrugated_iron_02', tile: 1.3, kind: 'metal', tint: 0xc7a54c, roughness: 0.95 },
   truckPaint: { surface: 'Metal046B', tile: 1.6, kind: 'metal', tint: 0xdfe3e6, roughness: 0.55, metalness: 0.25 },
   darkGlass: { surface: 'Metal046B', tile: 1.0, kind: 'glass', tint: 0x1c232a, roughness: 0.22, metalness: 0.7, envIntensity: 1.5 },
+  // The stations. Painted, not bare: bare steel in a dark room is a black
+  // shape, and paint takes the light of the station's own lamp.
+  stationPaint: { surface: 'Metal046B', tile: 1.3, kind: 'metal', tint: 0xb4bcc2, gain: 1.35, roughness: 0.62, metalness: 0.2 },
+  cratePaint: { surface: 'Metal046B', tile: 1.3, kind: 'metal', tint: 0x8c9a70, gain: 1.45, roughness: 0.7, metalness: 0.2 },
   // The robotics lab: pale panels and a cleaner floor.
   wallLab: { surface: 'painted_plaster_wall', tile: 2.6, kind: 'concrete', tint: 0xdfeae6, roughness: 0.8, normalScale: 0.8 },
   labPanel: { surface: 'metal_plate_02', tile: 2.0, kind: 'metal', tint: 0xe6ecee, gain: 1.9, roughness: 0.75, normalScale: 1.0 },

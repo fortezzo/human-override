@@ -1,10 +1,10 @@
 # How HUMAN OVERRIDE works
 
-A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 3: the core loop, the mission, and ARGUS) and is extended as each stage is added.
+A plain-English tour, written so you can explain the game to someone who asks "how does it actually work?" It covers what exists today (Stage 4: the core loop, the mission, ARGUS, and everything scrap can buy) and is extended as each stage is added.
 
 ## The one-paragraph version
 
-The game is a web page. When it opens, it downloads about 17 MB of pictures, 3D models and sounds, builds a 3D building out of them, and then redraws it 60 or more times a second from wherever you are standing. Every redraw is one "frame". Between frames the game does a little bookkeeping: move the player, move the robots, check whether bullets hit anything, decide whether another robot should come in, play sounds. That loop of "update a little, draw, repeat" is the whole game.
+The game is a web page. When it opens, it downloads about 18 MB of pictures, 3D models and sounds, builds a 3D building out of them, and then redraws it 60 or more times a second from wherever you are standing. Every redraw is one "frame". Between frames the game does a little bookkeeping: move the player, move the robots, check whether bullets hit anything, decide whether another robot should come in, play sounds. That loop of "update a little, draw, repeat" is the whole game.
 
 ## What it is built with
 
@@ -18,15 +18,17 @@ There is no server behind it. Once the files are downloaded, everything runs on 
 
 **Rounds.** A round is a fixed number of robots: 6 in round 1, 10 in round 2, then 14, 18, 23, 29 and so on. They do not all arrive at once: one comes in every two and a half seconds or so (every two seconds from round 9), and never more than 24 are on the map together. When the last one is destroyed there is a fifteen-second lull, then the next round starts with more robots that are tougher and faster. Toughness climbs quickly for the first six rounds and slowly after that. From round 5 some of them run, slowly at first; by round 14 the runners are just under your own sprinting speed, but never more than half the horde runs. A round lasts about half a minute at the start and a minute and a half by round 10. All of this is one small table of numbers in a single file (`src/config.ts`), so the difficulty can be retuned without touching the rest of the code, and it has been: see "How the difficulty was set" further down.
 
+**Swarms.** Every fifth round is different: a swarm of fast drones and nothing else, which ends with a Full Resupply (see "The economy" below).
+
 **Scrap.** Destroying robots pays scrap: 10 for a hit, 60 for a kill, 100 for a kill through the head, 130 for a kill with the melee strike. The riskier the kill, the better it pays. The shotgun pays for one hit per shell however many of its nine pellets land, or it would print money.
 
-**Spending it.** Guns hang on wall racks with their price beside them; walk up, press F. Buying a gun you already own refills its ammunition for less. Doors cost scrap too, and stay open. You can only carry two guns, so a third replaces the one in your hands. Every purchase goes through one small piece of code that checks the price, takes the scrap and reports what happened, which is what lets a test buy everything in the game and add up the bill.
+**Spending it.** Guns hang on wall racks with their price beside them; walk up, press F. Buying a gun you already own refills its ammunition for less. Doors cost scrap too, and stay open. You can only carry two guns, so a third replaces the one in your hands. Every purchase goes through one small piece of code that checks the price, takes the scrap and reports what happened, which is what lets a test buy everything in the game and add up the bill. Guns and doors are only the start of it: the six stations, the shutters, the pickups and the grenades have a section of their own below ("The economy").
 
 **Running away.** Sprinting is paid for with stamina, the thin bar under your health. A full bar is four seconds of sprinting. It starts refilling a second after you stop, and if you run it dry you are "winded": walking pace only until about a third of it has come back. So running buys time, not safety. Robots are also solid: you cannot run through one, and a crowd can box you in.
 
 **Taking hits.** A robot's blow takes a fifth of your health, and after one lands there is six tenths of a second in which another cannot. So a crowd needs five blows and at least 2.4 seconds to put you down from full health (in practice rather longer: a blow that would land inside that gap is lost, not put off, and each robot swings again a second and a half later), and health starts coming back three seconds after the last one. It is the difference between "I was overwhelmed" and "I died and do not know why". (Until the first real person played the whole mission it was four blows in 1.35 seconds, which is quicker than anyone can react; see "How the difficulty was set".)
 
-**Going down.** Your health comes back if nothing hits you for four seconds. If it reaches zero, the run ends, the game shows how far you got, and "Play Again" puts everything back exactly as it was at the start: robots, doors, guns, scrap, timers.
+**Going down.** Your health comes back if nothing hits you for three seconds. If it reaches zero and you are carrying the fail-safe, it is used up and you are back on your feet (see "The economy"). Otherwise the run ends, the game shows how far you got, and "Play Again" puts everything back exactly as it was at the start: robots, doors, guns, scrap, timers.
 
 The rules for all of this (how a round grows, what a hit pays, what a purchase does) are written as plain logic with no graphics in them, in `src/sim/`. That separation is what makes them testable: a test can play out round 30 in a thousandth of a second without drawing anything.
 
@@ -38,7 +40,7 @@ The mission is a checklist with an order to it, and it lives in one small file o
 2. **Recover three override keys**, in any order:
    - one sits in the **key cage** in the robotics lab, next door to the power room, whose lock lets go when the power comes back (it was in the power room itself until the map grew: the walk through the lab is the reason to open it);
    - one is issued by the **uplink** in the server hall to whoever starts it and then holds the ground around it for sixty seconds. The clock only runs while you are standing inside the ring on the floor; step out and it stops, keeping what you have earned, which is what lets you back off to recover and come back. While it runs, ARGUS sends extra robots at it: none in the first two rounds, then one more at a time for every three rounds played, up to four, so an uplink started early is a smaller fight than one started late. And while it runs no more than seven robots are on the map at once, the round's own and the uplink's together; the rest of the round waits. Holding ground means standing where every robot knows to find you, and a round that would be fair to someone free to run is not fair to someone who is not;
-   - one is carried by the **Custodian**, a tall, pale security machine that comes for the last key: it arrives with the first round to start once you hold the other two, and never before round 8. So the mission is as long as you make it. (It used to arrive with round 11 whatever you had done, and a fast player spent three rounds with nothing to do but wait.) Destroy it and the key drops where it fell.
+   - one is carried by the **Custodian**, a tall, pale security machine that comes for the last key: it arrives with the first round to start once you hold the other two, and never before round 6. So the mission is as long as you make it. (It used to arrive with round 11 whatever you had done, and a fast player spent three rounds with nothing to do but wait. Then it was "never before round 8", and you brought that down to 6: you would rather more people reach the ending than keep the mission long.) Destroy it and the key drops where it fell.
 3. **Unseal the core** with the three keys, **arm the kill switch**, and **hold the core** for the 75 seconds it takes to arm. The switch only arms while you are inside the core: step out and its clock stops, exactly as the uplink's does, and the tracker says GET BACK TO THE CORE. Running laps of the map does not win the game. This is the final stand: the ordinary rounds stand aside and ARGUS sends a heavy horde that presses in at a walk (one in five runs), and ten seconds in, its own unit, the **Proxy**: half as tall again as anything else, with eight times the health of an ordinary robot. It is too big for the ceiling ducts, so it comes in on foot, through one of the loading dock's truck bays if you have opened the dock and across the front yard if you have not, and in through the core's door, where you can see it coming from across the room.
 4. **Pull the switch.** Every robot on the map goes limp and falls where it stands. ARGUS's eye on the core wall gutters twice and goes dark in a little over a second, the red light it threw on the room dies with it, the red lights on its machines go out, the monitors that showed its eye read ARGUS OFFLINE, and cold working light comes up in its place. Then the HUMANITY SAVED screen shows your run. From there you can stop, or keep fighting for a higher round (the machines still outside "have not heard").
 
@@ -93,6 +95,88 @@ From round 4 the horde is no longer all one kind. The specials take the place of
 - **Heavies** (from round 8: one; two from round 12). Slow, a third bigger, with four times the health and plating that turns seven tenths of any hit. The plating has one opening: the reactor burning in the middle of its chest. A shot there does full weak-point damage. Shoot the glow. It is the ordinary robot's body and head underneath, in armour made for it: a breastplate in two halves that close on the reactor's housing, strips down the belly that lap one another, shoulder plates in two layers carried on a strut, shaped plates down the legs with a hinged cap over each knee, and a helm round the ordinary robot's own visor. Stood beside one of the horde it is plainly the same make of machine, built heavier.
 
 All three are built in code on the same skeleton as the ordinary robot (the drone simply has nothing built on its limbs, and the game holds it in the air), so they needed no new downloads, and they share its path-finding, hit testing and the way it breaks apart.
+
+## The economy: what scrap buys
+
+Scrap is the only currency. You earn it by hitting and destroying robots, and Stage 4 is everything it can be spent on. The rules for all of it are small files in `src/sim/` (`boosts.ts`, `bench.ts`, `crate.ts`, `pickups.ts`, `shutters.ts`, `grenades.ts`), each with unit tests, and every price and number is in `src/config.ts`.
+
+### A station in every area
+
+There are six stations and six areas, one in each, so that every area is worth going to.
+
+| Area | Station | What it does | Price |
+| --- | --- | --- | --- |
+| Security lobby | **FAILSAFE** (a Boost Station) | One self-revive | 1,500, then 1,000 more each time it is bought again |
+| Power room | **CARAPACE** (a Boost Station) | More health: 160 where it was 100 | 2,500 |
+| Server hall | **AUTOLOADER** (a Boost Station) | Reloading takes six tenths of the time | 1,500 |
+| Core | **HAIR TRIGGER** (a Boost Station) | A quarter less time between shots | 2,000 |
+| Loading dock | **The Prototype Crate** | A random weapon | 1,000 a go |
+| Robotics lab | **The Overclock Bench** | Upgrades the weapon in your hands, up to four times | 2,000, 3,500, 5,000, 6,500 |
+
+The four Boost Stations and the bench are dead until the power is on (their prompt says so), which is one more reason to restore it first. The crate has no need of it.
+
+Each station is a painted cabinet built from the same kit as the rooms, with a lit sign and a lamp of its own colour that can be seen across a room: violet for the fail-safe, green for health, amber for reloading, red for rate of fire, pale gold for the crate and blue for the bench. A Boost Station holds a glowing charge in its alcove; when you buy the boost the charge is gone from the cabinet and a tag in the same colour appears above your health bar.
+
+### The boosts
+
+A boost lasts for the whole run. Three of them are simple: more health (and buying it fills you up), a faster reload, a faster rate of fire. The last two apply to every gun you carry or pick up later.
+
+The fourth is the fail-safe. When a blow would put you down and you are carrying it, it is used up instead: you are back on your feet with six tenths of your health, nothing can hurt you for three seconds, and every robot within five metres is knocked off balance, which is the gap you need to get out of the crowd. Then it is gone. Its station will sell you another, for 1,000 more each time (1,500, 2,500, 3,500 and so on), which is one of the things that keeps scrap useful in a long run.
+
+### The Overclock Bench
+
+The bench works on whichever weapon is in your hands. Each upgrade adds three tenths of the gun's original damage and a fifth of its original magazine and spare ammunition, and hands it back full. A weapon can be overclocked four times (it is then a "Mk V", with more than twice the damage it had off the wall), each time for more than the last. The level belongs to that one gun: swap it for another and the upgrades are left behind with it. Ammunition for an overclocked gun is bought at the same wall rack as before.
+
+### The Prototype Crate
+
+Pay, the lid comes up, weapons flicker past for a couple of seconds, and it settles on one, which hangs there for nine seconds. Press F again to take it, or walk away and the lid shuts on it. What it can offer:
+
+- **The Turncoat**, the one weapon found nowhere else (see below). The chance is one in five, and grows by one in ten with every go that does not produce it, so nobody goes a dozen tries without seeing it. It is not offered while you are carrying one.
+- Otherwise **one of the ordinary guns, already overclocked**. A gun you are not carrying comes as a Mk II. A gun you are carrying comes one level above yours, and takes its place. So the crate never offers something worse than what you have, and at 1,000 it is a cheaper way up than the bench, if you are willing to take what comes.
+
+### The Turncoat
+
+The crate's special weapon fires a beam, and a robot it hits changes sides: its lights turn the pale blue of everything that is on your side, it goes for the nearest robot and strikes it (hard enough to destroy an ordinary one), and after ten seconds its own core burns out. Everything it destroys, and the turned robot itself when it burns out, counts as yours: the scrap and the round both. A turned bomber runs into the others and goes off among them, and that blast does not hurt you.
+
+ARGUS's own machines, the Custodian and the Proxy, cannot be turned; the beam only hurts them, and the HUD says CANNOT BE TURNED. And ARGUS can answer the Turncoat as it answers any gun you lean on: robots shielded against it are turned for half as long.
+
+It comes with sixteen shots and no wall rack sells more: only a Full Resupply refills it. (The bench will overclock it, which adds shots and nothing else.)
+
+Its model is the fourth of the gun models you downloaded. The pictures that came with it look like they belong to a scanned-surface library with a licence of its own, so none of them is used: the game keeps only its shape (a twelfth of the triangles it came with, which is still more than the sidearm's) and paints it from surfaces it already had.
+
+### Timed pickups
+
+A destroyed robot sometimes leaves a badge of light turning in the air under a thin shaft that can be seen across a room. Walk into it to take it.
+
+| Pickup | What it does |
+| --- | --- |
+| **Full Resupply** | Every weapon you carry is filled, and your grenades |
+| **Overload** | For 20 seconds every hit destroys what it lands on |
+| **EMP Blast** | Every robot on the map is destroyed, and they are your kills |
+| **Double Scrap** | For 30 seconds everything pays double |
+| **Lockdown** | Every shutter is repaired |
+
+The chance is one kill in twenty-five, with two limits so that they stay an event: no more than three in a round, and at least five kills between one and the next. One lies for 25 seconds, blinking for the last six. Overload and Double Scrap show on the HUD with a bar that drains. Three things keep them honest: ARGUS's own machines are not destroyed by an EMP or by one hit under Overload (the blast takes a quarter of their health, and Overload triples what a hit does to them); a Lockdown is never left when there is no shutter to repair; and nothing is left where you could not walk to it.
+
+### Shutters
+
+The five openings robots walk in through (the main entrance, the breach in the power room, the two truck bays and the lab's hatch) have roller shutters, and a run now begins with all of them down. A robot outside one has to batter it: five blows and it is wrenched up, crooked, the way all the shutters in the building used to hang. So the first thing you hear in a run is something beating on the entrance, and the first robot is indoors about thirteen seconds in.
+
+From indoors, F runs a forced or battered shutter back down for 50 scrap, and whatever is outside has to start again. That buys seconds, not safety: every area has a ceiling vent as well. Down, a shutter stops you and your bullets too. It cannot be run down while you are outside it or under it, so you cannot shut yourself out; a Lockdown leaves that one shutter alone for the same reason. ARGUS's Proxy takes one down with a single blow.
+
+Robots find their way as though every shutter were open (their way in is through one), walk up to it, and strike it instead of you. That is the only change to how they move.
+
+### Grenades
+
+G throws one. It flies, bounces once or twice, stops near where it lands and goes off 1.7 seconds after leaving your hand (thrown level, that is about twelve metres away): everything within five and a half metres is hurt, most at the middle, where it does three times an ordinary robot's health. It hurts you too if you are close, though less than a bomber's blast. You start a run with two, each new round hands you another, and you can carry four; a Full Resupply fills the pouch.
+
+### Swarm rounds
+
+Every fifth round is a swarm: drones and nothing else, fourteen the first time and six more each time after, coming in quickly but never more than ten on the map at once. The announcement says SWARM. ARGUS's counters are made for the ordinary robots, so it announces none before a swarm and what it had in force waits a round. The last drone to be destroyed leaves a Full Resupply where it fell, and that one waits a full minute.
+
+### Where the scrap goes over a long run
+
+You told me you finished with far more scrap than you could spend, with ammunition the only thing left to buy. Now, on top of the doors (7,250 for all of them) and the wall weapons: the four boosts are 7,500; a fail-safe costs more every time; taking one gun to the top at the bench is 17,000, and two is 34,000; and the crate is 1,000 a go for as long as you like. For scale: the first-timer model earns 15,000 to 18,000 scrap in a run that ends in round 8 and 38,000 to 47,000 in one that reaches round 12. So during the mission you choose two or three things, and a long run does not run out of things to buy.
 
 ## How the map works
 
@@ -247,7 +331,9 @@ The code was written by an AI agent that cannot hold a mouse, so the project car
 
 - **A whole mission, scripted.** The same test plays the mission from the first breaker to HUMANITY SAVED: it stands where a player would stand and presses F at each step, holds the uplink for its sixty seconds (and walks away for ten of them to check the clock stops), shoots the Custodian and the Proxy until they are destroyed, pulls the switch, checks every robot has gone down, then fights on through three more rounds. It also tries each step too early and checks that nothing happens.
 
-- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and shops. It comes in four characters. The "expert" never misses and is there to prove the game can be played. The "first-timer" is a rough model of someone new to this kind of game: slow to notice a robot, shaky, aims at the body, backs away late, runs when hurt. The "skilled" player is quick but not instant, on target most of the time, sprints clear to reload, keeps both guns loaded and topped up, and gets ready before starting a fight. The "regular" is the one the mission is now paced for. The first real person to finish the mission said the skilled model was stronger than they were and that a human is closer to the first-timer, so the regular has nearly the first-timer's hands (a little quicker and steadier, still aiming at the body three shots in four) and the habits of someone on their fourth or fifth attempt: it reloads in the lulls, brings the good gun to a fight, breaks out of a crowd, and does not back into the yards the robots walk in from. Any of them can also be told to play the mission, following the objective tracker as a person would.
+- **The economy, used.** The same test goes to every station and presses F: each boost with the power off (nothing is sold, nothing is charged) and on (its price, once, and then the thing its sign promises is measured: the health, the reload time, the time between shots); the bench twice on the same gun; the crate with its dice fixed, once taking what it offers and once leaving it. It lets robots put the player down with a fail-safe in hand (back up, once) and then without. It counts the five blows a robot needs to force a shutter, repairs it, and tries to repair it from the wrong side. It takes every pickup and measures what changed, throws a grenade into a pack, plays to the fifth round and checks that every robot of it is a drone, and turns a robot with the Turncoat and watches it destroy its neighbour and burn out.
+
+- **An autopilot** (the 0 key in debug mode) plays the game by itself: it backs away from what is close, shoots what is nearest, reloads, and shops. It comes in four characters. The "expert" never misses and is there to prove the game can be played. The "first-timer" is a rough model of someone new to this kind of game: slow to notice a robot, shaky, aims at the body, backs away late, runs when hurt. The "skilled" player is quick but not instant, on target most of the time, sprints clear to reload, keeps both guns loaded and topped up, and gets ready before starting a fight. The "regular" is the one the mission is now paced for. The first real person to finish the mission said the skilled model was stronger than they were and that a human is closer to the first-timer, so the regular has nearly the first-timer's hands (a little quicker and steadier, still aiming at the body three shots in four) and the habits of someone on their fourth or fifth attempt: it reloads in the lulls, brings the good gun to a fight, breaks out of a crowd, and does not back into the yards the robots walk in from. Any of them can also be told to play the mission, following the objective tracker as a person would. Since Stage 4 they use part of the economy as well: all of them buy a boost when they are standing by its station with the scrap for it and walk into pickups; the regular and the skilled also make the trip to a station, overclock their best gun once the boosts they can reach are bought, and throw a grenade at a pack. None of them opens the crate or repairs a shutter.
 
 - **Whole runs, played many times.** Two tools use those characters to answer questions about difficulty, without drawing anything (so a fifteen-minute run takes about twenty seconds). `npm run balance` plays ordinary rounds and reports the round each run ended in. `npm run mission` plays the whole mission with no god mode and reports when each step was reached, in what round, and how each run ended. They are models, not people: they show whether the numbers are in the right place, not how the game feels.
 
@@ -298,10 +384,12 @@ The ordinary rounds themselves were left alone: how many robots a round sends, h
 
 After it, the two models nearest to a real person (the first-timer and the regular) each finish about one mission in four, where neither finished any; the skilled model finishes nine in ten. A finished mission takes ten to fifteen minutes and ends in round 8 or 9, which is the other target you changed: the mission's length follows how you play, and a fast one ending before round 10 is fine.
 
-The numbers the models produce now are in PROGRESS.md, with how many runs each is based on. They will move again in Stage 4, when the player gets boosts, a better weapon and grenades, and the same tools will measure them again. If that leaves the game too easy, that is a question for you and not something to be tuned back unasked.
+**Then Stage 4 gave the player the economy, and you let the Custodian come from round 6.** Nothing was made harder to pay for either. The same tools measured it again: the first-timer model now finishes about half its missions (31 of 60) and the regular about two in three (40 of 60), where each finished one in four; the skilled finishes 28 of 32. A finished mission takes about nine minutes and ends in round 7 or 8. In ordinary rounds the first-timer still goes down in round 9 (the median of 16 runs). The mission's last fight is no longer hard for the models (the regular wins 40 of 43 final stands, where it won 12 of 22), and that has been put to you as a question, not tuned back.
+
+The numbers the models produce now are in PROGRESS.md, with how many runs each is based on.
 
 ## Still to come
 
-These parts are designed but not built yet. This document will grow as they are.
+Everything in the design is built. What is left is the last stage:
 
-- **The full economy** (Stage 4): shutters to repair, boost stations, a prototype crate, an overclock bench, pickups, swarm rounds, grenades.
+- **Polish** (Stage 5): no new features. Game feel, menus and HUD, balance, performance, loading time, a preview picture and title for when the link is shared, and the final documents.

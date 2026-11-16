@@ -412,7 +412,8 @@ export function buildLab(assets: Assets, materials: MaterialLibrary, robots?: Ro
   (['log', 'eye', 'lockdown', 'static'] as const).forEach((feed, i) => screens.add([10.95 + i * 0.97, 2.06, z0 + SKIN + 0.105], [0, 0, 1], 0.84, 0.62, feed));
   // Clutter that belongs here, all of it tight against a wall.
   b.prop('utility_box_01', { at: [x1 - 0.26, 0, 17.0], rotY: -HALF_PI });
-  b.prop('power_box_01', { at: [x1 - 0.08, 1.55, 19.2], rotY: -HALF_PI, collide: false });
+  // (Clear of the Overclock Bench, which has the wall from 17.75 to 19.85.)
+  b.prop('power_box_01', { at: [x1 - 0.08, 1.55, 21.5], rotY: -HALF_PI, collide: false });
   b.prop('korean_fire_extinguisher_01', { at: [x1 - 0.22, 0, 20.6], rotY: -HALF_PI });
   b.prop('security_camera_01', { at: [x1 - 0.3, 4.2, z0 + 0.3], rotY: -Math.PI / 4, collide: false });
   b.prop('security_camera_01', { at: [x0 + 0.3, 4.2, z1 - 0.3], rotY: (Math.PI * 3) / 4, collide: false });

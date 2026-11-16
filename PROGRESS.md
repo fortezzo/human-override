@@ -9,11 +9,251 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | 0 | The look test: one room, one robot, one rifle | **Approved** (after two rounds of feedback, recorded below) |
 | 1 | Core loop: whole map, rounds, scrap, weapons, HUD, restart, debug mode | **Played; nine items of feedback, all done** (recorded below) |
 | 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Played; four items of feedback, all done** (recorded below) |
-| 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Played; eight items of feedback. Seven done, the eighth is a note for Stage 4** (recorded below). The map is now six areas. **Waiting for you to play it again.** |
-| 4 | Full economy | Not started |
+| 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Played; eight items of feedback, all done, and approved from the screenshots** (recorded below). The map is six areas. |
+| 4 | Full economy: stations, shutters, pickups, grenades, swarm rounds, the special weapon, settings and how-to-play screens, the phone message | **Built. Waiting for you to play it.** |
 | 5 | Polish | Not started |
 
-The approved look lives in `media/look-target/` and is never overwritten. Stage 3's pictures are in `media/stage-3/` (49 of them now, the whole set re-taken after the Stage 3 feedback, with the two new areas as 38 to 46) and are re-made with `npm run build` then `npm run shots`. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+The approved look lives in `media/look-target/` and is never overwritten. Stage 4's pictures are in `media/stage-4/` (67 of them: every earlier view re-taken on this build as 01 to 46, and the economy as 47 to 64) and are re-made with `npm run build` then `npm run shots`. Stage 3's are kept in `media/stage-3/` as they were when you approved them. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+
+## Before Stage 4: your answers to the Stage 3 feedback work
+
+You approved the bigger map and all seven fixes from the screenshots (the loading dock, the robotics lab, the ARGUS analysis moment, the resisted hit and the redesigned heavy), and both notes in `SPEC.md`. Three things you said then are recorded here because they bind what comes after:
+
+- **The Custodian comes sooner.** "Have it arrive the round after I hold the other two keys, and no earlier than round 6. I'd rather more people reach the ending than keep the mission long." Done before anything else in this stage (`MISSION.custodianFromRound`, 8 to 6), and `SPEC.md` says so.
+- **For Stage 4:** spread the stations across all six areas; scrap must stay useful through a long run (the boosts, the crate, bench upgrades that can be bought more than once); re-tune once boosts and upgrades exist, still aiming for a real player being able to finish the mission with good play.
+- **For Stage 5, not now:** the truck in the loading dock is blocky next to everything else (picture 39), and the long wall in picture 46 (the server hall's west walk) is blank. Neither has been touched.
+
+## Stage 4: what is built
+
+Everything the spec lists for Stage 4: shutters and repair, Boost Stations, the Prototype Crate and its special weapon, the Overclock Bench, timed pickups, swarm rounds, grenades, the settings and how-to-play screens, and the phone message. **Stage 5 has not been started.**
+
+**The stations: one in every area.** Six stations, six areas. Each is a painted cabinet built from the rooms' own kit, with a lit sign in a colour of its own, a lamp bar under the sign that lights its face and the floor in front of it, hazard stripes, and a prompt with the price when you walk up.
+
+| Area | Station | What it sells | Price |
+| --- | --- | --- | --- |
+| Security lobby | Boost Station: **FAILSAFE** (violet) | One self-revive | 1,500, and 1,000 more each time it is bought again |
+| Power room | Boost Station: **CARAPACE** (green) | More health: 160, where it was 100 | 2,500 |
+| Server hall | Boost Station: **AUTOLOADER** (amber) | Reloading takes six tenths of the time | 1,500 |
+| Core | Boost Station: **HAIR TRIGGER** (red) | A quarter less time between shots | 2,000 |
+| Loading dock | **The Prototype Crate** | A random weapon, already overclocked, or the Turncoat | 1,000 a go |
+| Robotics lab | **The Overclock Bench** | Upgrades the weapon in hand, up to four times | 2,000, 3,500, 5,000, 6,500 |
+
+- **The Boost Stations and the bench only work once the power is on.** Before that they are dark, with a red lamp, and the prompt says "no power: restore power at the main breaker". The notice when the breaker is thrown now ends "STATIONS ONLINE". The crate works without power.
+- **A boost is yours for the run.** Its charge is gone from the cabinet, and a tag in its colour appears above your health bar.
+- **The fail-safe.** A blow that would put you down does not: you are back up with six tenths of your health, untouchable for three seconds, and every robot within five metres is knocked off balance. Then it is used up, and its station sells another for more.
+- **The Overclock Bench** works on the weapon in your hands: each upgrade adds three tenths of the gun's own damage and a fifth of its magazine and spare ammunition, refills it, and renames it (Mk II to Mk V). Its arm comes down over the cradle and arcs for a moment.
+- **The Prototype Crate.** The lid comes up, weapons flicker past, and it settles on one that hangs there for nine seconds: F again takes it, walking away leaves it and the lid shuts. An ordinary gun you do not carry comes as a Mk II; one you do carry comes a level above yours and takes its place. One go in five (and likelier with every miss) it is the Turncoat.
+- **The Turncoat**, the special weapon, is the fourth gun model you downloaded, re-painted. Its beam turns a robot to your side: its lights go pale blue, it attacks the robots round it, and after ten seconds its core burns out. Everything it destroys, and itself, are your kills. The Custodian and the Proxy cannot be turned (the HUD says so); the beam hurts them instead. It comes with sixteen shots, and no wall rack sells more: only a Full Resupply refills it.
+
+**Shutters.** The five openings robots walk in by (main entrance, power room breach, two truck bays, the lab's hatch) have working shutters, down at the start of a run. Robots outside batter one (five blows, with a bang, sparks and the shutter shaking each time) until it is wrenched up; F from indoors runs it back down for 50 scrap. A shutter that is down stops you and your bullets as well. You cannot shut yourself out.
+
+**Timed pickups.** A destroyed robot sometimes leaves a badge of light under a thin shaft: **Full Resupply**, **Overload** (one-hit kills, 20 s), **EMP Blast** (every robot on the map), **Double Scrap** (30 s) or **Lockdown** (every shutter repaired). Walk into it. The two that last show on the HUD with a draining bar.
+
+**Grenades.** G throws one: two to start, another each round, four at most. It bounces, stops near where it lands and goes off after 1.7 seconds: thrown level, about twelve metres away.
+
+**Swarm rounds.** Rounds 5, 10, 15 and so on are drones only (14, then 20, then 26), announced as "SWARM", never more than ten on the map at once, and the last one leaves a Full Resupply that waits a minute.
+
+**Screens.**
+- **How to Play**, from the start screen and the pause screen: seven short sections for someone who has never played a game like this (the idea, staying alive, fighting, scrap and what it buys, the mission, ARGUS, things worth knowing) and the controls.
+- **Settings**, from the start screen as well as the pause screen: graphics quality, mouse sensitivity, brightness, volume, sound off, show frame rate, reduce screen shake and flashing. All remembered in your browser.
+- **Phones and tablets** get the title scene (the live lobby, the camera drifting) with "Play this on a computer with a mouse and keyboard", why, the page's address and a button that copies it.
+- The start screen has three more buttons under PLAY: HOW TO PLAY, SETTINGS, CREDITS.
+
+**On the HUD:** grenades (a pip for each), the boosts you hold, timers for Overload and Double Scrap, the weapon's mark after its name (KR-7 CARBINE MK II), TURNED and CANNOT BE TURNED under the crosshair, and "G grenade" in the opening hint.
+
+**Sound:** eighteen new sounds (the beam, a robot turned, a boost bought, the bench, the crate's lid, ticking, offer and close, a pickup, the EMP, three blows on a shutter, a shutter forced, a shutter repaired, a grenade bouncing, the fail-safe), all cut from packs already credited.
+
+### Difficulty, with the economy in
+
+You asked me to re-tune once boosts and upgrades existed, still aiming for a real player being able to finish the mission with good play, and not to make anything harder without asking. **So I measured, and changed nothing**: every change in this stage either gives the player something, or was your own (the Custodian from round 6), or is the spec's (every fifth round is a swarm: fourteen fragile drones, a little faster than the ordinary drone, in place of round 5's twenty-three robots). No number that sets how tough, how fast or how many the robots are was turned up. The table is the same one as before, set beside the numbers from the end of the Stage 3 feedback.
+
+60 missions each by the first-timer and the regular model, 32 by the skilled, and 16 runs of ordinary rounds each by the first-timer and the regular. No god mode, no free scrap.
+
+| | Skilled model (32 missions) | First-timer model (60 missions, 16 ordinary runs) | Regular model (60 missions, 16 ordinary runs) |
+| --- | --- | --- | --- |
+| Finished the mission | **28 of 32 (88%)**; it was 43 of 48 (90%) | **31 of 60 (52%)**; it was 4 of 16 (25%) | **40 of 60 (67%)**; it was 12 of 48 (25%) |
+| Mission time, of those that finished | **median 9:18** (fastest 7:13, slowest 11:00); it was 11:35 | median 8:57 (6:37 to 11:00); it was 13:15 | median 9:06 (6:45 to 10:53); it was 13:19 |
+| Round the mission ended in | 8 (14 runs), 7 (13) or 6 (1); it was 8, sometimes 9 | 7 (22 runs), 6 (5) or 8 (4); it was 8, once 9 | 7 (20 runs), 6 (10) or 8 (10); it was 8 |
+| Reached the final stand | 28 of 32; it was 45 of 48 | 37 of 60; it was 7 of 16 | 43 of 60; it was 22 of 48 |
+| **Won the final stand** | **28 of 28**, taking about 1:15 (median); it was 43 of 45, taking 1:25 | **31 of 37 (84%)**, taking about 1:35; it was 4 of 7 | **40 of 43 (93%)**, taking about 1:40; it was 12 of 22 (55%), taking 3:33 |
+| Got the uplink's key | 29 of 32; it was 46 of 48 | 55 of 60; it was 14 of 16 | 53 of 60; it was 38 of 48 |
+| Went down in round (attempting the mission) | 3, 3, 6 and 6: the 4 that went down | 6 (median; 3 to 8), of the 29 that went down | 6 (median; 3 to 7), of the 20 that went down |
+| Went down in round (ordinary rounds only) | | **9** (median); 8 of 16 in rounds 7 to 10; earliest 6, latest 13; it was 9 | 9 (median); 9 of 16 in rounds 7 to 10; earliest 8, latest 12; it was 8 |
+
+Where the regular model's 20 lost missions ended: 2 at the key cage (rounds 3 and 4); 5 at the uplink (rounds 5 and 6); **6 with two keys in hand in round 6, waiting for the Custodian** (which comes with round 7 for them); 2 fighting it; 2 at the core's door with all three keys; and 3 in the final stand.
+
+Where the first-timer's 29 ended: 2 at the cage in round 3; 3 at the uplink; **9 with two keys in round 6, waiting for the Custodian**; 6 fighting it; 3 with it destroyed and its key lying on the floor; and 6 with all three keys (one inside the core during the stand, two on their way back into it, three with the switch armed and not yet pulled).
+
+The skilled model's 4: two at the cage in round 3, one at the uplink, one waiting for the Custodian.
+
+**What made the difference.** Two things, and I cannot fully separate them. The first is yours: the Custodian now comes in round 6 or 7 for a player who has both keys, where it came in round 8, so the two models nearest to you finish about four minutes sooner than they did, before the rounds get heavy. The second is the economy. In the runs where I recorded what was bought: the regular model bought the health boost in 9 of 12 missions, the fail-safe in 8, the reload boost in 4 and the fire-rate boost in 1 (that one is in the core), overclocked a gun in 3, and was brought back by the fail-safe once. The first-timer buys what it is standing next to: in 44 missions, the reload boost in 25, the fail-safe in 24, the fire-rate boost in 21 and the health boost in 2, and the fail-safe brought it back in 11. Every model ended its missions with about 6,500 to 7,200 scrap unspent (median): a mission is short, and there is more to buy than it has time for.
+
+**How much these numbers move.** The first batch of 16 first-timer missions finished 12 (75%); the next 12 finished 4 (33%); the next 32 finished 15 (47%). That is what sixteen runs are worth, and it is why the table now stands on 60. Read "about half" and "about two in three", not the percentages.
+
+**Against the targets:**
+
+- *A real player can finish the mission with good play and no exploit* (yours). The two models nearest to a real person now finish **about half their missions (the first-timer) and two in three (the regular)**, where each finished one in four. I think that is "can finish with good play". They are models; they follow the tracker without ever getting lost; your own first run on this version will tell you more than they can.
+- *A first-time player should usually go down around round 9 (between rounds 7 and 10)*, fighting the ordinary rounds only. The first-timer model's median is **still 9**. Half its runs end in rounds 7 to 10 (it was three quarters), and nearly all the rest go further, to 11, 12 and 13. None of the sixteen ended in round 5 or round 10, the swarms: a swarm round ends with everything refilled, and a run that reaches one tends to get a round or two beyond it.
+- *The final stand is hard but winnable.* **It is no longer hard for the test players**: the regular model wins 40 of 43 and the skilled every one; the first-timer wins 31 of 37. That is boosts, the fail-safe and overclocked guns meeting a fight that was sized before any of them existed, in a round (7) with fewer and weaker robots than the round it used to happen in. I have left it, because you asked me not to make the game harder without asking. If you want it to bite again, the numbers are `MISSION.standMax` (9 robots at once), `MISSION.standInterval` (one every 2.2 s) and the Proxy's health (`MISSION.proxy.health`, 8), and I would rather you played it first.
+
+**The one place I would look next, if you want more people still to reach the ending:** round 6 with two keys in hand. It is where the largest single group of both models' runs ends (6 of the regular's 20, 9 of the first-timer's 29): the Custodian is due with the next round, and round 6 is the first with a bomber in it. That is not a change I have made; it is where the numbers point.
+
+**How far to trust this.** The same cautions as before, and one more: the test players use only part of the economy. They buy boosts, overclock a gun and throw grenades; they never open the crate and never repair a shutter. A person who does those as well has more than they do. (These batches were played on the build from just before the stations were re-lit and re-painted. Nothing that affects play changed after it.)
+
+### Found on the way, and fixed
+
+- **The stations were black shapes in the dark rooms.** Built from bare steel, a cabinet in the power room or the core showed its lit sign and nothing else. They are painted now, with a lamp bar under each sign and a stronger light (decision 151). Walking up to any of the six, its light is fully up from six metres away (measured).
+- **The bench stood on a stretch of wall that was not free.** A wall-mounted power box in the lab was inside it and showed through the bench's back board, across its card. The box has moved two metres along the wall, and the card to the clear half of the board. In the core, the first letters of "ARGUS CORE" ran 5 cm behind the fire-rate station's sign; the lettering is a little smaller and clear of it. I then checked the other four stations against everything on their walls: the lobby's, the power room's, the hall's and the dock's are clear.
+- **A thrown grenade rolled on for a room's length.** It kept its speed at every bounce. It now loses half its pace each time it hits the floor and drags to a stop.
+- **ARGUS's analysis stayed marked as in force after the kill switch.** Shutting ARGUS down cleared what it would do next but not what it was doing. Found by the check that ARGUS is off after HUMANITY SAVED; fixed.
+- **The test players walked into shutters.** They planned retreats through a shutter that was down, and walked up to robots that were still outside one. They now treat a shutter that is down as a wall, as a person would. This was fixed before any of the difficulty numbers above were measured.
+- **The special weapon was a black teardrop in the hand.** Its body was bare dark steel. It is now a pale, worn steel that takes the room's light as the other guns do, and its beam is thicker and brighter.
+- **A check failed that was right, because of chance** (decision 152).
+- **Three pictures were staged badly, not three things wrong in the game**, and I checked each before deciding which it was: stations photographed half a second after a jump across the map, before the lamps round them had come up (walking, they are up long before); a round number left on the HUD by the debug restart (the real PLAY AGAIN button clears it); and a swarm photographed with a drone against the lens.
+
+## Design decisions made in Stage 4
+
+Numbered on from the Stage 3 feedback's (which ended at 128). None of these was asked as a question; each is mine to defend and yours to overrule.
+
+129. **One station in each area, and which goes where.** Six stations, six areas, so I took "spread the stations across all six areas" literally. The fail-safe is in the lobby, the room every route passes through and the one place you can always get back to. The health boost is in the power room beside the breaker, so the first station you see come to life is the one a new player most needs. The reload boost is in the server hall, on the way to the uplink. The crate is in the dock and the bench in the lab, as you suggested. **That leaves the core, which is sealed until you hold all three keys.** I put the fire-rate boost there: it is the one whose absence costs least earlier on, and the one worth most at that moment, on the way in to fight the Proxy. If you would rather the core had none and another area had two, that is one line in `src/world/plan.ts`.
+130. **The boosts have their own names**: CARAPACE (health), AUTOLOADER (reload), HAIR TRIGGER (rate of fire), FAILSAFE (self-revive), each with its own colour. None is taken from another game, and each station's sign and prompt also says in plain words what it does. The special weapon is the XM-0 Turncoat, after what it does.
+131. **Prices**: the boosts 1,500 to 2,500; the bench 2,000 for the first upgrade and 1,500 more for each one after; the crate 1,000; a shutter 50. They were set against what the first-timer model earns in ordinary rounds: 15,000 to 18,000 in a run that ends in round 8 (about where a mission ends), and 38,000 to 47,000 in one that reaches round 12. So during the mission you choose (two or three boosts and perhaps one upgrade), and in a long run there is always something left to buy.
+132. **The fail-safe can be bought again**, for 1,000 more each time. The spec says "one self-revive", and it is one at a time. Buying another is the most direct answer to your note about scrap staying useful, and it turns a big pile of scrap into a way to finish.
+133. **The bench: four upgrades to a gun**, each adding three tenths of its original damage and a fifth of its magazine and spares, and refilling it. The level belongs to the gun, not to the kind of gun: swap it away and the upgrades go with it. Four, not endless, so that the numbers stay honest (a Mk V does 2.2 times what the gun did off the wall).
+134. **The crate hands out overclocked guns.** There are only three ordinary guns, and all three hang on walls. A crate that handed out the same guns would be worth nothing, so its guns come a level up: a Mk II if you do not carry that kind, one level above yours if you do. It never offers something worse than you have, and you can leave what it offers. At 1,000 it is a cheaper way up than the bench for anyone willing to take what comes.
+135. **The Turncoat, and what "briefly turns a robot to my side" means here.** A turned robot fights for ten seconds and then its core burns out, which counts as your kill. I chose that over having it turn back, because a robot that turns on you again from a pace away is a punishment for using the weapon. It goes straight for the nearest robot (it does not use the robots' map, which leads to you). ARGUS's own machines cannot be turned. Its chance from the crate starts at one in five and rises by one in ten with each miss.
+136. **Its model is your fourth gun, with none of its own pictures.** The textures in that download look like a scanned-surface library's, which has its own licence, so only the shape is used (28,000 of its 330,000 triangles) and the game paints it from surfaces already credited: a pale, worn steel body, brass rings, and a cell lit the colour of everything on your side.
+137. **Repairing a shutter costs scrap; it does not pay it.** "I can repair a broken shutter for a little scrap" reads either way. I took it as a price (50), because the spec lists it with the things F buys, and because you finished with scrap to burn.
+138. **A run starts with every shutter down.** So the first thing that happens in a run is something beating on the entrance, and the first robot is inside the lobby about 13 seconds into a run where it was about 8 (measured: 12.8 s and 7.6 s, the median of six starts each). That is a quieter opening than you have played. I considered starting the shutters already battered so that it was shorter, and did not: it lets the robots in sooner, which is harder, and that is yours to ask for. The shutters the building always had, jammed part-way up, are what a forced one looks like. A shutter that is down stops you and your bullets as well as the robots.
+139. **You cannot shut yourself out.** A shutter will not run down while you are outside it or under it, by F or by a Lockdown.
+140. **Pickups are walked into, not picked up with F.** The spec's controls list has F for "pick up", which the keys on the floor still use. In the middle of a fight a pickup that needs a key press is a pickup people miss.
+141. **Pickups stay an event**: one kill in twenty-five, at most three a round, at least five kills apart, 25 seconds on the floor. None is left where you cannot walk to it, and a Lockdown is never left when no shutter needs it.
+142. **ARGUS's own machines are not destroyed by an EMP Blast or by one hit under Overload.** The blast takes a quarter of their health; Overload triples what a hit does to them. The Custodian carries a key and the Proxy is the boss: neither should vanish to a lucky drop.
+143. **Grenades are handed out, not sold**: two to start, one more each round, four at most. They are something to do with a pack, not another shop.
+144. **Swarm rounds take the place of rounds 5, 10, 15**, they are not added between. Fourteen drones the first time, six more each time, ten on the map at once. ARGUS announces no counters before one (drones carry none), and whatever it had in force waits a round.
+145. **Settings are one set of controls in two places**: on the pause screen, where they have always been, and on a Settings screen from the start screen. "Sound off" was added (M still does it too). Brightness and the frame-rate counter stay, though the spec does not list them.
+146. **How to Play is words, not a tutorial level.** Seven short sections in the order a new player needs them, and the controls. It is on the start screen and the pause screen.
+147. **The phone message offers the page's address and a button that copies it.** Nothing is sent anywhere: it goes on the device's own clipboard.
+148. **What the test players use.** All three buy boosts and walk into pickups; the regular and the skilled also make the trip to a station they are not standing next to, overclock their best gun once the boosts they can reach are bought, and throw a grenade at a pack. None of them uses the crate or repairs a shutter. So the numbers above are for a player who uses some of the economy, not all of it.
+149. **Nothing was made harder.** Stage 4 gives the player a great deal, and the robots nothing beyond the swarm rounds the spec asks for. I measured what that did and report it above; I have not turned anything up to compensate, as you asked.
+150. **The pictures are in `media/stage-4/`**: the whole set re-taken (so 01 to 46 match the game as it is now), and 47 to 64 new.
+151. **The stations are painted, not bare steel.** My first version built them from the same dark steel as the breaker. In the two dark rooms (the power room and the core) and the lab, that was a black shape with a lit sign: bare metal shows reflections, not the light of a lamp beside it. They are now painted (grey for the Boost Stations and the bench, olive for the crate), each with a lamp bar under its sign and a brighter light of its own colour, so that each can be seen and read from across its room.
+152. **The checks and the pictures switch chance pickups off.** A destroyed robot leaves a pickup one time in twenty-five, by chance, and a check that counts what is lying on the floor cannot have one turn up uninvited (one did, and failed a check that was right). So the test tools turn chance drops off (`__HO.randomDrops(false)`, debug only), and one check turns them back on to prove that they happen and that three a round is the limit. The game itself is unchanged, and the test players that measure difficulty play with them on.
+
+## Checks run at the end of Stage 4
+
+| Check | Result |
+| --- | --- |
+| 1. Type-check and production build | Pass, zero errors |
+| 2. Unit tests | **229 of 229 pass** in 17 files. New (38 tests): every Boost Station with the power off and on, what each charges, and the fail-safe's rising price; the bench's levels and prices, and what each level and each boost does to every gun; the crate's dice (the special weapon's growing chance, never an offer worse than what is carried); how often pickups are left and which; a shutter's blows, repair and Lockdown; grenades; swarm rounds. |
+| 3. Headless browser | **197 of 197 pass** against the production build served from a sub-folder address. What is new is listed below. |
+| 4. Screenshots | 67 in `media/stage-4/`: the whole set re-taken on this build (01 to 46), and 47 to 64 new. Every one looked at: 01 to 46 as contact sheets, for anything dark, missing or out of place, and five of them (02, 07, 13, 26, 31) side by side with the versions you approved. Two things came of that beyond the fixes listed above: pictures 31 and 31b (ARGUS's analysis) are now staged a round earlier, because the round they used to precede is a swarm and ARGUS announces nothing before a swarm; and the rooms' pictures now show a station where one stands. |
+| 5. Performance | See below. |
+| 6. Credits | Pass: 197 shipped asset files all trace to credited sources (19 more than at the end of the Stage 3 feedback: eighteen sounds cut from packs already credited, and the Turncoat's model, the fourth of your gun downloads, now credited as shipped); the credits match `links.txt`; no file tracked by git is a raw download. |
+
+**New in the end-to-end test** (197 checks now; there were 169):
+
+- *The stations*: one in every area; with the power out the four Boost Stations and the bench sell nothing, charge nothing and say why, and the crate works; each boost bought with F for its price, once, and then measured (health 160 and full, the reload and the time between shots shorter by the stated share); the boosts on the HUD.
+- *The bench*: the same gun overclocked twice, 2,000 then 3,500, its damage and magazine measured after each, and handed back full; a Mk V gun refused, nothing charged.
+- *The crate*: with its dice fixed, F charges 1,000, it chooses, and a second F takes the Turncoat for nothing more; then an ordinary gun offered already overclocked and left where it is, the lid shutting on it with nothing but the roll paid.
+- *The Turncoat*: a robot turned, the robot beside it destroyed half a second later, the turned one burnt out at ten seconds, two kills and their scrap; a Custodian struck and not turned.
+- *The fail-safe*: robots put the player down; back up with six tenths of their health, a second of blows doing nothing, the fail-safe gone, the next one dearer; then down again with no fail-safe, and the run ends.
+- *Shutters*: all five down and sound at the start of a run; a robot counted through its five blows, and coming in only after the last; repaired with F from indoors for 50, and the next robot held again; no repair offered for a sound one, or from the wrong side; a shutter that is down stops the player as well.
+- *Pickups*: all five taken and their effects measured (a Lockdown that will not shut the player out; a strike paying 130 and then 260; one sidearm shot destroying a robot with twenty shots' worth of health, and half a minute later not; an EMP taking eight robots and a quarter of a Custodian); the timers on the HUD; one nobody takes gone after 25 seconds; and, with chance switched on, robots destroyed eight at a time until one of them leaves a pickup, and then a thousand more to see that three in a round is the limit.
+- *Grenades*: thrown, one fewer, not twice in a breath, off when the fuse says, four robots nine metres away destroyed; one at the thrower's feet; another handed out with the next round.
+- *A swarm round*: the fifth round, every robot of it a drone, announced as a swarm, no more than ten on the map, a Full Resupply left when it ends; and no counter of ARGUS's on the tenth.
+- *Screens*: How to Play and Settings from the start screen, what each contains, and a setting changed there found in the browser's storage; the phone's message and the address on it.
+- *Changed, not new*: the yard cannot be walked into while its shutter is down; the Custodian is expected with the round after the second key or round 6, whichever is later.
+
+### Performance (check 5)
+
+Measured on the production build on an NVIDIA GeForce RTX 4070 SUPER (a fast desktop card), at 1920 x 1080 unless it says otherwise. The heaviest moment is the one every stage has measured: the most robots the game allows, in the server hall, with every door on the map open so that all six areas are being drawn.
+
+*A full horde of ordinary robots, in the server hall, every door open* (six areas drawn):
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 198 | 622 | 1.21 M | 22 | 122 | 22 |
+| Medium | 165 | 787 | 1.43 M | 24 | 110 | 22 |
+| High | 167 | 786 | 1.43 M | 23 | 227 | 22 |
+| Ultra | 145 | 793 | 1.47 M | 24 | 83 | 11 |
+
+*The same horde as ARGUS sends it*: two heavies, two bombers and four drones among the 24, and of the sixteen ordinary robots seven shielded against the gun being fired and eight with a plate over the visor.
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 202 | 659 | 1.20 M | 22 | 122 | 33 |
+| Medium | 133 | 830 | 1.41 M | 22 | 245 | 44 |
+| High | 151 | 847 | 1.43 M | 22 | 301 | 55 |
+| Ultra | 111 | 883 | 1.48 M | 22 | 288 | 66 |
+
+*That horde in the loading dock*, with the player by the hall's shutter and the robots coming across the open floor:
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 269 | 360 | 0.79 M | 23 | 113 | 55 |
+| Medium | 197 | 482 | 1.06 M | 24 | 80 | 33 |
+| High | 209 | 473 | 1.04 M | 23 | 285 | 22 |
+| Ultra | 151 | 508 | 1.16 M | 23 | 429 | 22 |
+
+**Smoothness**: ARGUS's horde in the server hall, with the frame rate limited to the screen's, as a player sees it (this screen refreshes 240 times a second, so a perfect frame is 4.2 ms).
+
+| | Quality | Usual frame | Slowest 1% | Worst frame | Frames over 25 ms in 5 s |
+| --- | --- | --- | --- | --- | --- |
+| 1920 x 1080 | Low | 4.3 ms | 7.4 ms | 11.5 ms | 0 |
+|  | Medium | 5.7 ms | 9.4 ms | 17.8 ms | 0 |
+|  | High | 6.1 ms | 9.5 ms | 11.8 ms | 0 |
+|  | Ultra | 6.3 ms | 11.6 ms | 14.4 ms | 0 |
+| 3840 x 2160 | Low | 4.9 ms | 10.4 ms | 13.1 ms | 0 |
+|  | Medium | 11.1 ms | 13.8 ms | 15.6 ms | 0 |
+|  | High | 12.1 ms | 14.4 ms | 15.5 ms | 0 |
+|  | Ultra | 20.7 ms | 23.6 ms | 25.3 ms | 2 |
+
+**First appearances**: the slowest frame in the second after each thing is drawn for the first time, on High. The last seven rows are new with this stage.
+
+| First time on screen | Slowest frame in the next second | Frames over 25 ms |
+| --- | --- | --- |
+| An ordinary robot | 6.0 ms | 0 |
+| A robot carrying shielding | 5.2 ms | 0 |
+| A robot with a plate over its visor | 5.4 ms | 0 |
+| A shot that the shielding turns | 12.0 ms | 0 |
+| A drone | 5.0 ms | 0 |
+| A heavy | 6.0 ms | 0 |
+| A bomber | 5.1 ms | 0 |
+| The bomber going off | 7.2 ms | 0 |
+| A Custodian | 6.3 ms | 0 |
+| The Proxy | 4.9 ms | 0 |
+| The ARGUS analysis arriving | 6.7 ms | 0 |
+| The analysis shrinking into its corner | 5.4 ms | 0 |
+| A timed pickup lying on the floor | 11.9 ms | 0 |
+| A pickup taken: its notice, and its timer on the HUD | 6.4 ms | 0 |
+| A boost on the HUD | 5.0 ms | 0 |
+| A grenade thrown, and going off | 4.7 ms | 0 |
+| An EMP Blast taking three robots | 6.4 ms | 0 |
+| The Turncoat fired, and a robot turned | 7.4 ms | 0 |
+| A shutter battered, and forced up | 5.0 ms | 0 |
+
+Nothing stalls: the slowest is 12.0 ms (a shot that the shielding turns). The two slowest are a shot that shielding turns (as before) and the first timed pickup to be dropped; neither is near a stall.
+
+**Against the build you approved, measured the same hour.** Frame rates on this machine drift from day to day, so the build from the end of the Stage 3 feedback was measured again straight after this one. Same scene for both.
+
+| | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| Ordinary horde, server hall: the build you approved | 233 | 176 | 186 | 160 |
+| **This build** | **198 (-15%)** | **165 (-6%)** | **167 (-10%)** | **145 (-9%)** |
+| ARGUS's horde, server hall: the build you approved | 212 | 161 | 175 | 135 |
+| **This build** | **202 (-5%)** | **133 (-17%)** | **151 (-14%)** | **111 (-18%)** |
+| ARGUS's horde, loading dock: the build you approved | 286 | 225 | 239 | 181 |
+| **This build** | **269 (-6%)** | **197 (-12%)** | **209 (-13%)** | **151 (-17%)** |
+
+**This build is slower than the one you approved: by about 12% on average at 1920 x 1080**, and between 5% and 18% across the twelve measurements above, each of which is a two-second average that wobbles by several per cent from one run to the next. I looked for the cause in one of them (the ordinary horde on High) and found it: the six stations are drawn as 114 separate pieces, which is 67 more draw calls in that scene. Measured turn and turn about with the same horde, a frame takes 5.9 ms with the stations drawn and 5.4 ms with them hidden (169 frames a second against 185), which is the whole of the difference there; the shutters cost nothing measurable. I did not take the other eleven measurements apart. At 3840 x 2160, where the graphics card is the limit and not the number of things drawn, the two builds are the same (418 frames in five seconds on High against 417). It is well inside the budget and nothing stalls. Merging those pieces is performance work, which is Stage 5's; I have not done it now.
+
+Two more things to read these tables by. The machine itself was slower today than on the night the last report was made: the build you approved gives 233 / 176 / 186 / 160 here, where that night it gave 283 / 218 / 231 / 198, with no change to it. And at 3840 x 2160 on Ultra two frames in five seconds went over 25 ms in both builds today (worst 25.3 ms in this one, 27.0 ms in the earlier one); that night there were none.
+
+Budgets held: at most 24 robots on the map; 22 lamps live at once from the shared pool (8 that can cast shadows, 14 that cannot) plus the muzzle flash and the lamp that travels with the Proxy. The six stations add six lamps to the building's 110 (now 116), which compete for the same 22 places; pickups, grenades and the beam are particles and unlit glows, and add no lamps at all.
+
+- **Total download: 17.8 MB** of the 40 MB budget (models 9.0, textures 4.9, sound 2.4, code 1.5). It was 17.2 MB: the Turncoat's model is 0.36 MB, the eighteen sounds 0.18 MB, and the rest is code.
+- **Time to the title screen**: 5.1 s from local files; 4.5 s at 100 Mbps, 5.7 s at 50 Mbps, 8.5 s at 25 Mbps (simulated). The build you approved, measured the same hour: 4.6 s from local files; 4.2 s, 5.4 s and 8.1 s. So this stage adds a third to half a second: six stations and their signs to build, one more gun, eighteen more sounds.
 
 ## Stage 3 feedback: what changed
 
@@ -33,6 +273,8 @@ You finished the mission, the first real person to do so, approved the four Stag
 | 8 | For Stage 4, not now: I finished with far more scrap than I could spend | Recorded for Stage 4: scrap must have a use all the way through a long run (the boosts, the crate, and weapon upgrades at the bench that can be bought more than once). The models agree with you: in the seven runs I read that ended in round 8, the regular model was carrying between 5,400 and 23,600 scrap with nothing left to spend it on. | |
 
 ### Difficulty for a real person
+
+*(This is the record of the tuning after your first playthrough. Its table was superseded by Stage 4's: see "Difficulty, with the economy in" above.)*
 
 **A third model.** You said the skilled model is stronger than a real player like you and that a human is closer to the first-timer. So there is now a **regular** player: nearly the first-timer's hands (it notices a robot in 0.38 s to the first-timer's 0.45, turns a little faster, aims at the body three shots in four, and its aim wanders almost as much) with the habits of someone on their fourth or fifth attempt: it reloads in the lulls, buys the carbine before it starts the uplink, breaks out of a crowd, steps away from a robot that is hitting it from round a corner, and does not back into the yards the robots walk in from. The mission is paced for this one now, not for the skilled one.
 
@@ -132,6 +374,8 @@ Numbered on from Stage 3's (which ended at 100). None of these was asked as a qu
 128. **The two test tools report against what you have decided.** `npm run balance` now counts the runs that end in rounds 7 to 10 (it counted 5 to 8), and `npm run mission` no longer prints how many missions took 15 to 20 minutes. Neither change touches the game.
 
 ## Checks run at the end of the Stage 3 feedback
+
+*(As they stood then. The current counts are under "Checks run at the end of Stage 4" above.)*
 
 | Check | Result |
 | --- | --- |
@@ -499,27 +743,35 @@ Budgets held: at most 24 robots on the map, the mission's own and the specials i
 
 ## Not verified
 
-- **How any of it sounds.** I cannot hear. The ring of a resisted hit and the new opening of the analysis's sound were cut and levelled by measurement (how loud, how sharp the start, how long the ring), not by ear. The bomber's beep is still unheard, too.
-- **How the two new areas play.** I have only looked at them as pictures (nine are kept, 38 to 46), and the checks prove that robots get everywhere in them, that nothing stands in a doorway and that nowhere in them is out of a robot's reach. Whether the dock's lanes are good to run a horde round, and whether the lab's fenced cell is in the way or is cover, needs you.
-- **How the difficulty feels.** Five blows instead of four is a number chosen from logs of test players. Whether it feels right or soft in your hands is the thing I most want to hear about.
-- **Whether a person finishes the mission as often as the models say.** The two models nearest to a real person each finish one mission in four; the skilled one nine in ten. Those are models, and the regular one in particular moved a good deal as I changed its habits (see "How far to trust the regular model"). You are the only real measurement there has been, and you have played one version.
-- **The analysis in motion.** Its two stages were measured on the screen and looked at as pictures a few hundredths of a second apart. Whether two seconds is long enough to read it, whether the flight to the corner reads as "it has gone over there", and whether it gets in the way at the start of a lull, needs you; so does whether it reads in a video on a phone, which is what you asked for.
-- **A resisted hit under automatic fire.** Looked at one shot at a time. The word is held still on purpose while a burst goes into the same plating; I have not seen a whole burst.
-- **The heavy in motion**, and whether its helm reads as the horde robot's head at fighting distance in a dark room. Up close and in the studio it does.
-- **Every yard, looking back at the building.** The loading dock needed an outside wall because the lobby's window looks at it. I checked that window and the front yard, and reasoned about the walled yards the robots cross (they have roofs and no view out). I have not stood in each one and looked.
-- **The address on the profile card on the real site**, and **slower hardware, browsers other than Chromium, and how bright it is on your screen**: as before. The heaviest scene now draws six areas where it drew three, and I have only measured it on this machine.
+- **How any of it sounds.** I cannot hear. The eighteen new sounds (the beam, a robot turned, the stations, the crate, a pickup, the EMP, blows on a shutter, a shutter forced and repaired, a grenade bouncing, the fail-safe) were cut and levelled by measurement, like every sound before them. The earlier ones (the ring of a resisted hit, the analysis's opening, the bomber's beep) are still unheard too.
+- **How the economy plays in your hands.** The checks prove that every station sells what it says for what it says, and the test players show what a player who uses some of it can do. Whether the prices feel right, whether the core is the right place for the fourth boost, whether a shutter is worth 50, and whether you still end up with scrap you cannot spend: those need you.
+- **The Turncoat in a real fight.** It was tested on two robots standing in the open. A turned robot goes straight at the nearest robot, not round the furniture, so in a crowded room it may spend some of its ten seconds walking into a rack. I have not watched one in a full round.
+- **Throwing a grenade by feel.** Where it goes off was measured (thrown level, 11.7 metres from you; aimed 15 degrees down, 8; aimed 20 degrees up, 16); whether the arc feels natural, and whether 1.7 seconds is the right fuse, is a feel question.
+- **A swarm round for a real person.** The test players very rarely go down in one: 3 of their 152 missions ended in round 5 (all three the regular model's, at the uplink), and none of their 32 runs of ordinary rounds ended in round 5 or round 10. Drones are small and fast, which is harder for a person's aim than for a model's.
+- **The opening of a run.** The first robot is now inside the lobby about 13 seconds in, where it was 8, because round 1 has to batter the entrance shutter first. Whether that is a welcome breath or a wait needs you.
+- **The fail-safe as a moment.** The check proves what it does (back on your feet with 60 health, and a second of blows doing nothing). I have not looked at the moment itself, its flash and its notice, and whether you understand in the middle of a fight what just happened to you needs you.
+- **How to Play, read by someone who has never played.** It was written for them and checked for the words it should contain. It has not been read by one.
+- **The phone message on a real phone.** It was checked in a desktop browser pretending to be one (a 414 x 896 touch screen). The button that copies the address needs the phone's permission, which a pretend phone always gives.
+- **Whether a person finishes the mission as often as the models say.** The models say about half the time (the first-timer) and two times in three (the regular). They never get lost and never misread a prompt, they use only part of the economy, and three batches of the same model gave 75%, 33% and 47%. Your own runs are the real measure.
+- **The stations in motion and in play**: whether each can be found across its room by its light, and whether any is in the way of a fight. Each stands on a stretch of wall checked against every fitting on it (one, the lab's, was not free at first: see "Found on the way"), and the checks say nothing became unreachable or unhittable because of them.
+- **Everything listed as not verified after Stage 3 that this stage did not touch**: the analysis in motion, a resisted hit under automatic fire, the heavy in motion, every yard looking back at the building, the address on the profile card on the real site, slower hardware, browsers other than Chromium, and how bright it is on your screen.
 
 ## Known rough edges
 
-- **The first-timer model now lasts to about round 9** when it only fights the ordinary rounds (it was 7), which is over the spec's old "rounds 5 to 8". You have said that is fine; the target in `SPEC.md` was changed to match, and nothing is to be made harder again without asking you. See "Difficulty for a real person".
-- **The skilled model finds the mission easy now** (it finishes 90% of missions and wins 96% of the final stands it reaches). That is the price of pacing it for someone closer to the first-timer. Stage 4 gives the player boosts and upgrades, which will make it easier still; the same tools will measure it then, and if anything looks too easy I will put it to you before changing it.
-- **Scrap piles up even more than it did**: by round 8 the regular model is carrying between 5,400 and 23,600 (the seven runs I read). Opening the whole map takes 7,250 where it took 3,000, and that is the only new thing to buy. Stage 4 (your item 8).
-- **The second carbine and the second shotgun are the same guns** as the first. New weapons are Stage 4's.
-- **The box truck, its trailer and the containers are plain shapes made in code**, with painted lettering. They hold up at the distances they are seen from, under sodium light; at arm's length they are simpler than the downloaded props round them.
-- **The assembly arms do not move.** They are posed over the unit on the jig, with a welding light that flickers; nothing turns.
-- **The dock's lamps light the ground outside its north wall** when the dock is open (lamps have no shadows of their own). Two lamps were put on that wall so that it looks meant.
-- **In a crowd, blows are lost, not queued.** A robot whose blow would land within 0.6 s of another's simply misses. With several robots round you that makes going down slower than the "2.4 seconds" on paper; I have left it, because it errs on your side.
-- **The game still throws away about 100 MB of script memory a second in a heavy fight**, **the shielding is flat**, **the drone's rotors do not turn**, **the heavy swings like an ordinary robot**, **ARGUS only knows four things about you and forgets from round to round**, **the rounds after the switch are plainer**, **the screenshots' profile card shows `127.0.0.1`**, **the sidearm and shotgun have no hands on them**, **Auto never raises quality again by itself**, and **the music does not build through a round**: all unchanged from Stage 3.
+- **The stations are cabinets built from the rooms' kit**: plain painted shapes with a lit sign, a glowing charge and lamps. They read as machines, but they are not as detailed as the downloaded props beside them. If they stand out the way the dock's truck did, that is a Stage 5 job alongside it.
+- **The stations cost frame rate.** They are drawn as 114 separate pieces, and in the heaviest scene that is about half a millisecond a frame: 169 frames a second on High against 185 with them hidden. Nothing stalls and it is far inside the budget, but it is waste, and merging them is on the list for Stage 5.
+- **The crate's offer simply hangs in the air and turns**, and the bench's arm is two links and a tip. There is no animation of the weapon leaving your hands.
+- **Jumping across the map with the debug tools leaves the lamps round you dark for about a second** while they hand over. Walking, they are up long before you arrive (a station's from six metres away), so a player never sees it; someone using the debug keys to skip about might.
+- **Holding the Turncoat up to aim shows you the back of it**: it has no sights, and its body is a fat teardrop. It is kept low enough that the crosshair is clear.
+- **The Turncoat's ammunition cannot be bought.** It comes with sixteen shots; only a Full Resupply (a pickup, or the end of a swarm round) refills it. And the bench will overclock it like any gun, but all it gains is more shots: the beam turns a robot for ten seconds at every level.
+- **A turned robot is not a decoy.** The others keep coming for you; it only fights them. And it walks straight at its target (see "Not verified").
+- **A robot battering a shutter uses its ordinary blow**, and the shutter shakes, sags and throws sparks; it does not dent. Forced, it hangs exactly as the shutters did before this stage.
+- **There is no throwing animation**: the grenade leaves from just below the crosshair.
+- **Swarm drones are the ordinary drone**, a little faster.
+- **The test players do not use the Prototype Crate or repair shutters**, so the numbers above leave those out.
+- **The final stand is easy for the test players now** (the regular model wins 40 of 43, the skilled 28 of 28, the first-timer 31 of 37). That is boosts, the fail-safe and overclocked guns meeting a fight that was sized before any of them existed. I have not touched it: you asked me not to make anything harder without asking.
+- **Your two notes for Stage 5 are untouched**: the dock's truck is still plain shapes, and the server hall's west wall is still blank.
+- **Unchanged from before**: the game still throws away about 100 MB of script memory a second in a heavy fight, the shielding is flat, the drone's rotors do not turn, the heavy swings like an ordinary robot, ARGUS only knows four things about you and forgets from round to round, the rounds after the switch are plainer, the screenshots' profile card shows `127.0.0.1`, the sidearm and shotgun have no hands on them, Auto never raises quality again by itself, the music does not build through a round, the assembly arms do not move, and the dock's lamps light the ground outside its north wall.
 
 ## Stage 1 feedback: what changed
 
@@ -812,9 +1064,9 @@ npm run dev            play it (opens the browser)
 npm run build          type-check and production build
 npm test               unit tests
 npm run e2e            end-to-end check of the built game
-npm run shots          re-take this stage's screenshots (media/stage-3)
+npm run shots          re-take this stage's screenshots (media/stage-4)
 npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
-npm run mission        the whole mission with no god mode, played by a model of a skilled player
+npm run mission        the whole mission with no god mode, played by a model of a player (and what it bought)
 npm run perf           performance and smoothness report
 npm run check:credits  licensing check
 ```

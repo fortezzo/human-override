@@ -35,6 +35,7 @@ await page.goto(`${site.url}?debug=1`);
 await page.evaluate(() => localStorage.clear());
 await page.reload();
 await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+await page.evaluate(() => window.__HO.randomDrops(false));
 console.log(`Rendering on: ${await gpuName(page)}`);
 
 const run = (fn, arg) => page.evaluate(fn, arg);
@@ -663,10 +664,10 @@ await run(() => {
   ho.steadyLights(true);
   ho.scrap(6000);
   for (const id of ['lobbyHall', 'lobbyPower']) ho.openDoor(id);
-  // On to round 4 with nothing on the map.
-  for (let i = 0; i < 6000 && game.stats.round < 4; i++) {
+  // On to round 3 with nothing on the map. (Not round 4, as it was: the round after that is a swarm, and ARGUS announces nothing before a swarm.)
+  for (let i = 0; i < 6000 && game.stats.round < 3; i++) {
     ho.simulate(1 / 60, 10);
-    if (game.stats.round < 4 && game.director.rounds.phase === 'active') {
+    if (game.stats.round < 3 && game.director.rounds.phase === 'active') {
       ho.clearRobots();
       ho.skipRound();
     }
@@ -714,7 +715,7 @@ await run(() => window.__HO.analysisBanner.hold(null));
 await run(() => {
   const ho = window.__HO;
   const game = ho.game;
-  for (let i = 0; i < 3000 && game.stats.round < 5; i++) ho.step(1 / 60, 4);
+  for (let i = 0; i < 3000 && game.stats.round < 4; i++) ho.step(1 / 60, 4);
   ho.holdRounds(true);
   ho.clearRobots();
   ho.announcement.clear();
@@ -871,6 +872,9 @@ await page.click('.screen.profile [data-action="profile-back"]');
     run((power) => {
       const ho = window.__HO;
       ho.autopilot(false);
+      // (By way of the start screen, so that the HUD is cleared as a real restart clears it: the debug restart leaves the last run's round on it.)
+      ho.game.toTitle();
+      ho.play();
       ho.restart();
       ho.step(1 / 60, 3);
       if (power) ho.missionJump('keys');
@@ -895,7 +899,8 @@ await page.click('.screen.profile [data-action="profile-back"]');
     await run(([x, z, yaw, pitch]) => {
       const ho = window.__HO;
       ho.place(x, z, yaw, pitch);
-      ho.step(1 / 60, 30);
+      // (A jump across the map: the lamps round the new place take about a second to come up. Walking there, they are up long before.)
+      ho.step(1 / 60, 120);
     }, [from[0], from[1], facing(from, [lx, lz]), pitch]);
   };
 
@@ -963,7 +968,10 @@ await page.click('.screen.profile [data-action="profile-back"]');
     ho.tap('fire');
     ho.step(1 / 60, 2);
   });
-  await shoot('55-turncoat-beam');
+  // (Sooner than the others: the word under the crosshair is on real time.)
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(outDir, '55-turncoat-beam.jpg'), type: 'jpeg', quality: 92 });
+  console.log('  55-turncoat-beam.jpg');
   await step(26);
   await page.waitForTimeout(1200);
   await shoot('56-turned-robot');
@@ -1014,11 +1022,16 @@ await page.click('.screen.profile [data-action="profile-back"]');
   // 60. A grenade going off in a pack.
   await run(() => {
     const ho = window.__HO;
-    ho.place(0, 4.4, 0, 0);
-    for (const [x, z] of [[0, -3.6], [1.0, -4.3], [-1.0, -4.3], [0.2, -5.2], [-1.6, -3.2]]) ho.spawnKind(x, z, 180, {});
+    ho.place(0, 5.2, 0, -3);
+    for (const [x, z] of [[0, -3.2], [1.0, -3.9], [-1.0, -3.9], [0.2, -4.8], [-1.6, -2.8]]) ho.spawnKind(x, z, 180, { hold: true });
     ho.step(1 / 60, 20);
     ho.tap('grenade');
-    ho.step(1 / 60, Math.round(ho.economy().rules.grenade.fuse * 60) + 4);
+    // To the frame after it goes off.
+    for (let frames = 0; frames < 60 * 4; frames++) {
+      ho.step(1 / 60, 1);
+      if (frames > 5 && ho.economy().grenadesInAir === 0) break;
+    }
+    ho.step(1 / 60, 3);
   });
   await shoot('60-grenade');
 
@@ -1038,9 +1051,10 @@ await page.click('.screen.profile [data-action="profile-back"]');
       if (ho.run().phase === 'waiting' && frames % 30 === 0) ho.skipRound();
     }
     ho.announcement.freezeAt(1.1);
-    ho.step(1 / 60, 60 * 7);
-    ho.aimAtRobot('chest');
-    ho.step(1 / 60, 2);
+    // The round's own drones cross a room in under two seconds, which is a blur or a face full of rotor.
+    // So the picture is of a pack of them held nearly still, as the first of the real ones come in behind.
+    for (const [x, z] of [[-0.6, -0.4], [1.3, 0.6], [-2.2, -1.2], [2.6, -1.6], [0.4, -2.6], [-3.4, -2.8], [1.8, -3.8], [-1.2, -4.4], [3.6, -3.2]]) ho.spawnKind(x, z, 180, { kind: 'drone', speed: 0.5 });
+    ho.step(1 / 60, 40);
   });
   await shoot('61-swarm-round');
   await run(() => {
@@ -1050,7 +1064,12 @@ await page.click('.screen.profile [data-action="profile-back"]');
   });
 
   // 62 and 63. The screens: how to play, and settings from the start screen.
-  await run(() => window.__HO.game.toTitle());
+  await run(() => {
+    const ho = window.__HO;
+    ho.game.toTitle();
+    // (So that the start screen's own scene is what is drawn behind its menus.)
+    ho.step(1 / 60, 90);
+  });
   await page.waitForTimeout(400);
   await page.click('.screen.title [data-action="howto"]');
   await shoot('62-how-to-play');

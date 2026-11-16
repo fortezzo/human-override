@@ -144,6 +144,8 @@ try {
   const started = Date.now();
   await page.goto(`${site.url}?debug=1`);
   await page.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  // (Destroyed robots sometimes leave a pickup, by chance. Every check here must come out the same each time, so that is off except where a check is about it.)
+  await page.evaluate(() => window.__HO.randomDrops(false));
   const loadSeconds = (Date.now() - started) / 1000;
   console.log(`GPU: ${await gpuName(page)}`);
   check('loads from a sub-folder address', true, `${loadSeconds.toFixed(1)} s to title screen`);
@@ -3447,6 +3449,42 @@ try {
     emp.kills === 8 && emp.earned === 8 * rules.scrap.kill && emp.standing === 1 && emp.role === 'custodian' && Math.abs(emp.elite - (1 - rules.pickups.empElite)) < 0.01 && emp.sounds.includes('empBlast'),
     `8 robots and a Custodian on the map: ${emp.kills} destroyed for ${emp.earned} scrap; the Custodian left standing with ${Math.round(emp.elite * 100)}% of its health`,
   );
+  // Destroyed robots sometimes leave one, by chance. With chance switched back on, robots are destroyed eight at a time
+  // (by an EMP, so that nothing has to be walked into) until one of them leaves something, and then for a long while more.
+  const chance = await ev(() => {
+    const ho = window.__HO;
+    ho.randomDrops(true);
+    ho.clearRobots();
+    ho.place(0, 2, 0, 0);
+    ho.step(1 / 60, 5);
+    let kills = 0;
+    let firstAfter = 0;
+    let first = null;
+    let left = 0;
+    for (let wave = 0; wave < 140; wave++) {
+      for (const [x, z] of [[-5, -3], [-3, -5], [0, -5.5], [3, -5], [5, -3], [6, 1], [-6, 1], [-4, 5]]) ho.spawnRobot(x, z, 0, true, 1.2, 10);
+      ho.step(1 / 60, 3);
+      ho.game.pickups.clear();
+      ho.game.collect('emp');
+      kills += 8;
+      ho.step(1 / 60, 2);
+      const lying = ho.economy().pickups;
+      if (lying.length && !first) {
+        first = lying[0];
+        firstAfter = kills;
+      }
+      left += lying.length;
+    }
+    ho.randomDrops(false);
+    ho.clearRobots();
+    ho.step(1 / 60, 30);
+    return { kills, first, firstAfter, left };
+  });
+  check(
+    'destroyed robots sometimes leave a pickup, by chance, where the player can walk to it; and never more than three in a round',
+    chance.first !== null && ['resupply', 'overload', 'emp', 'doubleScrap', 'lockdown'].includes(chance.first.id) && Math.abs(chance.first.x) < 9 && Math.abs(chance.first.z) < 7 && chance.left === rules.pickups.perRound,
+    chance.first ? `the first after ${chance.firstAfter} robots had been destroyed (${chance.first.id}, in the lobby); ${chance.left} left by ${chance.kills} robots in the one round` : `none in ${chance.kills} kills`,
+  );
   const lapsed = await ev(() => {
     const ho = window.__HO;
     ho.dropPickup('emp', 6, 5);
@@ -3608,6 +3646,7 @@ try {
   real.on('pageerror', (e) => problems.push(`real clicks exception: ${e.message}`));
   await real.goto(`${site.url}?debug=1`);
   await real.waitForFunction(() => window.__HO?.ready, null, { timeout: 120000 });
+  await real.evaluate(() => window.__HO.randomDrops(false));
   const at = () => real.evaluate(() => ({ ...window.__HO.run(), quality: window.__HO.stats().quality, ammo: window.__HO.stats().ammo, locked: document.pointerLockElement !== null }));
   const until = (state) => real.waitForFunction((state) => window.__HO.stats().state === state, state, { timeout: 8000 }).catch(() => {});
   /** What the browser does when the player presses Esc: it takes the mouse back. */

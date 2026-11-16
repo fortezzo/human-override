@@ -675,6 +675,9 @@ kbd {
   font-size: 14px;
 }
 /* How to play: short sections in two columns, read top to bottom. */
+.howto .panel.wide {
+  width: 1040px;
+}
 .howto-scroll {
   max-height: 64vh;
   overflow-y: auto;
