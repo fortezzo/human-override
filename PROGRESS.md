@@ -9,11 +9,233 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | 0 | The look test: one room, one robot, one rifle | **Approved** (after two rounds of feedback, recorded below) |
 | 1 | Core loop: whole map, rounds, scrap, weapons, HUD, restart, debug mode | **Played; nine items of feedback, all done** (recorded below) |
 | 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Played; four items of feedback, all done** (recorded below) |
-| 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Built. Waiting for you to play it.** |
+| 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Played; eight items of feedback. Seven done, the eighth is a note for Stage 4** (recorded below). The map is now six areas. **Waiting for you to play it again.** |
 | 4 | Full economy | Not started |
 | 5 | Polish | Not started |
 
-The approved look lives in `media/look-target/` and is never overwritten. Stage 3's pictures are in `media/stage-3/` (37 of them, including every earlier view re-taken) and are re-made with `npm run build` then `npm run shots`. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+The approved look lives in `media/look-target/` and is never overwritten. Stage 3's pictures are in `media/stage-3/` (49 of them now, the whole set re-taken after the Stage 3 feedback, with the two new areas as 38 to 46) and are re-made with `npm run build` then `npm run shots`. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
+
+## Stage 3 feedback: what changed
+
+You finished the mission, the first real person to do so, approved the four Stage 2 fixes, ARGUS's counters and remarks, the three special robots, the profile card and the lamp glass, and listed eight things. Seven are done and are in the table; the eighth is a note for Stage 4 and is recorded under it. **Stage 4 has not been started.**
+
+**Your answer since** (16 November, after reading the summary of this work, which reported that the first-timer model now lasts to about round 9 in the ordinary rounds, over the spec's "rounds 5 to 8"): that is fine, and after your playthrough easier is the right direction. The target in `SPEC.md` has been changed to match (decision 126), and **the game is not to be made harder again without asking you first.**
+
+| # | You asked for | What was done | How it is checked now |
+| --- | --- | --- | --- |
+| 1 | A bigger map: a loading dock and a robotics lab, built to the approved look, each with its own mood; two new loops and no dead ends; cramped spots widened; each with a door to buy, a wall weapon, hidden robot entries and room for Stage 4's stations; a mission step moved if it helps | **Six areas.** The **loading dock** is west of the server hall: 22 metres by 22 and seven and a half high, the biggest open space on the map, under sodium lamps; shipping containers in islands with lanes all round, a box truck backed into the middle bay with its headlamps on, a crane, and two truck bays open to the yards the robots cross. The **robotics lab** is south of the power room and east of the hall: cold and white, a fenced assembly cell with three arms working on a half-built unit, torsos coming in on an overhead line, racks of arms and legs, units standing switched off in recharging bays (all of them the robots' own bodies, taken apart by the game). **Three loops** now: lobby, hall, power room (as before); lobby, dock, hall; hall, lab, power room. **Four new doors**: lobby to dock 1000, hall to dock 1000, power room to lab 1000, hall to lab 1250. **Wall weapons**: a second carbine in the dock, a second shotgun in the lab. **Entries**: two truck bays and a ceiling vent in the dock, the assembly-line hatch and a vent in the lab, one more vent in the hall; thirteen in all, none of them visible from indoors. **Widened**: the server hall's rack rows now stop short of both side walls, leaving a walkway down each side (they ran wall to wall), and both doors into the power room are wider. **The caged key moved to the lab**, as you suggested: the mission now walks you through it. Floor is left clear in both for the stations: in the lab, three and a half metres of the west wall in the south-west corner and six metres of the east wall north of the hatch (either would take the Overclock Bench); in the dock, seven metres of the north wall either side of the stacked containers and twelve of the south wall. See pictures 38 to 46. | Unit tests of the map: three loops, no dead end but the core. End to end: every one of the eight doors bought with F and walked through on foot, round each of the three loops, at all four quality levels (60 crossings), each room measured for light; a robot sent in at each of the thirteen entrances reaches the player; every entry is joined to every room on the robots' map; none of the five walk-in spots can be seen from indoors; each new area's doors, prices, wall weapon, entries and HUD name. |
+| 2 | The safe spot by the barrels: robots must reach and hit me anywhere I can stand, and a bomber's blast too; add a check that samples standable positions across the whole map | **Found, with three more like it, and closed at the root.** Your spot was the corner among the barrels in the lobby. There were two ways into it: a jump (which put you on top of anything up to waist height) and a gap between two of the barrels only just as wide as you are. The Stage 1 check saw neither, because it studied the floor plan in 15 cm squares. **Jumping no longer gets you onto or over anything taller than a step**, so every spot of the first kind is gone at once, including a way out of the building over the new dock's barriers that I had just built without knowing. **The barrels' corner is solid.** **A bomber's blast is no longer stopped by low cover** (a barrel or a barrier between you used to block it); only a wall, or something taller than you are, does. **The new check stands everywhere**: about 147,000 places, one every 10 cm, for a body slightly slimmer than yours so that it goes through anything you could squeeze through, on the floor and on top of whatever can be stood on, reached by the game's own rules of movement. It fails if a robot cannot get within striking distance of any of them without a wall between. Besides your corner it found **a second safe spot behind the security desk** in the lobby's opposite corner (through a gap between a bin and the corner of the desk that a person can just squeeze through), a strip behind a crate in the power room, and a slot in the new dock. All are closed. **And robots no longer gather on the wrong side of a wall**: see "found on the way". | That check, in the end-to-end run and as unit tests on made-up maps (a fenced corner, a gap 70 cm wide). Told that jumping onto things still works, it must find your corner again (2.2 m out of reach). Then real robots: one sent from five metres away to each of the sixteen most awkward places the check can find, and each must land a blow (the slowest took 4.4 s). A player run at the barrels from five sides, jumping all the way, never ends up on or among them. A bomber set off across a low barrier hurts; across a wall it does not. |
+| 3 | Difficulty for a real person: I would not have survived without the safe spot; treat a human as closer to the first-timer model; re-tune so a real player can finish with good play and no exploit; say what changed | See **"Difficulty for a real person"** below. The short version: what ends an ordinary player's run is being boxed in by a pack, so a blow now takes a fifth of your health (it was three tenths) and a crowd cannot land them faster than one every 0.6 s; the mission's own fights are sized for someone holding ground; and the ordinary rounds were left alone. | `npm run mission` and `npm run balance` re-produce every number in that section. |
+| 4 | Do not make me wait for the Custodian: have it arrive at the start of the round after I hold the other two keys, never before round 8; re-run both models, same table | Exactly that. With two keys in hand the tracker reads **A CUSTODIAN CARRIES THE LAST KEY / IT ARRIVES WITH ROUND 8** (or whichever round is next, if you are past 7). The skilled model now finishes in about eleven and a half minutes, in round 8 or 9. The table is below. | Unit tests of the rule both ways round. End to end: keys early, it comes with round 8; no keys by round 10, it does not come; both keys taken in round 10, it comes with round 11. |
+| 5 | Make the ARGUS analysis a moment: large near the top centre with ARGUS's eye and its own sound, about two seconds, then shrink into the corner for the rest of the pause; never pause; keep the crosshair and the middle clear; respect reduced flashing; screenshots of both states | It arrives across the top of the view under ARGUS's eye mark (the one painted on the walls, drawn as a vector so it is sharp at any size): the ring turns into place and the iris opens, the title is 38 px on a 1080p screen and the "ADAPTING" lines 36 px in capitals, where the corner banner's are 13 and 17. It holds for about two seconds (2.6 from first appearing), then flies to the corner as it fades and the small banner takes its place, where it stays **until the next round begins** (it used to go after eight seconds). It has a sound of its own, rebuilt to open on a sharp burst as the banner snaps in. It is sized as a share of the window, so it ends about a third of the way down in a small window and on a big screen alike. With flashing reduced nothing moves or blinks: it fades in and fades across. Only one thing is shown at the top of the view at a time: it waits for "ROUND 4 CLEARED" to leave, and a mission notice waits for it. Pictures 31 and 31b. | End to end, measured on the screen: where it is, how big its lettering is at 1280 x 720 and at 1920 x 1080, that it ends above 42% of the way down (the crosshair is at 50%), that the eye mark is there, that its sound was asked for, that the game went on playing behind it, that the corner banner takes its place and stays until the next round starts. |
+| 6 | Make a resisted hit obvious: a larger, clearer word, a deflecting spark, a flash on the plate and its own sound | **RESISTED** is 26 px and bold (it was 11 px), in the colour of the plating that turned the shot, with a dark edge so it reads over a pale floor, and a deflection mark either side. The plate it struck flares white and swells. A spray of long sparks is thrown back off it in the plating's colour, and the round itself glances away as a bright streak. The sound is new: a struck bell and a struck plate, three versions, in place of the soft shimmer it had. The word snaps in once and stays while you keep firing into the same plating, so it does not strobe. Pictures 32 and 32b. | End to end: the word's size, weight, place and colour; that the plate is still flaring a quarter of a second on; that the new sound was asked for; and that a resisted hit throws at least a dozen more sparks than an ordinary one into the same robot. |
+| 7 | The heavy looks like plain boxes next to the horde robot: same level of design, with plating seams, pistons and joints, and a head of the same family; keep the glowing chest | Rebuilt. It keeps the horde robot's own body and head underneath and wears armour made for it: a breastplate in two halves that close on an eight-sided housing round the reactor (bolted, with three claws gripping the core), a bank of cooling fins and a hose each side running back to the power pack; strips down the belly that lap one another, one on each joint of the spine; shoulder plates in two layers with a rolled edge between them, carried on a strut from the yoke; a cap over each elbow, plates down the forearms, thighs and shins with a rib down each, a hinged cap over each knee, skirt plates hung from hinges on the hips. The head is the horde robot's head, visor and all, inside a helm: a hood over the brow, a guard round the jaw, a crest. Its numbers, its reactor and where to shoot it are unchanged. Pictures 35 and 35b. | By eye, in the studio viewer from every side and in four poses, and in the game's own light beside one of the horde. The end-to-end checks on the heavy (plating, weak point) pass unchanged. |
+| 8 | For Stage 4, not now: I finished with far more scrap than I could spend | Recorded for Stage 4: scrap must have a use all the way through a long run (the boosts, the crate, and weapon upgrades at the bench that can be bought more than once). The models agree with you: in the seven runs I read that ended in round 8, the regular model was carrying between 5,400 and 23,600 scrap with nothing left to spend it on. | |
+
+### Difficulty for a real person
+
+**A third model.** You said the skilled model is stronger than a real player like you and that a human is closer to the first-timer. So there is now a **regular** player: nearly the first-timer's hands (it notices a robot in 0.38 s to the first-timer's 0.45, turns a little faster, aims at the body three shots in four, and its aim wanders almost as much) with the habits of someone on their fourth or fifth attempt: it reloads in the lulls, buys the carbine before it starts the uplink, breaks out of a crowd, steps away from a robot that is hitting it from round a corner, and does not back into the yards the robots walk in from. The mission is paced for this one now, not for the skilled one.
+
+**What I read before changing anything.** As in Stage 2, the last seconds of dozens of runs. Two things came out of it.
+
+- *The game:* nobody was being out-shot. They were being **boxed in**. A pack arrives, three or four robots are in reach, and from full health to down took a second and a half (four blows, 0.45 s apart). No person reacts in that.
+- *The models:* the new one had habits no person has, and each was fixed before the game's numbers were touched: retreating into the dead-end yards the robots come in by and being cornered there; shooting at a robot six metres away while one it could not see hit it from round the end of a rack; waiting for the round to be nearly over before starting the uplink; leaving the Custodian's key on the floor until there was an eight-metre gap in the fighting; crossing the whole map to top up ammunition before the final stand. The first two are things a beginner really does, so the first-timer model keeps them.
+
+**What was changed in the game** (all of it in `src/config.ts`):
+
+| | Was | Now |
+| --- | --- | --- |
+| A robot's blow | 30 of your 100 health | **20** |
+| Least time between two blows from a crowd | 0.45 s | **0.6 s** |
+| So, from full health to down in a crowd | 4 blows, 1.35 s at the quickest | **5 blows, 2.4 s at the quickest**; with four robots round you, about six seconds, measured |
+| Health starts coming back after | 4 s | **3 s** |
+| A heavy's blow / the Custodian's / the Proxy's | 50 / 34 / 45 | **40 / 28 / 36** |
+| Robots on the map at once while you hold the uplink | whatever the round sent (10 to 15 in rounds 5 and 6) | **7 at most**; the rest of the round waits |
+| The final stand's horde | 12 at once, one every 1.9 s | **9 at once, one every 2.2 s** |
+| The Custodian's health / the Proxy's (times an ordinary robot's) | 6 / 10 | **5 / 8** |
+| The Custodian arrives | with round 11 | with the round after you hold the other two keys, never before round 8 (item 4) |
+
+**What was not changed:** the ordinary rounds. How many robots each round sends, how tough they are, how many run and how fast (still just under your sprint in the late rounds, as you asked after Stage 1), the specials, ARGUS's counters, what things cost.
+
+**Where it stands now**, on the final code: 48 missions each by the skilled and the regular model, 16 by the first-timer, and 16 runs of ordinary rounds each by the first-timer and the regular. No god mode, no free scrap. The first two columns are the table you asked for, set beside Stage 3's.
+
+| | Skilled model (48 missions) | First-timer model (16 missions, 16 ordinary runs) | Regular model, new (48 missions, 16 ordinary runs) |
+| --- | --- | --- | --- |
+| Finished the mission | **43 of 48 (90%)**; it was 17 of 48 (35%) | **4 of 16 (25%)**; it was 0 of 16 | **12 of 48 (25%)** |
+| Mission time, of those that finished | **median 11:35** (fastest 10:41, slowest 14:50); it was 17:44 | median 13:15 (12:20 to 14:17) | median 13:19 (11:12 to 14:51) |
+| Round the mission ended in | **8** (39 runs) or 9 (4 runs); it was 11 | 8 (3 runs) or 9 (1 run) | 8 (all 12) |
+| Reached the final stand | 45 of 48 | 7 of 16; it was 0 | 22 of 48 |
+| **Won the final stand** | **43 of 45 (96%)**, taking 1:25 (median); it was 17 of 29 (59%) | 4 of 7 | **12 of 22 (55%)**, taking 3:33 (median: it steps out of the core to recover, and the clock stops) |
+| Got the uplink's key | 46 of 48 | 14 of 16; it was 7 of 16 | 38 of 48 |
+| Went down in round (attempting the mission) | 8 (median; 3 to 8), of the 5 that went down | **8** (median; 4 to 9), of the 12 that went down; it was 5 | 7 (median; 5 to 9), of the 36 that went down |
+| Went down in round (ordinary rounds only) | | **9** (median); 6 of 16 ended by round 8; earliest 4, latest 12; it was 7 | 8 (median); 9 of 16 in rounds 5 to 8; earliest 5, latest 13 |
+
+Where the skilled model's 5 lost runs ended: 2 in round 3 at the key cage, and 3 in round 8 with all three keys (one about to arm the switch, two inside the core during the stand). **None was lost waiting for the Custodian**; in Stage 3 that was 10 of 48.
+
+Where the first-timer's 12 lost missions ended: 2 at the uplink (rounds 4 and 5), 2 in round 7 with two keys in hand, 4 in round 8 with the Custodian destroyed and its key lying on the floor, and 4 in round 8 or 9 with all three keys (one at the core's door, one on its way back into the core, two with the switch armed and not yet pulled).
+
+Where the regular model's 36 lost missions ended: 10 at the uplink in round 5; **10 with two keys in hand, waiting for the Custodian** (5 in round 5, 5 in round 7); 5 in round 8 at the Custodian (one fighting it, four with its key on the floor); and 11 in rounds 8 and 9 with all three keys (one at the core's door, nine in the final stand, four of them inside the core and five on their way back into it, and one with the switch armed).
+
+**Against the spec's three targets, and yours:**
+
+- *A real player can finish the mission with good play and no exploit* (yours). The two models that are meant to be closest to a real person, the first-timer and the regular, each now finish **one mission in four**, where neither finished any before; the skilled model finishes nine in ten. A person who learns the game should land between those. I think one in four for a near-beginner is the right side of "hard", but it is a judgment, and it is a number from models. **One thing in it is yours to decide:** the regular model has both keys by round 5 and then has to live through rounds 5, 6 and 7 before the Custodian may come. Ten of its 48 runs end there. That is the wait you asked me to remove, in a smaller form, and it is your "never before round 8" that keeps it. If you would rather it came as soon as the other two keys are held, whatever the round, that is one number (`MISSION.custodianFromRound`), and I would expect the regular model to finish about one mission in three.
+- *A first-time player should usually go down between rounds 5 and 8* (as the spec read). **This one moved, and you have since changed the target to match.** Fighting the ordinary rounds only, the first-timer model's median is now round 9 (it was 7): of its sixteen runs one ended in round 4, one in 7, four in 8, five in 9, two in 10, two in 11 and one in 12. Across four batches on near-identical rules the median was 8, 8, 8.5 and 9. That is the cost of making a crowd survivable. I reported it as over the spec's range; you answered that about round 9 is fine and that easier is the right direction, so `SPEC.md` now reads "around round 9 (between rounds 7 and 10)", which twelve of those sixteen runs meet. The levers are written down in case you ever want it back (`ROUNDS.counts` from round 8 on, or `ROUNDS.runShareMax`, how much of a round runs), **but nothing gets harder unless you ask for it.**
+- *A focused player can finish the mission in 15 to 20 minutes, around round 10 to 12.* **No longer, by your choice** (item 4: "a fast mission ending before round 10 is fine"). Every finished mission, by every model, took between 10 and 15 minutes and ended in round 8 or 9. `SPEC.md` now carries that sentence of yours beside the old figure (decision 127).
+- *The final stand is hard but winnable.* For the regular model it is exactly that: 12 wins in 22 (55%). For the skilled model it is no longer hard: 43 in 45 (it was 59%).
+
+**How far to trust the regular model.** Less than the other two. Its result moved between 6 wins in 48 and 17 as I changed its habits, on rules that barely changed: whether it waited to own the carbine before starting the uplink was worth more to it than anything I did to the game. The version reported here starts the uplink when it gets there, which is what the tracker tells a person to do. I report it because it is the model nearest to you; I would not lean on its exact number.
+
+**What I would watch when you play it.** Whether five blows feels right, or soft. The models cannot tell me that; they only tell me how far a player with certain hands gets. If the final stand still feels unwinnable to you, the first numbers I would turn are `MISSION.standMax` (9 robots at once) and the Proxy's blow (`MISSION.proxy.damage`, 36). If something now feels too forgiving, tell me which: the ordinary rounds (the first number I would offer to turn back is `ROBOT.attackDamage`, toward 25), or the uplink (seven robots at once is deliberately fewer than the round around it would send, and starting it early has become the safe thing to do). I will not turn any of them up unasked.
+
+### Found on the way, and fixed
+
+- **A second safe spot, and robots on the wrong side of a wall.** In one of 48 missions my regular test player was still "getting back to the core" after 45 minutes. It was standing in the corner behind the lobby's security desk at full health, and nine robots and the Proxy were pressed against the other side of the wall behind it, in the power room. Two faults, one hiding the other. It had squeezed into a corner robots could not enter (see item 2). And a robot told to get "as close as it can" to someone it cannot reach was heading for the nearest floor it could stand on, which was through the brickwork. Robots now make for the nearest floor on the player's side of the wall. My first version of the stand-everywhere check, at 20 cm for a full-width body, had passed this corner: a body sliding along the bin and the desk gets through a gap that samples that far apart step straight over. The check now samples every 10 cm with a slimmer body.
+- **The breaker could be thrown through a wall.** It hangs on the power room's south wall, and the lab is behind that wall: from inside the lab, standing against it, the game offered "Restore power". Worse, the lab's weapon rack hangs on the back of the same wall, and the breaker's prompt hid the rack's until the power was on. The check I wrote for the lab's rack found it. A console can now only be used from the room it is in.
+- **A slot in the new loading dock** between a container and the barrels in the corner, 80 cm wide: a person fitted and a robot did not. The stand-everywhere check found it the first time it ran. The container now meets the barrels.
+- **The loading dock could be seen through from outside.** A room is only drawn while its doors are open, and its walls face inward. From the lobby's open window you looked either at open country where a building should be, or straight into the dock through its missing outside wall. It now has an outside face (concrete plinth, steel cladding, two sodium lamps) that belongs to the lobby and is always there.
+- **A browser will not start a fade on something an animation has just moved.** The large banner jumped straight to the corner instead of flying there. It is two boxes now: one arrives, the other carries it away.
+- **A held bomber never goes off**, which made my first test of the blast pass for the wrong reason (nothing exploded on either side of the wall). The check now uses one that primes but barely moves.
+- **My stand-everywhere check could not step off the far side of a barrel**: someone who drops off a tall thing lands clear of its side, not against it, and the first version only looked one sample away. Its unit test caught it.
+- **Three browsers started in the same second**: one timed out loading and a whole batch of missions was lost. Batches now start a few seconds apart, and play a kept copy of the build so that work can go on meanwhile.
+
+## Design decisions made in the Stage 3 feedback
+
+Numbered on from Stage 3's (which ended at 100). None of these was asked as a question; each is mine to defend and yours to overrule.
+
+101. **Where the two areas go.** The dock is west of the server hall, with a short passage up to a goods door in the lobby's west wall; the lab is south of the power room and east of the hall. That gives each new area a door from two different rooms, which is what makes the two new loops (lobby, dock, hall; hall, lab, power room), and it puts the old "loading dock" entrance in the hall's west wall to use: it is now the shutter into the real dock.
+102. **The caged key is in the lab**, as you suggested. It makes the lab part of every mission, where otherwise it would be a room some players never opened. The cost is one more door on the mission's path (1000 from the power room, or 1250 from the hall).
+103. **The new doors cost what the old ones do**: 1000 for the dock's two and the power room's door to the lab, 1250 for the hall's door to the lab (the same as the hall's other side door). Opening the whole map is 7,250 scrap, up from 3,000.
+104. **The new wall weapons are a second carbine (dock) and a second shotgun (lab)**, not new guns. New weapons arrive in Stage 4 with the crate and the bench; until then a second rack means ammunition is never a whole map away.
+105. **The dock's bays and the lab's hatch are entrances**, not scenery: robots walk in through two of the three truck bays (the third has the truck in it) and through the hatch the assembly line comes in by, and each room has a ceiling vent as well. Each walk-in has a walled yard behind it, as the old ones do, so nothing is ever seen to appear.
+106. **The hall's racks were shortened, not removed.** The rows stop short of the side walls now, which makes a walkway down each side and turns the hall from a comb into a grid. The uplink's corner is unchanged.
+107. **The safe spot was closed by changing the jump, not by moving the barrels.** Moving them would have fixed one corner. A jump that cannot mount anything taller than a step fixes every corner on the map, including ones not built yet, and the check now proves it. Space still jumps (the spec lists it); it just does not take you anywhere a robot cannot go.
+108. **A robot's blow is still decided by distance, not by line of sight.** A robot on the other side of a rack's end can hit you. Making blows need a clear line would have made every thin obstacle a safe spot.
+109. **Low cover does not stop a blast; tall cover does.** A container or a rack between you and a bomber still saves you. A barrel does not.
+110. **The Custodian's rule is exactly yours**, with one reading of mine: "the round after I hold the other two keys" means the next round to *start*, so keys taken during the lull before round 8 bring it with round 8. The tracker names the round.
+111. **The analysis is on screen twice over**, large and small, and only one is visible at a time. The large one is centred lettering and the small one is right-aligned, so one box could not turn into the other; one arrives and leaves, and the other takes its place.
+112. **The large banner is sized from the window**, not in fixed pixels, and from the room there is between the objective box on the left and ARGUS's corner on the right. On a 1920 x 1080 screen its main lines are 36 px; in a 1280 x 720 window, 22 px. It never covers the objective.
+113. **One thing at a time at the top of the view.** The analysis waits for a round or mission announcement to finish, and a mission notice waits for the analysis. Nothing is dropped: the notice is shown when the banner shrinks.
+114. **The banner stays in the corner until the next round begins**, as you asked, where it used to leave after eight seconds. If no round begins (the debug hold) it goes after twenty.
+115. **RESISTED is in the plating's own colour** (green for the sidearm's, orange for the shotgun's, blue for the carbine's, pink for the strike's), so the word and the plates on the robot say the same thing. The other three words under the crosshair (ARMOUR, PLATE, PLATE OFF) are unchanged: you asked about this one, and they are answered by the heavy's and the plate's own look.
+116. **The heavy is the Drudge underneath.** Its body and head are the horde robot's own parts, re-finished in bare plate, with the armour added over them. That is what makes them one family, and it is why the heavy's helm has the Drudge's visor in it. Its size, health, speed, plating and weak point are unchanged; only what it looks like is.
+117. **A third test player, the "regular"**, and the mission is paced for it. The skilled model stays, because the table you asked for needs it and because it shows the ceiling.
+118. **Crowd damage was eased; the rounds were not.** The spec's first-timer target is about the ordinary rounds, so those numbers were left alone, and the change was made where the logs said runs were ending: the second and a half between a pack arriving and the run being over. (It moved the first-timer model all the same, and you have since moved the target: decision 126.)
+119. **Fixes to how the test players behave are only given to the ones who would know.** Staying out of the robots' entry yards and stepping away from a robot you cannot see are things a person learns; the first-timer model does not have them. (When it was given them too, it went from round 8 to round 10 in the ordinary rounds, which is not a first-timer.)
+120. **The uplink's limit is on the whole map, not on the uplink's own wave.** Seven robots at once, the round's and the uplink's together. Its own wave was never the problem: in rounds 5 and 6 the round itself had ten to fifteen robots converging on someone who is not allowed to leave.
+121. **With the dock shut, the Proxy comes in across the front yard.** It is too big for the ducts and needs a way in on foot; the dock's bays are that way when the dock is open, and the main breach is when it is not.
+122. **The dock has an outside wall that belongs to the lobby.** See "found on the way". It is the lobby that has the window, so it is the lobby that draws what the window shows.
+123. **One sound was replaced and one rebuilt**: the shimmer for a resisted hit gave way to three versions of a struck bell and plate, and the analysis's sound now opens on a sharp burst and a low thump. Both come from packs already credited; the download is unchanged at 17.2 MB.
+124. **SPEC.md keeps your words.** The change from four areas to six is added under the original sentence, marked as a change and dated to this feedback, with the two mission changes (the cage, the Custodian) beside it.
+125. **The pictures keep their numbers.** 31, 32 and 35 are the ones you named, re-taken; 31b, 32b and 35b are the second state of each; the new areas are 38 to 46. Picture 12 was "the breaker and the cage" and is now "the breaker and the lab door".
+126. **The first-timer's target in `SPEC.md` is now "around round 9 (between rounds 7 and 10)"**, changed on your instruction of 16 November. This time the sentence itself was changed, because you asked for the target to be updated; a marked note under it keeps what it said before ("between rounds 5 and 8"), your reason (after your playthrough, easier is the right direction) and your rule (**don't make the game harder again without asking**). "Between rounds 7 and 10" is my wording of your "about round 9": it is the old four-round window moved up by two, and twelve of the model's sixteen runs fall in it.
+127. **Your sentence about the mission's length is beside it.** "A fast mission ending before round 10 is fine" (item 4) is recorded under the same paragraph of `SPEC.md`, because the spec's "15 to 20 minutes, around round 10 to 12" is still printed there and no longer describes what you asked for. That original sentence is untouched. You did not ask for this line; strike it if you would rather the spec said nothing.
+128. **The two test tools report against what you have decided.** `npm run balance` now counts the runs that end in rounds 7 to 10 (it counted 5 to 8), and `npm run mission` no longer prints how many missions took 15 to 20 minutes. Neither change touches the game.
+
+## Checks run at the end of the Stage 3 feedback
+
+| Check | Result |
+| --- | --- |
+| 1. Type-check and production build | Pass, zero errors |
+| 2. Unit tests | **191 of 191 pass** in 15 files. New: the Custodian's rule both ways round and what the tracker says about it; the stand-everywhere check on made-up maps (a fenced corner, a low step, a gap a person only just fits, the same at a finer spacing); the map as six areas in three loops with no dead end but the core. |
+| 3. Headless browser | **169 of 169 pass** against the production build served from a sub-folder address. What is new is listed below. |
+| 4. Screenshots | 49 in `media/stage-3/`, the whole set re-taken, compared by eye with `media/look-target/`. New: 31b, 32b, 35b and 38 to 46. |
+| 5. Performance | See below. |
+| 6. Credits | Pass: 178 shipped asset files all trace to credited sources (two more than at the end of Stage 3: three versions of the new deflection sound in place of the one it replaces, cut from packs already credited); the credits match `links.txt`; no file tracked by git is a raw download. The two new areas use only models and textures that were already in the game, and shapes made in code. |
+
+*When these were run.* The headless-browser run, the performance report and the screenshots are all from the final build of the game. After them only documents changed, and what the two test tools print at the end of a batch (decision 128). The type-check, the unit tests and the credits check were run again after that, and each of the two tools was run to see that it still works.
+
+**New in the end-to-end test** (20 checks, making 169):
+
+- *Nowhere to hide*: the stand-everywhere check (about 147,000 places; none out of reach); the same check told that jumping onto things still works (it must find the barrel corner); ten runs at the barrels, jumping all the way; a real robot sent to each of the sixteen most awkward places; a bomber across a low barrier and across a wall.
+- *The two new areas*: each one's doors, from the plan and from the prompt on screen; its wall weapon bought; its name on the HUD; its ways in. All eight doors bought with F and walked through on foot round the map's three loops at every quality level. A robot from each of the thirteen entrances reaching the player.
+- *The Custodian*: not before the other two keys, however late the round; then with the very next round. With the dock shut the Proxy comes in at the front yard; with it open, through a truck bay.
+- *The analysis*: where the large banner is and how big, in a small window and on a 1080p screen; its eye mark and its sound; the small banner taking its place; that it stays until the next round begins and then goes.
+- *A resisted hit*: the word's size, weight, place and colour; the plate's flare; the sparks counted against an ordinary hit's; the sound.
+- *Changed, not new*: going down in a crowd now takes five blows, never two within 0.6 s (it was four, 0.45 s).
+
+### Performance (check 5)
+
+Measured on the production build on an NVIDIA GeForce RTX 4070 SUPER (a fast desktop card), at 1920 x 1080 unless it says otherwise.
+
+**The heaviest moment the game can produce** is the one every stage has measured, with one change that makes it heavier: the horde is in the server hall with **every door on the map open**, and the hall now has a door to each of the other five areas, so all six are being drawn where it used to be three. A third table is new: the same horde in the loading dock, the biggest room.
+
+*A full horde of ordinary robots, in the server hall, every door open* (six areas drawn):
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 283 | 543 | 1.20 M | 22 | 124 | 22 |
+| Medium | 218 | 712 | 1.43 M | 23 | 155 | 33 |
+| High | 231 | 715 | 1.44 M | 23 | 211 | 33 |
+| Ultra | 198 | 738 | 1.48 M | 23 | 183 | 33 |
+
+*The same horde as ARGUS sends it*: two heavies, two bombers and four drones among the 24, and of the sixteen ordinary robots seven shielded against the gun being fired and eight with a plate over the visor.
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 257 | 602 | 1.21 M | 22 | 137 | 44 |
+| Medium | 200 | 758 | 1.41 M | 22 | 286 | 55 |
+| High | 215 | 758 | 1.42 M | 23 | 266 | 55 |
+| Ultra | 162 | 788 | 1.47 M | 22 | 278 | 55 |
+
+*That horde in the loading dock*, with the player by the hall's shutter and the robots coming across the open floor:
+
+| Quality | Frames per second | Draw calls | Triangles | Robots | Particles | Scrap pieces |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low | 359 | 351 | 0.79 M | 23 | 112 | 44 |
+| Medium | 254 | 474 | 1.06 M | 24 | 130 | 33 |
+| High | 262 | 465 | 1.04 M | 23 | 289 | 22 |
+| Ultra | 166 | 498 | 1.17 M | 23 | 290 | 22 |
+
+**Smoothness**: ARGUS's horde in the server hall, with the frame rate limited to the screen's, as a player sees it (this screen refreshes 240 times a second, so a perfect frame is 4.2 ms).
+
+| | Quality | Usual frame | Slowest 1% | Worst frame | Frames over 25 ms in 5 s |
+| --- | --- | --- | --- | --- | --- |
+| 1920 x 1080 | Low | 4.1 ms | 5.3 ms | 6.9 ms | 0 |
+|  | Medium | 4.8 ms | 10.0 ms | 18.5 ms | 0 |
+|  | High | 4.7 ms | 6.8 ms | 9.9 ms | 0 |
+|  | Ultra | 4.8 ms | 9.7 ms | 12.7 ms | 0 |
+| 3840 x 2160 | Low | 4.2 ms | 9.5 ms | 13.2 ms | 0 |
+|  | Medium | 8.7 ms | 11.2 ms | 17.0 ms | 0 |
+|  | High | 9.4 ms | 11.9 ms | 12.4 ms | 0 |
+|  | Ultra | 17.6 ms | 21.9 ms | 23.8 ms | 0 |
+
+No frame took longer than 25 ms at either size, at any level. (The 4K rows are there because 4K loads this card about as heavily as 1080p loads a much slower one.)
+
+**First appearances**: the slowest frame in the second after each thing is drawn for the first time, on High.
+
+| First time on screen | Slowest frame in the next second | Frames over 25 ms |
+| --- | --- | --- |
+| An ordinary robot | 4.8 ms | 0 |
+| A robot carrying shielding | 5.9 ms | 0 |
+| A robot with a plate over its visor | 4.7 ms | 0 |
+| A shot that the shielding turns | 13.1 ms | 0 |
+| A drone | 4.9 ms | 0 |
+| A heavy | 5.7 ms | 0 |
+| A bomber | 5.9 ms | 0 |
+| The bomber going off | 6.1 ms | 0 |
+| A Custodian | 5.0 ms | 0 |
+| The Proxy | 5.1 ms | 0 |
+| The ARGUS analysis arriving | 5.3 ms | 0 |
+| The analysis shrinking into its corner | 5.1 ms | 0 |
+
+Nothing stalls: the slowest is 13.1 ms (a shot that the shielding turns). **The last two rows are new, and the first of them found something**: the first time the large banner appeared, the picture stopped for about a fifth of a second (frames of 110, 107 and 55 ms, measured). The second time cost nothing. It was the browser preparing, on the graphics card, to draw large soft-shadowed lettering on a faded band, and the game shares that card. The whole HUD is now drawn once, too faint to see, while the title screen is up; the banner's first appearance costs 5.3 ms.
+
+**Against Stage 3, measured the same day.** Frame rates on this machine differ from day to day, so the Stage 3 version was rebuilt as it was and measured today as well. Same scene for both: the ordinary horde in the server hall, every door open.
+
+| | Low | Medium | High | Ultra |
+| --- | --- | --- | --- | --- |
+| Stage 3's report, measured then (three areas drawn) | 302 | 239 | 253 | 182 |
+| The Stage 3 version, measured today (three areas drawn) | 304 | 242 | 249 | 182 |
+| **This version** (six areas drawn) | **283** | **218** | **231** | **198** |
+| This version, an earlier run today | 272 | 179 | 197 | 195 |
+| ARGUS's horde: Stage 3 version today / this version | 281 / 257 | 202 / 200 | 222 / 215 | 173 / 162 |
+
+With twice as many rooms being drawn, the heaviest scene is **7% slower on Low, 10% on Medium and 7% on High** than the Stage 3 version measured the same day, and no slower on Ultra, where the graphics card is the limit and one run differs from the next by more than the two versions do. (Two runs of this version today differed from each other by up to a fifth on Medium and High, so read these as "a little slower", not as exact figures.) It is fewer triangles than before, not more: the server hall's shortened rack rows take more out of the picture than the two new rooms, seen through their doors, put in. On this card every level still runs at more than two and a half times the spec's 60 frames a second in its worst case (162, on Ultra, with ARGUS's horde); I have not measured a laptop.
+
+Budgets held: at most 24 robots on the map, the mission's own and the specials included; 22 lamps live at once from the shared pool (8 that can cast shadows, 14 that cannot) plus the muzzle flash and the lamp that travels with the Proxy, however many of the building's 110 lamps are in view; nothing in the two new areas raised either number.
+
+- **Total download: 17.2 MB** of the 40 MB budget (models 8.7, textures 4.9, sound 2.2, code 1.4). It was 17.2 MB at the end of Stage 3: the two areas are built from models and textures already in the game.
+- **Time to the title screen**: 3.6 s from local files; 4.0 s at 100 Mbps, 5.2 s at 50 Mbps, 7.9 s at 25 Mbps (simulated).
 
 ## Stage 2 feedback: what changed
 
@@ -27,6 +249,8 @@ You approved the mission flow, the objective tracker and marker, the round annou
 | 4 | Nothing has fought the mission without god mode. Run a first-timer model and a skilled-player model through it, say how long it takes and how often each wins the final stand, and tune toward the spec | Done; see **"Mission length and difficulty"** below. The short version: the game was about twice too fast and got too hard too suddenly after round 6. After re-tuning, the skilled model finishes **17 missions in 48**; the ones it finishes take **17:44 (median), in round 11**; it wins the final stand **17 times in the 29 it reaches**. The first-timer never finishes and goes down in **round 5** (median) when it attempts the mission, **round 7** when it only fights. | `npm run mission` and `npm run balance` re-produce every number in that section. |
 
 ### Mission length and difficulty
+
+*(This is the record of Stage 2's tuning. The numbers in it were superseded by the Stage 3 feedback: see "Difficulty for a real person" above.)*
 
 Two models of a player did this. The **first-timer** is the one from Stage 1: slow to notice a robot, shaky, aims at the body, backs away late, runs when hurt. The **skilled** player is new, and is my stand-in for the spec's "focused player": quick but not instant (0.22 s), mostly on target, goes for the head a little over half the time, sprints clear to reload, keeps both guns loaded and topped up, and gets ready before starting a fight. Both can now play the mission by themselves: they follow the objective tracker, hold the uplink's ring and the core, step out to recover and come back, and pull the switch. Two tools play whole runs with them, with no god mode and no free scrap, without drawing anything: `npm run balance` (ordinary rounds) and `npm run mission` (the whole mission).
 
@@ -155,6 +379,8 @@ ARGUS and the specials:
 
 ## Checks run at the end of Stage 3
 
+*(As they stood when Stage 3 was first handed over. The current counts are under "Checks run at the end of the Stage 3 feedback" above.)*
+
 | Check | Result |
 | --- | --- |
 | 1. Type-check and production build | Pass, zero errors |
@@ -273,27 +499,27 @@ Budgets held: at most 24 robots on the map, the mission's own and the specials i
 
 ## Not verified
 
-- **How any of it sounds.** I cannot hear. The nine new sounds were cut and levelled by measurement. The bomber's beep, in particular, has to be heard over a fight to do its job, and I do not know that it is.
-- **How ARGUS reads in motion.** The banner, the remarks and the words under the crosshair were looked at as frozen pictures and their timings measured. Whether eight seconds is long enough to read two findings while reloading, and whether the remarks land as menace or as noise, needs you.
-- **The remarks' writing.** They are mine. They are meant to be cold and short. Say if the voice is wrong.
-- **Whether a person finishes the mission as often as the spec implies.** See "Mission length and difficulty": the time and the round are right for the model; how often it gets there is 17 in 48. A model is not a person.
-- **Whether each counter is noticed in the heat of a fight.** Each is drawn on the robots and named on screen; the check proves they are there, not that they are seen.
-- **The address on the profile card on the real site.** It prints whatever address the page is served from; it has only ever been served from this machine.
-- **Slower hardware, browsers other than Chromium, and how bright it is on your screen**: as at the end of Stage 1. The new "first appearances" check found no stall on this machine; a slow one builds shaders more slowly, and I have not seen one.
+- **How any of it sounds.** I cannot hear. The ring of a resisted hit and the new opening of the analysis's sound were cut and levelled by measurement (how loud, how sharp the start, how long the ring), not by ear. The bomber's beep is still unheard, too.
+- **How the two new areas play.** I have only looked at them as pictures (nine are kept, 38 to 46), and the checks prove that robots get everywhere in them, that nothing stands in a doorway and that nowhere in them is out of a robot's reach. Whether the dock's lanes are good to run a horde round, and whether the lab's fenced cell is in the way or is cover, needs you.
+- **How the difficulty feels.** Five blows instead of four is a number chosen from logs of test players. Whether it feels right or soft in your hands is the thing I most want to hear about.
+- **Whether a person finishes the mission as often as the models say.** The two models nearest to a real person each finish one mission in four; the skilled one nine in ten. Those are models, and the regular one in particular moved a good deal as I changed its habits (see "How far to trust the regular model"). You are the only real measurement there has been, and you have played one version.
+- **The analysis in motion.** Its two stages were measured on the screen and looked at as pictures a few hundredths of a second apart. Whether two seconds is long enough to read it, whether the flight to the corner reads as "it has gone over there", and whether it gets in the way at the start of a lull, needs you; so does whether it reads in a video on a phone, which is what you asked for.
+- **A resisted hit under automatic fire.** Looked at one shot at a time. The word is held still on purpose while a burst goes into the same plating; I have not seen a whole burst.
+- **The heavy in motion**, and whether its helm reads as the horde robot's head at fighting distance in a dark room. Up close and in the studio it does.
+- **Every yard, looking back at the building.** The loading dock needed an outside wall because the lobby's window looks at it. I checked that window and the front yard, and reasoned about the walled yards the robots cross (they have roofs and no view out). I have not stood in each one and looked.
+- **The address on the profile card on the real site**, and **slower hardware, browsers other than Chromium, and how bright it is on your screen**: as before. The heaviest scene now draws six areas where it drew three, and I have only measured it on this machine.
 
 ## Known rough edges
 
-- **The skilled model loses a quarter of its missions in the ordinary rounds before the Custodian comes** (13 of 48; ten of them in rounds 8 to 10). If that matches what you find, "What I would watch" above names the numbers I would turn first.
-- **The game still throws away about 100 MB of script memory a second in a heavy fight** (it was 190), so the browser still pauses now and then to clear up, and a single slow frame still turns up in the smoothness tables. The three causes that are left are named in the performance section. Stage 5.
-- **The shielding is flat.** Four hexagons of light round the chest that do not turn with the arms; from some angles one looks like a sign held up beside the robot.
-- **The drone's rotors do not turn.** They are dark discs.
-- **The heavy swings like an ordinary robot** (there is no heavier animation in the set that suits it).
-- **ARGUS only knows four things about you.** Sprinting everywhere, never buying anything, hiding behind one doorway: it has no counter for those. The four are the spec's.
-- **ARGUS forgets.** It reads one round at a time, so alternating two habits round by round keeps it one step behind. That is by design (decision 84) but a determined player will find it.
-- **The rounds after the switch are plainer** than the ones before it: no counters, no remarks (decision 93). Stage 4's swarm rounds are meant for exactly there.
-- **Nothing to spend scrap on once you own two guns and two doors**: the skilled model is carrying over 20,000 unspent by round 10. Stage 4.
-- **The screenshots' profile card shows `127.0.0.1`**: see decision 92.
-- **The sidearm and shotgun have no hands on them**, **Auto never raises quality again by itself**, and **the music does not build through a round**: unchanged.
+- **The first-timer model now lasts to about round 9** when it only fights the ordinary rounds (it was 7), which is over the spec's old "rounds 5 to 8". You have said that is fine; the target in `SPEC.md` was changed to match, and nothing is to be made harder again without asking you. See "Difficulty for a real person".
+- **The skilled model finds the mission easy now** (it finishes 90% of missions and wins 96% of the final stands it reaches). That is the price of pacing it for someone closer to the first-timer. Stage 4 gives the player boosts and upgrades, which will make it easier still; the same tools will measure it then, and if anything looks too easy I will put it to you before changing it.
+- **Scrap piles up even more than it did**: by round 8 the regular model is carrying between 5,400 and 23,600 (the seven runs I read). Opening the whole map takes 7,250 where it took 3,000, and that is the only new thing to buy. Stage 4 (your item 8).
+- **The second carbine and the second shotgun are the same guns** as the first. New weapons are Stage 4's.
+- **The box truck, its trailer and the containers are plain shapes made in code**, with painted lettering. They hold up at the distances they are seen from, under sodium light; at arm's length they are simpler than the downloaded props round them.
+- **The assembly arms do not move.** They are posed over the unit on the jig, with a welding light that flickers; nothing turns.
+- **The dock's lamps light the ground outside its north wall** when the dock is open (lamps have no shadows of their own). Two lamps were put on that wall so that it looks meant.
+- **In a crowd, blows are lost, not queued.** A robot whose blow would land within 0.6 s of another's simply misses. With several robots round you that makes going down slower than the "2.4 seconds" on paper; I have left it, because it errs on your side.
+- **The game still throws away about 100 MB of script memory a second in a heavy fight**, **the shielding is flat**, **the drone's rotors do not turn**, **the heavy swings like an ordinary robot**, **ARGUS only knows four things about you and forgets from round to round**, **the rounds after the switch are plainer**, **the screenshots' profile card shows `127.0.0.1`**, **the sidearm and shotgun have no hands on them**, **Auto never raises quality again by itself**, and **the music does not build through a round**: all unchanged from Stage 3.
 
 ## Stage 1 feedback: what changed
 
