@@ -5,7 +5,9 @@
 // themselves (see world/doorFrames.ts), so that they are there from
 // whichever side a door is seen.
 
+import * as THREE from 'three';
 import type { LevelBuilder } from '../build/LevelBuilder';
+import { DOCK } from '../plan';
 import { BLAST_DOOR, BREACH, POWER_DOOR, ROOM, VESTIBULE, WINDOW, WINDOWS, YARD_CONTAINER } from './plan';
 
 const HALF_PI = Math.PI / 2;
@@ -62,11 +64,34 @@ function buildVestibule(b: LevelBuilder): void {
   b.prop('mounted_fluorescent_lights', { part: 'd', at: [0, v.height, -10.1], collide: false, cast: false });
 
   // The building's outer face either side of the corridor, and the yard.
-  b.box('wall', [rx0 - 8, 0, v.z0 - 0.5], [v.x0 - 0.5, 8, zIn], { cast: false });
+  // (To the west it runs on past the end of the loading dock, which stands
+  // out beyond the lobby on that side: nothing behind this face is drawn
+  // unless its own doors are open, and from the far end of the yard the
+  // gap where the dock should be could be seen round a shorter one.)
+  b.box('wall', [DOCK.x0 - 3, 0, v.z0 - 0.5], [v.x0 - 0.5, 8.4, zIn], { cast: false });
   b.box('wall', [v.x1 + 0.5, 0, v.z0 - 0.5], [rx1 + 8, 8, zIn], { cast: false });
   b.box('floor', [rx0 - 8, -0.4, -40], [rx1 + 8, 0, v.z0 - 0.5], { collide: false, cast: false });
   // West yard, seen through the windows.
   b.box('floor', [rx0 - 26, -0.4, zIn], [rx0 - 0.5, -0.02, ROOM.z1 + 8], { collide: false, cast: false });
+  // And across the south side of it, the north face of the loading dock:
+  // its plinth of bare concrete and the steel cladding above. The dock is
+  // a room of its own and is only drawn while its doors are open, and then
+  // only from inside (its walls face inward); without this, someone at the
+  // open window looked either at open country where a building should
+  // be, or straight into the dock through its missing outside wall.
+  const face = DOCK.z0 - 0.06;
+  b.box('concreteDark', [DOCK.x0 - 3, 0, face - 0.3], [rx0 - t, 2.3, face], { collide: false, cast: false });
+  b.box('wallDock', [DOCK.x0 - 3, 2.3, face - 0.24], [rx0 - t, DOCK.height + 0.9, face], { collide: false, cast: false });
+  b.box('darkSteel', [DOCK.x0 - 3, 2.24, face - 0.34], [rx0 - t, 2.36, face], { collide: false, cast: false });
+  // Two bulkhead lamps on it, the colour of the dock's own. (When the dock
+  // is open its lamps reach through to the ground out here, there being no
+  // shadow to stop them, and these are what that light appears to come from.)
+  for (const x of [-15.5, -23.5]) {
+    b.box('darkSteel', [x - 0.34, 4.0, face - 0.42], [x + 0.34, 4.3, face - 0.3], { collide: false, cast: false });
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.14, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xffa24a, emissiveIntensity: 5, roughness: 0.4 }));
+    lamp.position.set(x, 4.02, face - 0.46);
+    b.addObject(lamp);
+  }
 
   // The yard is fenced in with road barriers (and sealed behind them), so
   // nobody wanders off into the dark: robots arrive across it, and the

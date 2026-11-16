@@ -178,9 +178,11 @@ export function findStandableOutOfReach(
     if (gap > reach) spots.push({ x, z, gap });
     else if (gap > robots.cell) awkward.push({ x, z, y, gap });
     // To the samples next to this one: on the level, up as far as the
-    // player can climb, or down. And down only, to those a little further
-    // off (within `dropReach`): someone who walks off the edge of a thing
-    // too tall to step down from lands clear of its side, not against it.
+    // player can climb, or down. And to those a little further off (within
+    // `dropReach`) when the difference in height is more than a step:
+    // there is a band round anything tall where a body can stand neither
+    // on the floor (too near its side) nor on top (not yet over it), and
+    // someone who drops off it, or gets up onto it, crosses that band.
     // (Never far enough to cross a wall: the two sides of the thinnest wall
     // are further apart than that for a body this wide.)
     for (let dr = -dropCells; dr <= dropCells; dr++) {
@@ -191,7 +193,10 @@ export function findStandableOutOfReach(
         if (c < 0 || r < 0 || c >= cols || r >= rows) continue;
         const beside = Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
         if (!beside && (dr * dr + dc * dc) * step * step > dropReach * dropReach) continue;
-        for (const next of levelsAt(c, r)) if (beside ? next <= y + player.climb + 1e-6 : next < y - player.stepHeight) visit(c, r, next);
+        for (const next of levelsAt(c, r)) {
+          if (next > y + player.climb + 1e-6) continue;
+          if (beside || next < y - player.stepHeight || next > y + player.stepHeight + 1e-6) visit(c, r, next);
+        }
       }
     }
   }

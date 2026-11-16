@@ -24,12 +24,14 @@ const ROUND_CAP = Number(process.argv[4] ?? 14);
 /** A round that lasts this many game minutes has stalled: something cannot reach something. */
 const STALL_MINUTES = 6;
 
-if (!fs.existsSync('dist/index.html')) {
+// (HO_DIST=some-folder plays a copy of the build kept in that folder.)
+const dist = process.env.HO_DIST ?? 'dist';
+if (!fs.existsSync(`${dist}/index.html`)) {
   console.error('No production build found. Run "npm run build" first.');
   process.exit(1);
 }
 
-const site = await serve('dist', '/');
+const site = await serve(dist, '/');
 const { browser, page } = await launch({ width: 640, height: 360 });
 page.on('pageerror', (e) => console.log('exception:', e.message));
 await page.goto(`${site.url}?debug=1`);

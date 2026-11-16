@@ -581,6 +581,9 @@ try {
 
   // Blows cannot land in a flurry: after one lands there is a moment of
   // grace, so three robots at once do not mean down in under a second.
+  // (Five blows, and never two within the grace period: a crowd takes at
+  // least 2.4 seconds to put a player down from full health. It was four
+  // blows and 1.35 seconds, which is quicker than a person can react.)
   const flurry = await ev(() => {
     const ho = window.__HO;
     const g = ho.game;
@@ -590,7 +593,11 @@ try {
     for (const [x, z] of [[0, 1.9], [1.0, 3.4], [-1.0, 3.4], [0, 4.1]]) ho.spawnRobot(x, z, 0, false, 1.5, 5000);
     const drops = [];
     let last = g.player.health;
-    for (let frame = 0; frame < 60 * 6 && g.player.health > 0; frame++) {
+    // (A blow that would land inside the grace period is lost, not put
+    // off, and each robot swings again only a second and a half later: so
+    // four robots land about one blow in two, and going down takes several
+    // seconds. Watch for long enough to see it through.)
+    for (let frame = 0; frame < 60 * 16 && g.player.health > 0; frame++) {
       ho.step(1 / 60, 1);
       if (g.player.health < last) drops.push(frame / 60);
       last = g.player.health;
@@ -613,7 +620,7 @@ try {
       ho.step(1 / 60, 130);
     });
   }
-  check('with four robots in reach it takes four blows, never closer together than the grace period, to go down', flurry.blows === 4 && flurry.shortest >= 0.44 && flurry.seconds >= 1.3, `${flurry.blows} blows over ${flurry.seconds.toFixed(1)} s, the closest two ${flurry.shortest.toFixed(2)} s apart`);
+  check('with four robots in reach it takes five blows, never closer together than the grace period, to go down', flurry.blows === 5 && flurry.down && flurry.shortest >= 0.59 && flurry.seconds >= 2.36, `${flurry.blows} blows over ${flurry.seconds.toFixed(1)} s, the closest two ${flurry.shortest.toFixed(2)} s apart`);
 
   // The sidearm has a rack of its own in the lobby: there is always
   // something cheap to buy, and an empty gun is never the end of a run.
@@ -966,6 +973,17 @@ try {
       { door: 'hallPower', stand: [10.6, 11.4], face: [8, 11.4], inside: [5.2, 11.6], look: [-3, 17], room: 'hall' },
       { door: 'lobbyHall', stand: [0, 9.3], face: [0, 6], inside: [0, 4.2], look: [0, -6], room: 'lobby' },
     ],
+    // The two loops the loading dock and the robotics lab add to the map.
+    'lobby, loading dock, hall, lobby': [
+      { door: 'lobbyDock', stand: [-8.0, 5.1], face: [-10.5, 5.1], inside: [-13.6, 5.4], look: [-22, 14], room: 'dock' },
+      { door: 'hallDock', stand: [-12.6, 16.5], face: [-10.5, 16.5], inside: [-10.1, 16.5], look: [-10.1, 9], room: 'hall' },
+      { door: 'lobbyHall', stand: [0, 9.3], face: [0, 6], inside: [0, 4.2], look: [0, -6], room: 'lobby' },
+    ],
+    'lobby, hall, robotics lab, power room': [
+      { door: 'lobbyHall', stand: [0, 5.4], face: [0, 9], inside: [-1, 12.9], look: [-1, 22], room: 'hall' },
+      { door: 'hallLab', stand: [8.0, 19.0], face: [10.5, 19.0], inside: [10.9, 19.0], look: [16, 22], room: 'lab' },
+      { door: 'powerLab', stand: [20.6, 15.6], face: [20.6, 13.0], inside: [20.6, 11.6], look: [16, 6], room: 'power' },
+    ],
     // The core's door is not bought: with the three override keys in hand, F unseals it.
     'lobby, hall, the core, and out again': [
       { door: 'lobbyHall', stand: [0, 5.4], face: [0, 9], inside: [-1, 12.9], look: [-1, 22], room: 'hall' },
@@ -1041,8 +1059,8 @@ try {
   }
   check(
     'every door, opened with F and walked through on foot, leads into a lit room at every quality level',
-    dark.length === 0 && walked.length === 36,
-    dark.length ? dark.join(' | ') : `36 crossings (all 4 doors, both directions, 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
+    dark.length === 0 && walked.length === 60,
+    dark.length ? dark.join(' | ') : `60 crossings (all 8 doors, round each of the map's three loops, at 4 levels); the darkest room measured ${Math.min(...walked).toFixed(1)} of 255`,
   );
 
   // Each room is drawn only while it can be seen, so each must be closed
@@ -1803,7 +1821,8 @@ try {
   );
   check('the fastest mission time is remembered', Math.abs(ending.best.missionTime - ending.time) < 0.01 && ending.time > 60, `${ending.best.missionTime?.toFixed(0)} s`);
   const missionAudit = await ev(() => window.__HO.spawnAudit());
-  check('through the whole mission no robot was created in view', missionAudit.created > 30 && missionAudit.seen.length === 0, `${missionAudit.created} created, ${missionAudit.seen.length} seen`);
+  // (Fewer are created than there used to be: the uplink keeps the map from filling, and the final stand sends nine at a time, not twelve.)
+  check('through the whole mission no robot was created in view', missionAudit.created > 20 && missionAudit.seen.length === 0, `${missionAudit.created} created, ${missionAudit.seen.length} seen`);
 
   // ---- Afterwards: fight on, for three more rounds.
   const roundThen = after4.round;
@@ -2128,6 +2147,128 @@ try {
     `${bomberShots} sidearm shots set it off; ${r.kills - chain.kills} robots destroyed for ${r.scrap - chain.scrap} scrap, and the player, ${(5.1).toFixed(1)} m back, untouched`,
   );
 
+  // ---- The two areas added after the first playthrough: each has a door
+  // to buy from either neighbour, a wall weapon, a way in that robots walk
+  // through and one they drop from, and its own name on the HUD.
+  const added = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.autopilot(false);
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    ho.step(1 / 60, 20);
+    const out = { doors: {}, racks: {}, names: {}, entries: {} };
+    // Every door on the map, from the plan: which areas it joins and what the prompt asks for it.
+    for (const door of game.world.doors) {
+      const plan = door.plan;
+      if (plan.a !== 'dock' && plan.b !== 'dock' && plan.a !== 'lab' && plan.b !== 'lab') continue;
+      const along = plan.along === 'x';
+      // Stand a metre back from the middle of the door, on its first side, facing it.
+      ho.place(along ? door.centre.x : door.centre.x - 1.2, along ? door.centre.z - 1.2 : door.centre.z, along ? 180 : -90, 0);
+      ho.step(1 / 60, 6);
+      const prompt = ho.run().prompt;
+      out.doors[plan.id] = { joins: [plan.a, plan.b].sort().join('+'), cost: plan.cost, prompt: prompt?.text ?? null, asked: prompt?.cost ?? null };
+    }
+    for (const door of game.world.doors) ho.openDoor(door.plan.id);
+    ho.step(1 / 60, 130);
+    // The wall weapon in each: walk up to it with nothing in the bank, then with enough.
+    for (const [area, x, z, yaw] of [
+      ['dock', -17.1, 17.6, 90],
+      ['lab', 17.6, 15.5, 0],
+    ]) {
+      game.wallet.scrap = 0;
+      ho.place(x, z, yaw, 0);
+      ho.step(1 / 60, 6);
+      const before = ho.run();
+      game.wallet.scrap = 3000;
+      ho.step(1 / 60, 2);
+      ho.tap('interact');
+      ho.step(1 / 60, 30);
+      const after = ho.run();
+      out.racks[area] = { prompt: before.prompt?.text ?? null, cost: before.prompt?.cost ?? null, usable: before.prompt?.usable ?? null, paid: 3000 - after.scrap, slots: after.slots.join('+'), area: before.area };
+    }
+    // The ways in, by area.
+    const routes = ho.entryRoutes();
+    for (const id of Object.keys(routes)) {
+      const area = /^dock/.test(id) ? 'dock' : /^lab/.test(id) ? 'lab' : null;
+      if (area) (out.entries[area] ??= []).push(id);
+    }
+    game.wallet.scrap = 0;
+    return out;
+  });
+  // (The HUD is redrawn on the browser's own frames: stand in each room for a moment and read its name off the screen.)
+  for (const [area, x, z] of [
+    ['dock', -17.1, 17.6],
+    ['lab', 17.6, 15.5],
+  ]) {
+    await ev(([x, z]) => {
+      window.__HO.place(x, z, 0, 0);
+      window.__HO.step(1 / 60, 4);
+    }, [x, z]);
+    await page.waitForTimeout(200);
+    added.names[area] = await ev(() => document.querySelector('.hud-brand-sub')?.textContent ?? '');
+  }
+  check(
+    'the loading dock and the robotics lab each have a door to buy from either neighbour, at its price',
+    Object.keys(added.doors).length === 4 &&
+      added.doors.lobbyDock?.joins === 'dock+lobby' &&
+      added.doors.hallDock?.joins === 'dock+hall' &&
+      added.doors.hallLab?.joins === 'hall+lab' &&
+      added.doors.powerLab?.joins === 'lab+power' &&
+      Object.values(added.doors).every((door) => door.cost >= 1000 && door.cost <= 1250 && door.asked === door.cost && typeof door.prompt === 'string'),
+    Object.entries(added.doors)
+      .map(([id, door]) => `${id}: "${door.prompt}" for ${door.asked}`)
+      .join('; '),
+  );
+  check(
+    'each has a wall weapon (a carbine in the dock, a shotgun in the lab), its own name on the HUD, and robots both walking and dropping in',
+    added.racks.dock?.prompt?.includes('KR-7') &&
+      added.racks.dock.cost === 1500 &&
+      added.racks.dock.usable === false &&
+      added.racks.dock.paid === 1500 &&
+      added.racks.dock.area === 'dock' &&
+      added.racks.lab?.prompt?.includes('DB-12') &&
+      added.racks.lab.cost === 750 &&
+      added.racks.lab.paid === 750 &&
+      added.racks.lab.area === 'lab' &&
+      added.racks.lab.slots.includes('shotgun') &&
+      /LOADING DOCK/i.test(added.names.dock) &&
+      /ROBOTICS LAB/i.test(added.names.lab) &&
+      added.entries.dock?.sort().join() === 'dockBayNorth,dockBaySouth,dockVent' &&
+      added.entries.lab?.sort().join() === 'labLine,labVent',
+    `dock: "${added.racks.dock?.prompt}" (${added.racks.dock?.cost}), ways in ${added.entries.dock?.join(', ')}, HUD "${added.names.dock}"; lab: "${added.racks.lab?.prompt}" (${added.racks.lab?.cost}), ways in ${added.entries.lab?.join(', ')}, HUD "${added.names.lab}"`,
+  );
+
+  // A console on a wall cannot be used from the room behind that wall. (The
+  // breaker hangs on the power room's south wall, and the lab's weapon rack
+  // on the back of the same wall: until this was checked, someone at the
+  // rack was offered "Restore power", and the rack could not be used.)
+  const throughWall = await ev(() => {
+    const ho = window.__HO;
+    const game = ho.game;
+    ho.restart();
+    ho.god(true);
+    ho.holdRounds(true);
+    ho.clearRobots();
+    const place = ho.mission().places.breaker;
+    // In the power room, at the breaker: offered.
+    ho.place(place.stand[0], place.stand[1], 180, 0);
+    ho.step(1 / 60, 6);
+    const inFront = ho.run().prompt?.text ?? null;
+    // In the lab, as near the breaker as the wall allows, facing it: not offered.
+    ho.place(place.at[0], 14.5 + 0.45, 0, 0);
+    ho.step(1 / 60, 6);
+    const behind = { prompt: ho.run().prompt?.text ?? null, area: ho.run().area, apart: Math.hypot(place.at[0] - game.player.position.x, place.at[2] - game.player.position.z) };
+    return { inFront, behind, phase: ho.mission().phase };
+  });
+  check(
+    'the main breaker cannot be thrown through the wall from the lab behind it',
+    throughWall.inFront === 'Restore power' && throughWall.behind.area === 'lab' && throughWall.behind.prompt !== 'Restore power' && throughWall.phase === 'power',
+    `in front of it: "${throughWall.inFront}"; in the lab, ${throughWall.behind.apart.toFixed(1)} m from it through the wall: "${throughWall.behind.prompt ?? 'nothing'}"`,
+  );
+
   // ---- The Custodian keeps to the player's pace: it comes for the last
   // key, with the round after the other two are in hand, however late that
   // is. (Taken early, it waits for round 8: that is checked in the mission
@@ -2204,8 +2345,8 @@ try {
     return { now: ho.outOfReach(), jumping: ho.outOfReach(1.15) };
   });
   check(
-    'standing everywhere the player can get to (a place every 20 cm, across the whole map), a robot can always get within striking distance',
-    hiding.now.patches.length === 0 && hiding.now.stoodOn > 30000,
+    'standing everywhere the player can get to (a place every 10 cm, across the whole map), a robot can always get within striking distance',
+    hiding.now.patches.length === 0 && hiding.now.stoodOn > 120000,
     hiding.now.patches.length ? hiding.now.patches.map((p) => `${p.squares} places around (${p.x.toFixed(1)}, ${p.z.toFixed(1)}), ${p.deepest.toFixed(2)} m out of reach`).join('; ') : `stood in ${hiding.now.stoodOn} places; none out of reach`,
   );
   const corner = hiding.jumping.patches.find((p) => Math.hypot(p.x + 8, p.z + 6.3) < 1.2);

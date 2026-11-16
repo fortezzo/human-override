@@ -218,13 +218,38 @@ export function nearestOpenCell(grid: NavGrid, x: number, z: number, maxRings = 
  * The nearest square a robot can get to. This is what "go to the player"
  * aims for when the player is standing somewhere robots cannot go (inside
  * a pocket, or tight against a wall): they come as close as they can.
+ *
+ * Nearest on the player's side of the wall, that is. The nearest square of
+ * all can be in the next room, half a metre away through the brickwork,
+ * and a whole round of robots once stood there, pressed against the wrong
+ * side of a wall, while the player they wanted stood untouched in a corner
+ * of the lobby. A square with a wall between it and the point is only
+ * settled for when there is no other within reach of the search.
  */
 export function nearestReachableCell(grid: NavGrid, x: number, z: number, maxRings = 40): number {
-  return nearestCell(grid, x, z, maxRings, grid.reach, 1);
+  const sameSide = nearestCell(grid, x, z, maxRings, grid.reach, 1, true);
+  return sameSide >= 0 ? sameSide : nearestCell(grid, x, z, maxRings, grid.reach, 1);
 }
 
-/** The nearest square where `flags` has the value `wanted`, searching outward in rings. */
-function nearestCell(grid: NavGrid, x: number, z: number, maxRings: number, flags: Uint8Array, wanted: number): number {
+/**
+ * Is there a wall on the straight line between two points? A wall is floor
+ * that nothing may ever walk on (the gaps between the rooms' own floors):
+ * furniture does not count, since a robot reaches over a desk.
+ */
+export function wallBetween(grid: NavGrid, ax: number, az: number, bx: number, bz: number): boolean {
+  const length = Math.hypot(bx - ax, bz - az);
+  const steps = Math.max(1, Math.ceil(length / (grid.cell * 0.5)));
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const c = Math.floor((ax + (bx - ax) * t - grid.x0) / grid.cell);
+    const r = Math.floor((az + (bz - az) * t - grid.z0) / grid.cell);
+    if (c < 0 || r < 0 || c >= grid.cols || r >= grid.rows || grid.mask[r * grid.cols + c]) return true;
+  }
+  return false;
+}
+
+/** The nearest square where `flags` has the value `wanted`, searching outward in rings; with `sameSide`, only squares with no wall between them and the point. */
+function nearestCell(grid: NavGrid, x: number, z: number, maxRings: number, flags: Uint8Array, wanted: number, sameSide = false): number {
   const c0 = Math.min(grid.cols - 1, Math.max(0, Math.floor((x - grid.x0) / grid.cell)));
   const r0 = Math.min(grid.rows - 1, Math.max(0, Math.floor((z - grid.z0) / grid.cell)));
   let best = -1;
@@ -239,7 +264,7 @@ function nearestCell(grid: NavGrid, x: number, z: number, maxRings: number, flag
         const cx = grid.x0 + (c + 0.5) * grid.cell - x;
         const cz = grid.z0 + (r + 0.5) * grid.cell - z;
         const d = cx * cx + cz * cz;
-        if (d < bestDist) {
+        if (d < bestDist && !(sameSide && wallBetween(grid, x, z, x + cx, z + cz))) {
           bestDist = d;
           best = i;
         }

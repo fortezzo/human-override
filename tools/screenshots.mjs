@@ -162,7 +162,7 @@ await shoot('07-door-opening');
 await run(() => {
   const ho = window.__HO;
   ho.photoMode(true);
-  for (const id of ['lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+  for (const id of ['lobbyPower', 'hallPower', 'hallCore', 'lobbyDock', 'hallDock', 'hallLab', 'powerLab']) ho.openDoor(id);
   ho.step(1 / 60, 140);
   ho.view(-1, 1.7, 8.6, 180, 0, 72);
 });
@@ -187,10 +187,27 @@ await run(() => {
   ho.view(17.5, 1.7, 6.2, 172, 2, 72);
 });
 await step(40);
-await shoot('12-breaker-and-cage');
+await shoot('12-breaker-and-lab-door');
 await run(() => window.__HO.view(-1, 1.75, 26.7, 180, 7, 72));
 await step(40);
 await shoot('13-core');
+
+// ---- 7b. The two areas added after the first full playthrough: the loading dock and the robotics lab.
+for (const [name, x, z, yaw, pitch, fov] of [
+  ['38-loading-dock', -12.6, 16.5, 90, 0, 74],
+  ['39-loading-dock-truck-bay', -18.6, 14.1, 90, 2, 70],
+  ['40-loading-dock-from-the-south-bay', -31.5, 23.4, -50, 4, 74],
+  ['41-loading-dock-from-the-lobby-passage', -12.4, 5.1, 125, -2, 74],
+  ['42-robotics-lab', 20.6, 15.6, 170, 0, 74],
+  ['43-robotics-lab-assembly-cell', 12.2, 21.8, -90, 4, 68],
+  ['44-robotics-lab-from-the-hall', 10.6, 19.0, -90, 0, 74],
+  ['45-robotics-lab-key-cage', 17.6, 28.0, -100, 2, 70],
+  ['46-server-hall-west-walk', -10.2, 9.0, 180, 0, 72],
+]) {
+  await run(([x, z, yaw, pitch, fov]) => window.__HO.view(x, 1.7, z, yaw, pitch, fov), [x, z, yaw, pitch, fov]);
+  await step(50);
+  await shoot(name);
+}
 
 // ---- 8. A robot dropping from a ceiling vent
 await run(() => {
@@ -674,13 +691,23 @@ await run(() => {
   ho.announcement.clear();
   ho.holdRounds(false);
   ho.skipRound();
-  const up = () => document.querySelector('.argus-analysis').classList.contains('show') && document.querySelector('.argus-round').textContent === next;
+  // (It waits for "ROUND N CLEARED" to leave the top of the view, on the
+  // real clock, which this loop does not let pass: holding it at its first
+  // stage brings it up at once and keeps it there to be photographed.)
+  const up = () => {
+    if (ho.analysisBanner.showing() === 'waiting') ho.analysisBanner.hold('moment');
+    return ho.analysisBanner.showing() === 'moment' && document.querySelector('.moment-round').textContent === next;
+  };
   for (let i = 0; i < 60 * 8 && !up(); i++) ho.step(1 / 60, 1);
+  ho.analysisBanner.hold('moment');
   ho.step(1 / 60, 20);
 });
-// (The banner's lines come in one after another: let the last of them arrive.)
-await page.waitForTimeout(1600);
+// As it arrives: large, near the top centre. (Its lines come in one after another: let the last of them land.)
 await shoot('31-argus-analysis');
+// And about two seconds later: shrunk into ARGUS's corner, where it stays until the next round begins.
+await run(() => window.__HO.analysisBanner.hold('corner'));
+await shoot('31b-argus-analysis-in-its-corner');
+await run(() => window.__HO.analysisBanner.hold(null));
 
 // ---- 32. The next round arrives carrying what it said: shielding against that gun, plates over weak points.
 await run(() => {
@@ -724,6 +751,30 @@ await page.waitForTimeout(260);
 await page.screenshot({ path: path.join(outDir, '32-argus-counters.jpg'), type: 'jpeg', quality: 92 });
 console.log('  32-argus-counters.jpg');
 
+// ---- 32b. A resisted hit up close: the word, the flare on the plate, the sparks and the round glancing off.
+await run(() => {
+  const ho = window.__HO;
+  const game = ho.game;
+  ho.clearRobots();
+  ho.step(1 / 60, 120);
+  ho.place(-1, 12.4, 180, 0);
+  ho.spawnKind(-0.7, 16.0, 0, { shield: 'carbine', hold: true, health: 5000 });
+  ho.spawnKind(-2.6, 17.6, 0, { hold: true });
+  ho.step(1 / 60, 50);
+  const robot = game.robots[0];
+  const aim = robot.chest(new game.camera.position.constructor());
+  const eye = game.camera.position;
+  const p = game.player.position;
+  ho.place(p.x, p.z, (Math.atan2(-(aim.x - eye.x), -(aim.z - eye.z)) * 180) / Math.PI, (Math.atan2(aim.y - eye.y, Math.hypot(aim.x - eye.x, aim.z - eye.z)) * 180) / Math.PI);
+  ho.step(1 / 60, 20);
+  ho.announcement.clear();
+  ho.tap('fire');
+  ho.step(1 / 60, 3);
+});
+await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+await page.screenshot({ path: path.join(outDir, '32b-resisted-hit.jpg'), type: 'jpeg', quality: 92 });
+console.log('  32b-resisted-hit.jpg');
+
 // ---- 35 (taken first, while the floor is clean). The heavy up close: plated all over, its core burning in its chest.
 await run(() => {
   const ho = window.__HO;
@@ -736,6 +787,16 @@ await run(() => {
   ho.step(1 / 60, 60);
 });
 await shoot('35-heavy');
+// The same heavy from nearer and to one side, with one of the horde beside it: the same make of machine, built heavier.
+await run(() => {
+  const ho = window.__HO;
+  ho.clearRobots();
+  ho.place(-1.0, 2.9, -22, 4);
+  ho.spawnKind(0.3, 0.5, 0, { kind: 'heavy', hold: true });
+  ho.spawnKind(-1.5, 0.2, 0, { hold: true });
+  ho.step(1 / 60, 60);
+});
+await shoot('35b-heavy-beside-a-drudge');
 
 // ---- 33. The special robots: drones, a bomber and a heavy in a round of the ordinary kind.
 await run(() => {

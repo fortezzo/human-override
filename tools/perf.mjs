@@ -38,15 +38,16 @@ for (const [name, ms] of Object.entries(timings)) console.log(`  ${name}: ${ms} 
 
 // The heaviest moment the game can produce: a full horde (the most robots
 // ever allowed on the map at once) closing on the player in the server
-// hall, with every door open so three areas are in view, the carbine
-// firing without pause, robots being destroyed and their debris piling up.
+// hall, with every door on the map open (the hall has a door to each of
+// the other five areas, so all six are being drawn), the carbine firing
+// without pause, robots being destroyed and their debris piling up.
 await page.evaluate(() => {
   const ho = window.__HO;
   ho.play();
   ho.god(true);
   ho.holdRounds(true);
   ho.clearRobots();
-  for (const id of ['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+  for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
   ho.scrap(5000);
   // Buy the carbine at its rack, then stand in the aisle facing the lobby.
   ho.place(1.6, 10.1, 180);
@@ -56,6 +57,13 @@ await page.evaluate(() => {
   ho.place(-1, 17.5, 0, -2);
 });
 
+/** Where the horde is measured: the player's place and heading, and the corner of the block of robots and which way its rows run. */
+const SCENES = {
+  hall: { stand: [-1, 17.5, 0, -2], from: [-3.2, 8.6], across: [0.9, 0], back: [0, 1.7], heading: 180 },
+  // The loading dock, the biggest room on the map: the player by the hall's shutter, the horde coming across the open floor from the bays.
+  dock: { stand: [-13.4, 16.4, 90, -2], from: [-19.5, 13.6], across: [0, 1.0], back: [-1.7, 0], heading: -90 },
+};
+
 // It is measured twice. First with 24 ordinary robots, which is how every
 // stage has measured it, so the numbers can be set side by side. Then as
 // ARGUS sends it late in a run: two heavies, two bombers and four drones
@@ -63,21 +71,22 @@ await page.evaluate(() => {
 // against the gun being fired and half with a plate over the weak point
 // (the two of its counters that put something on the robots; the other
 // two send more bombers and drones, which are in the picture already).
-function horde(argus) {
+function horde({ argus, scene }) {
   const ho = window.__HO;
   ho.clearRobots();
+  ho.place(...scene.stand);
   let ordinary = 0;
   // 24 robots, tough enough to last the measurement, some of them runners.
   for (let i = 0; i < 24; i++) {
-    const x = -3.2 + (i % 6) * 0.9;
-    const z = 8.6 + Math.floor(i / 6) * 1.7;
+    const x = scene.from[0] + (i % 6) * scene.across[0] + Math.floor(i / 6) * scene.back[0];
+    const z = scene.from[1] + (i % 6) * scene.across[1] + Math.floor(i / 6) * scene.back[1];
     const speed = i % 3 === 0 ? 3.0 : 1.6;
     const health = i % 4 === 0 ? 150 : 1500;
     const kind = !argus ? null : i === 7 || i === 16 ? 'heavy' : i === 2 || i === 21 ? 'bomber' : i === 5 || i === 10 || i === 13 || i === 18 ? 'drone' : null;
-    if (!argus) ho.spawnRobot(x, z, 180, false, speed, health);
-    else if (kind) ho.spawnKind(x, z, 180, { kind, health: 1500, ...(kind === 'bomber' ? { speed: 1.6 } : {}) });
+    if (!argus) ho.spawnRobot(x, z, scene.heading, false, speed, health);
+    else if (kind) ho.spawnKind(x, z, scene.heading, { kind, health: 1500, ...(kind === 'bomber' ? { speed: 1.6 } : {}) });
     else {
-      ho.spawnKind(x, z, 180, { speed, health, ...(ordinary % 5 < 2 ? { shield: 'carbine' } : {}), ...(ordinary % 2 === 0 ? { guard: 400 } : {}) });
+      ho.spawnKind(x, z, scene.heading, { speed, health, ...(ordinary % 5 < 2 ? { shield: 'carbine' } : {}), ...(ordinary % 2 === 0 ? { guard: 400 } : {}) });
       ordinary++;
     }
   }
@@ -85,12 +94,22 @@ function horde(argus) {
   ho.press('fire', true);
 }
 
-for (const argus of [false, true]) {
-  console.log(argus ? '\nThe same horde as ARGUS sends it: specials among the 24, shielding and plates on the rest' : '\nA full horde of ordinary robots');
+for (const [argus, where] of [
+  [false, 'hall'],
+  [true, 'hall'],
+  [true, 'dock'],
+]) {
+  console.log(
+    where === 'dock'
+      ? '\nThe horde as ARGUS sends it, in the loading dock (the biggest room on the map)'
+      : argus
+        ? '\nThe same horde as ARGUS sends it: specials among the 24, shielding and plates on the rest'
+        : '\nA full horde of ordinary robots, in the server hall',
+  );
   console.log('quality   fps    frame ms   draw calls   triangles   robots  particles  scrap');
   for (const level of ['low', 'medium', 'high', 'ultra']) {
     await page.evaluate((level) => window.__HO.setQuality(level), level);
-    await page.evaluate(horde, argus);
+    await page.evaluate(horde, { argus, scene: SCENES[where] });
     await page.waitForTimeout(1500);
     // Average over two seconds of real frames.
     const result = await page.evaluate(
@@ -143,7 +162,7 @@ const paced = async (width, height) => {
     ho.god(true);
     ho.holdRounds(true);
     ho.clearRobots();
-    for (const id of ['lobbyHall', 'lobbyPower', 'hallPower', 'hallCore']) ho.openDoor(id);
+    for (const door of ho.game.world.doors) ho.openDoor(door.plan.id);
     ho.scrap(5000);
     ho.place(1.6, 10.1, 180);
     ho.step(1 / 60, 140);
@@ -155,7 +174,7 @@ const paced = async (width, height) => {
   console.log('quality   frames   usual ms   99th ms   worst ms   frames over 25 ms');
   for (const level of ['low', 'medium', 'high', 'ultra']) {
     await limited.page.evaluate((level) => window.__HO.setQuality(level), level);
-    await limited.page.evaluate(horde, true);
+    await limited.page.evaluate(horde, { argus: true, scene: SCENES.hall });
     // Long enough for the change of level itself to be over and done with.
     await limited.page.waitForTimeout(3500);
     const r = await limited.page.evaluate(
@@ -279,6 +298,22 @@ await paced(3840, 2160);
     ho.spawnRobot(-1.5, -1.6, 0, true, 1.2, 4000, 'custodian');
   });
   await first('the Proxy', () => window.__HO.spawnRobot(1.5, -1.6, 0, true, 1.2, 4000, 'proxy'));
+  // ARGUS's analysis arriving across the top of the view, and then shrinking into its corner.
+  await first('the ARGUS analysis arriving', () => {
+    const ho = window.__HO;
+    ho.clearRobots();
+    ho.announcement.clear();
+    ho.game.onAnalysis({
+      round: 5,
+      adaptations: [],
+      withdrawn: [],
+      lines: [
+        { observed: '100% of hits on weak points.', adapting: 'Adapting: armoured weak points.' },
+        { observed: '100% of damage from the carbine.', adapting: 'Adapting: carbine-resistant plating.' },
+      ],
+    });
+  }, 2400);
+  await first('the analysis shrinking into its corner', () => window.__HO.analysisBanner.hold('corner'));
   const { frames, marks } = await fresh.page.evaluate(() => ({ frames: window.__frames, marks: window.__marks }));
   const ordered = frames.map((frame) => frame[1]).sort((a, b) => a - b);
   console.log(`\nFirst appearances at 1920 x 1080 on High, frame rate limited to the screen's (usual frame ${ordered[Math.floor(ordered.length / 2)].toFixed(1)} ms)`);

@@ -6,15 +6,20 @@
 //
 //   npm run build && npm run mission             12 runs as the skilled player
 //   npm run mission -- 20                        20 runs
+//   npm run mission -- 12 regular                as the regular player
 //   npm run mission -- 12 firstTimer             as the first-timer
 //   npm run mission -- 12 expert                 as the expert, which never misses
 //
-// The skilled player is the model of the "focused player" the mission is
-// paced for (the spec: finishes in 15 to 20 minutes, around round 10 to
-// 12, with a final stand that is hard but winnable). The first-timer is a
-// rough model of someone new to this kind of game. They are models, not
-// people: they show whether the numbers are in the right place, not how
-// the game feels.
+// The regular player is the model the mission is paced for: a real person
+// a few attempts in, with nearly a beginner's hands and sensible habits
+// (the spec: a focused player finishes in 15 to 20 minutes, with a final
+// stand that is hard but winnable). The skilled player is a good deal
+// stronger than that, and the first-timer is a rough model of someone new
+// to this kind of game. They are models, not people: they show whether the
+// numbers are in the right place, not how the game feels.
+//
+// (HO_DIST=some-folder plays a copy of the build kept in that folder, so
+// that a long batch can go on measuring one version while another is built.)
 //
 // (While tuning, set HO_URL to the address of a running dev server and the
 // production build is not needed: HO_URL=http://localhost:5173/ npm run mission)
@@ -29,11 +34,12 @@ const pilot = process.argv[3] ?? 'skilled';
 const MINUTE_CAP = Number(process.argv[4] ?? 45);
 
 const external = process.env.HO_URL;
-if (!external && !fs.existsSync('dist/index.html')) {
+const dist = process.env.HO_DIST ?? 'dist';
+if (!external && !fs.existsSync(`${dist}/index.html`)) {
   console.error('No production build found. Run "npm run build" first.');
   process.exit(1);
 }
-const site = external ? null : await serve('dist', '/');
+const site = external ? null : await serve(dist, '/');
 const { browser, page } = await launch({ width: 640, height: 360 });
 page.on('pageerror', (e) => console.log('exception:', e.message));
 await page.goto(`${external ?? site.url}?debug=1`);
@@ -65,7 +71,7 @@ const median = (values) => {
   return sorted.length === 0 ? NaN : sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
 };
 
-const names = { firstTimer: 'first-timer', skilled: 'skilled player', expert: 'expert' };
+const names = { firstTimer: 'first-timer', regular: 'regular player', skilled: 'skilled player', expert: 'expert' };
 console.log(`${runs} missions as the ${names[pilot] ?? pilot}, no god mode\n`);
 console.log('run   outcome                                     time   round   keys   accuracy   destroyed   carrying');
 const results = [];

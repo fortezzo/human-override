@@ -24,15 +24,22 @@ export const PLAYER = {
   gravity: 17.5,
   stepHeight: 0.32,
   maxHealth: 100,
-  regenDelay: 4.0,
+  // (Health starts coming back this long after the last blow. It was 4
+  // seconds; three rewards the player who breaks out of a crowd and keeps
+  // moving, which is what good play is in a game like this.)
+  regenDelay: 3.0,
   regenPerSecond: 34,
   /**
    * After a blow lands, no other blow can land for this long. Without it,
    * three robots in reach take a player from full health to down in under
    * a second, which nobody can react to. With it, being surrounded is
-   * still lethal, but there is a moment in which to run.
+   * still lethal, but there is a moment in which to run. (It was 0.45,
+   * and a blow did 30: a crowd took a player from full health to down in
+   * 1.35 seconds. The first real person to finish the mission could not
+   * have without a spot the robots could not reach. Now a crowd needs
+   * five blows and at least 2.4 seconds.)
    */
-  mercy: 0.45,
+  mercy: 0.6,
   /** How hard a robot hit shoves the view (degrees). */
   hitKick: 3.2,
   /**
@@ -325,6 +332,15 @@ export const MISSION = {
   uplinkWaveBase: 0,
   uplinkWaveRounds: 3,
   uplinkWaveMax: 4,
+  /**
+   * While the uplink is being held, no more robots than this are on the
+   * map at once, the round's and the uplink's own together: the rest of
+   * the round waits its turn. Holding ground means standing where every
+   * robot knows to find you, and a round that would put fifteen robots on
+   * someone free to run puts them all on someone who is not. (Without it,
+   * the uplink was where half of all missions ended, whoever was playing.)
+   */
+  uplinkCrowd: 7,
   /** Seconds the kill switch takes to arm, and how far into that ARGUS's own unit arrives. */
   armSeconds: 75,
   bossAfter: 10,
@@ -344,8 +360,8 @@ export const MISSION = {
    * room the size of the core a crowd of sprinters leaves nothing to do
    * but go down, and the Proxy is there to be the thing that hunts.
    */
-  standInterval: 1.9,
-  standMax: 12,
+  standInterval: 2.2,
+  standMax: 9,
   standRunners: 0.2,
   /** How near the player must be to pick up a key that is lying on the floor (metres). */
   keyReach: 1.7,
@@ -359,8 +375,8 @@ export const MISSION = {
    * rocks the Custodian; nothing rocks the Proxy); and `flinch` is how long
    * a hit slows it for, in seconds (an ordinary robot: 0.22).
    */
-  custodian: { health: 6, speed: 3.0, damage: 34, scrap: 500, stagger: 2, flinch: 0.1 },
-  proxy: { health: 10, speed: 3.6, damage: 45, scrap: 1500, stagger: 12, flinch: 0 },
+  custodian: { health: 5, speed: 3.0, damage: 28, scrap: 500, stagger: 2, flinch: 0.1 },
+  proxy: { health: 8, speed: 3.6, damage: 36, scrap: 1500, stagger: 12, flinch: 0 },
 };
 
 /** How rounds grow. Round numbers start at 1. */
@@ -432,7 +448,7 @@ export const SPECIALS = {
    * glowing core in its chest does only `plating` of its damage. The core
    * takes each weapon's weak-point damage.
    */
-  heavy: { from: 8, count: 1, every: 4, most: 2, health: 4, speed: 1.35, damage: 50, plating: 0.3 },
+  heavy: { from: 8, count: 1, every: 4, most: 2, health: 4, speed: 1.35, damage: 40, plating: 0.3 },
 };
 
 /**
@@ -526,8 +542,8 @@ export const ROBOT = {
   /** Above this ground speed the run animation is used instead of the walk. */
   runAbove: 1.75,
   attackRange: 1.45,
-  // Four blows to go down from full health.
-  attackDamage: 30,
+  // Five blows to go down from full health.
+  attackDamage: 20,
   /** Seconds into the swing when the hit lands, and the swing's length. */
   attackHitTime: 0.42,
   attackDuration: 1.0,

@@ -166,7 +166,9 @@ export interface DebugApi {
   holdRounds(on: boolean): void;
   /**
    * Let the game play itself: as the "expert" that never misses (the
-   * default), or as the "firstTimer", a rough model of a beginner.
+   * default), or as the "firstTimer", a rough model of a beginner; or as
+   * the "regular" (a real person a few attempts in, whom the mission is
+   * paced for) or the "skilled" player.
    */
   autopilot(on: boolean, pilot?: PilotName, mission?: boolean): void;
   /** Advance the game without drawing it (much faster; for playing whole runs in a tool). */
@@ -784,16 +786,25 @@ export function installDebugApi(game: Game): DebugTools {
       return groupSafeSpots(spots, cell);
     },
     outOfReach(climb = PLAYER.stepHeight) {
-      const step = 0.2;
+      // (A sample every 10 cm, for a body 5 cm slimmer than the player's:
+      // someone sliding along two obstacles gets through a gap that leaves
+      // them two centimetres to spare, and a coarser grid of full-width
+      // bodies steps straight over a gap like that. One such gap, between
+      // a bin and the corner of the security desk, hid a second safe spot.)
+      const step = 0.1;
       const robots = robotFloor();
       const found = findStandableOutOfReach(
         NAV_BOUNDS,
         step,
         game.world.openColliders,
         robots,
-        { radius: PLAYER.radius, stepHeight: PLAYER.stepHeight, height: PLAYER.height, climb },
+        { radius: PLAYER.radius - 0.05, stepHeight: PLAYER.stepHeight, height: PLAYER.height, climb },
         [PLAYER_START.x, PLAYER_START.z],
-        ROBOT.attackRange - 0.15,
+        // A robot starts its swing when its centre is within attackRange of
+        // the player's. (Ten centimetres are kept in hand: the robot's map
+        // is in 30 cm squares, and the body tested here is slimmer than the
+        // player's, so it stands a little nearer the walls than they can.)
+        ROBOT.attackRange - 0.1,
       );
       return {
         stoodOn: found.stoodOn,

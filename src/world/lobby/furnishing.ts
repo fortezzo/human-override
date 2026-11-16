@@ -46,7 +46,11 @@ function buildDesk(b: LevelBuilder, screens: ScreenBank): WorkLights['deskLamp']
   b.prop('clipboard', { at: [6.75, 0.795, -4.45], rotY: 0.6, collide: false, cast: false });
   b.prop('portable_searchlight', { at: [7.1, 0.87, -4.05], rotY: -2.6, collide: false });
   b.prop('SchoolChair_01', { at: [7.95, 0.29, -3.3], rot: [0.05, 1.0, HALF_PI], kind: 'metal' });
-  b.prop('metal_trash_can', { part: 'can', at: [5.75, 0, -6.35], rotY: 0.4 });
+  // (The bin stands against the north wall, clear of the desk. It once
+  // stood just off the desk's corner: a gap the player could squeeze
+  // through and a robot could not, into the guard's corner behind the
+  // desk, where nothing could then reach them.)
+  b.prop('metal_trash_can', { part: 'can', at: [4.55, 0, -6.66], rotY: 0.0 });
 
   // Electrical cabinets along the east wall, south of the monitors.
   b.prop('utility_box_02', { at: [wallX - 0.24, 0, -2.95], rotY: -HALF_PI });
@@ -95,6 +99,11 @@ function buildClutter(b: LevelBuilder): void {
   b.prop('barrel_03', { at: [x0 + 0.72, 0, z0 + 1.5], rotY: 1.0 });
   b.prop('barrel_03', { at: [x0 + 2.35, 0, z0 + 0.75], rotY: 0.2 });
   b.prop('barrel_03', { at: [x0 + 1.7, 0.33, z0 + 1.9], rot: [HALF_PI, 0.5, 0] });
+  // The corner they stand in is solid: nobody gets in among them. (There
+  // was a gap between two of them only just as wide as the player, and a
+  // space in the middle that no robot could reach.
+  // This is the corner the first person to finish the mission stood in.)
+  b.blocker([x0, 0, z0], [x0 + 2.72, 1.0, z0 + 1.95]);
 
   // Between the windows: a hand truck and the boxes that came off it.
   b.prop('hand_truck', { at: [x0 + 0.42, 0, 0.35], rotY: HALF_PI + 0.12 });

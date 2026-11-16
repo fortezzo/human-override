@@ -190,8 +190,11 @@ export function buildPower(assets: Assets, materials: MaterialLibrary): AreaBuil
   b.prop('Barrel_01', { at: [16.3, 0, 4.1], rotY: 2.0 });
   b.prop('barrel_03', { at: [21.6, 0.33, 8.2], rot: [HALF_PI, 0.8, 0] });
   b.prop('metal_tool_chest', { at: [x0 + 0.36, 0, 8.6], rotY: HALF_PI });
-  b.prop('wooden_military_crate', { at: [11.0, 0, 12.9], rotY: 0.2, kind: 'wood' });
-  b.prop('cardboard_box_01', { at: [12.2, 0, 13.2], rotY: 1.0, kind: 'soft' });
+  // (Both tight against the south wall. The crate once stood 84 cm out
+  // from it, which left a strip behind it that the player fitted into and
+  // a robot did not.)
+  b.prop('wooden_military_crate', { at: [11.0, 0, z1 - 0.3], rotY: 0, kind: 'wood' });
+  b.prop('cardboard_box_01', { at: [12.2, 0, z1 - 0.3], rotY: HALF_PI, kind: 'soft' });
   b.prop('WetFloorSign_01', { at: [15.9, 0, 7.6], rotY: -0.4, collide: false, kind: 'soft' });
   b.prop('korean_fire_extinguisher_01', { at: [x0 + 0.2, 0, 1.6], rotY: HALF_PI });
   b.prop('utility_box_01', { at: [18.4, 0, z1 - 0.26], rotY: Math.PI });

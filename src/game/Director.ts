@@ -53,6 +53,12 @@ export class Director {
    * or ends), and whatever the mission sends in still comes.
    */
   suspended = false;
+  /**
+   * The most robots allowed on the map at once, when the mission wants
+   * fewer than the rounds' own limit (while the player is holding the
+   * uplink); null for the usual limit.
+   */
+  crowdLimit: number | null = null;
   /** Debug: send every robot in through this entry (its id), whatever the rules say. */
   forceEntry: string | null = null;
   /** ARGUS's counters for the next round to start (it sets them in the lull before it). */
@@ -113,7 +119,7 @@ export class Director {
 
   /** Is there room on the map for one more? */
   get room(): boolean {
-    return this.active + this.waiting < ROUNDS.maxActive;
+    return this.active + this.waiting < (this.crowdLimit ?? ROUNDS.maxActive);
   }
 
   /**
@@ -181,7 +187,7 @@ export class Director {
   update(dt: number): void {
     if (!this.paused && !this.suspended) {
       // Robots waiting to come in count towards how full the map is.
-      const tick = updateRounds(this.rounds, ROUNDS, dt, this.active + this.waiting);
+      const tick = updateRounds(this.rounds, this.crowdLimit === null ? ROUNDS : { ...ROUNDS, maxActive: Math.min(ROUNDS.maxActive, this.crowdLimit) }, dt, this.active + this.waiting);
       if (tick.started !== null) {
         this.compose(tick.started);
         this.onRoundStart(tick.started);

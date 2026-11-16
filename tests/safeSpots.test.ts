@@ -68,6 +68,25 @@ describe('standing everywhere: places reached by the rules of movement that no r
     expect(found.stoodOn).toBeGreaterThan(stand(player.stepHeight).stoodOn);
   });
 
+  it('does the same at a finer spacing and for a slimmer body (the band round a tall thing is wider than one sample then)', () => {
+    const fine = (climb: number) => findStandableOutOfReach(bounds, 0.1, barrels, robots, { ...player, radius: player.radius - 0.05, climb }, [0, 0], 1.3);
+    expect(fine(player.stepHeight).spots).toHaveLength(0);
+    const jumping = fine(1.15);
+    expect(jumping.stoodOn).toBeGreaterThan(fine(player.stepHeight).stoodOn);
+    expect(groupSafeSpots(jumping.spots, 0.1)[0]!.deepest).toBeGreaterThan(2);
+  });
+
+  it('follows a body through a gap it only just fits', () => {
+    // A corner walled off except for a gap 70 cm wide: two centimetres more than the player.
+    const corner = [makeCollider(3.95, 7.5, 0.15, 2.5, 0, 0, 3), makeCollider(7.4, 5, 2.6, 0.15, 0, 0, 3)];
+    const floor = createNavGrid(bounds, 0.3, corner, robot.radius, robot.stepHeight, robot.height, walkable, entries);
+    // Full-width bodies 20 cm apart step straight over it...
+    expect(findStandableOutOfReach(bounds, 0.2, corner, floor, { ...player, climb: player.stepHeight }, [0, 0], 1.3).spots).toHaveLength(0);
+    // ...slimmer ones 10 cm apart go through, and find the corner behind it.
+    const found = findStandableOutOfReach(bounds, 0.1, corner, floor, { ...player, radius: player.radius - 0.05, climb: player.stepHeight }, [0, 0], 1.3);
+    expect(found.spots.length).toBeGreaterThan(100);
+  });
+
   it('counts a low step as somewhere to stand, and a robot beside it as within reach', () => {
     // A plinth 0.3 m high in the middle of the floor: the player walks onto it, and so do the robots.
     const plinth = [makeCollider(3, -3, 1, 1, 0, 0, 0.3)];

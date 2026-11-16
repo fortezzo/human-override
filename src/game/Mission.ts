@@ -202,7 +202,9 @@ export class Mission {
     if (this.custodianPending) this.sendCustodian();
     if (this.proxyPending) this.sendProxy();
 
-    // While the uplink is being defended, more robots come for it than the round sends.
+    // While the uplink is being defended the map is kept from filling up (see MISSION.uplinkCrowd).
+    this.director.crowdLimit = state.uplink === 'running' ? MISSION.uplinkCrowd : null;
+    // And more robots come for it than the round sends.
     if (state.uplink === 'running') {
       this.waveClock -= dt;
       if (this.waveClock <= 0 && this.director.room && this.extras() < uplinkWave(MISSION, this.director.rounds.round)) {
@@ -322,6 +324,12 @@ export class Mission {
   // ------------------------------------------------------ what F does here
 
   private near(place: MissionPlace): boolean {
+    // In the same room as it: a console on a wall is not within reach of
+    // someone standing against the other side of that wall. (The breaker
+    // could be thrown from inside the lab, through the power room's south
+    // wall; and the prompt for it hid the one for the lab's weapon rack,
+    // which hangs on the back of the same wall.)
+    if (this.world.playerArea !== place.area) return false;
     const p = this.player.position;
     const dx = place.at[0] - p.x;
     const dz = place.at[2] - p.z;

@@ -7,16 +7,24 @@
 // should, and between fights walks to the next thing it can afford (a
 // weapon, then doors) and buys it.
 //
-// It comes in three characters. The "expert" never misses and never
+// It comes in four characters. The "expert" never misses and never
 // hesitates: it is the test tool that proves the game can be played. The
 // "first-timer" is a rough model of someone new to this kind of game: slow
 // to notice, shaky, aims at the body, backs up late and runs when hurt. It
 // exists to answer one question the expert cannot: how far does a beginner
 // usually get? (tools/balance.mjs plays it many times and counts.) The
-// "skilled" player is in between, and is the model of the "focused player"
-// the mission is paced for: quick but not instant, mostly on target, aims
-// for the head a little over half the time, and gets ready before starting
-// a fight.
+// "skilled" player is quick but not instant, mostly on target, aims for
+// the head a little over half the time, and gets ready before starting a
+// fight.
+//
+// The "regular" is the one the mission is paced for. The first real
+// person to finish the mission said the skilled model was stronger than
+// they were, and that a human is closer to the first-timer. So the
+// regular has nearly the first-timer's hands (a little quicker, a little
+// steadier, still aiming at the body three shots in four) and the habits
+// of someone on their fourth or fifth attempt, which is what "good play"
+// means for a person: reloads in the lulls, keeps both guns fed, backs
+// off before it is too late, and gets ready before starting a fight.
 //
 // Any of them can also be told to play the mission: it then follows the
 // objective tracker as a player would, walking to each step in the gaps
@@ -32,7 +40,7 @@ import type { Robot } from '../entities/robot/Robot';
 import type { Game } from '../game/Game';
 import { rackOffer } from '../sim/economy';
 import { floodFrom, nextWaypoint, type NavGrid } from '../sim/navGrid';
-import { CORE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, UPLINK, type DoorPlan } from '../world/plan';
+import { CORE, DOCK_PASSAGE, DOOR_PLANS, HALL, MISSION_PLACES, RACK_PLANS, ROOM_RECTS, UPLINK, type DoorPlan } from '../world/plan';
 
 export interface PilotProfile {
   /** Seconds before it reacts to a robot it has just noticed. */
@@ -75,14 +83,29 @@ export interface PilotProfile {
   errandAt: number;
   /** Playing the mission: before starting a fight (the uplink, the final stand) it waits until it is healthy and loaded. */
   prepares: boolean;
+  /**
+   * And it has the patience of someone who has studied the game: it will
+   * not start one until it owns the best gun on the map and the round in
+   * play is all but over. (The skilled player's habit. Most people start
+   * the fight when they get there, if they are on their feet and loaded.)
+   */
+  patient: boolean;
+  /**
+   * With this many robots at arm's length it stops trading blows, turns
+   * and sprints out of the crowd, and fights again from a distance: the
+   * first thing anyone learns in a game of this kind. 0 = it never does
+   * (the beginner stands its ground until it is badly hurt).
+   */
+  breaksAway: number;
 }
 
-export type PilotName = 'expert' | 'skilled' | 'firstTimer';
+export type PilotName = 'expert' | 'skilled' | 'regular' | 'firstTimer';
 
 export const PILOTS: Record<PilotName, PilotProfile> = {
-  expert: { reaction: 0, turnRate: 7, headShare: 1, wobble: 0, linedFar: 0.035, linedNear: 0.12, tapEvery: 0, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.2, practised: false, yieldBelow: 35, errandAt: 6, prepares: true },
-  skilled: { reaction: 0.22, turnRate: 5.2, headShare: 0.55, wobble: 0.16, linedFar: 0.045, linedNear: 0.14, tapEvery: 0.17, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.3, practised: true, yieldBelow: 45, errandAt: 6, prepares: true },
-  firstTimer: { reaction: 0.45, turnRate: 3.4, headShare: 0.15, wobble: 0.5, linedFar: 0.07, linedNear: 0.18, tapEvery: 0.3, retreatAt: 4, panicBelow: 50, tidyReloads: false, rethink: 0.8, practised: false, yieldBelow: 60, errandAt: 9, prepares: false },
+  expert: { reaction: 0, turnRate: 7, headShare: 1, wobble: 0, linedFar: 0.035, linedNear: 0.12, tapEvery: 0, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.2, practised: false, yieldBelow: 35, errandAt: 6, prepares: true, patient: true, breaksAway: 0 },
+  skilled: { reaction: 0.22, turnRate: 5.2, headShare: 0.55, wobble: 0.16, linedFar: 0.045, linedNear: 0.14, tapEvery: 0.17, retreatAt: 5, panicBelow: 0, tidyReloads: true, rethink: 0.3, practised: true, yieldBelow: 45, errandAt: 6, prepares: true, patient: true, breaksAway: 3 },
+  regular: { reaction: 0.38, turnRate: 3.9, headShare: 0.25, wobble: 0.4, linedFar: 0.062, linedNear: 0.17, tapEvery: 0.26, retreatAt: 4.5, panicBelow: 30, tidyReloads: true, rethink: 0.6, practised: true, yieldBelow: 45, errandAt: 6, prepares: true, patient: false, breaksAway: 3 },
+  firstTimer: { reaction: 0.45, turnRate: 3.4, headShare: 0.15, wobble: 0.5, linedFar: 0.07, linedNear: 0.18, tapEvery: 0.3, retreatAt: 4, panicBelow: 50, tidyReloads: false, rethink: 0.8, practised: false, yieldBelow: 60, errandAt: 9, prepares: false, patient: false, breaksAway: 0 },
 };
 
 /** A patch of floor: what is inside a circle and inside a rectangle. */
@@ -112,6 +135,8 @@ interface Goal {
   rest?: boolean;
   /** It cannot wait for a gap in the fighting. */
   urgent?: boolean;
+  /** One press at one spot (a key lying on the floor): someone who has played before darts in for it with the robots a few steps off. */
+  quick?: boolean;
 }
 
 /** Something the mission wants done. */
@@ -127,6 +152,12 @@ const PLACE_NAMES: Record<keyof typeof MISSION_PLACES, string> = {
   coreDoor: "the core's door",
   killSwitch: 'the kill switch',
 };
+
+/** The rooms themselves, and the passage between the lobby and the loading dock: where it will fall back to. */
+const ROOMS: ReadonlyArray<readonly [number, number, number, number]> = [...Object.values(ROOM_RECTS), [DOCK_PASSAGE.x0 - 0.4, DOCK_PASSAGE.z0 - 0.4, DOCK_PASSAGE.x1 + 0.4, DOCK_PASSAGE.z1 + 0.4]];
+
+/** On the mission, the scrap it keeps back (for a gun and its ammunition) before spending on a door the mission does not need. */
+const SPARE_SCRAP = 2500;
 
 /** Which gun is worth more than which: it never trades down. */
 const WORTH: Record<WeaponId, number> = { pistol: 0, shotgun: 1, carbine: 2 };
@@ -281,6 +312,7 @@ export class Autopilot {
     let nearest = Infinity;
     let closestAny = Infinity;
     let crowd = 0;
+    let atArmsLength = 0;
     let standing = 0;
     /** A bomber about to go off, close enough to matter. */
     let fuseNear = false;
@@ -293,6 +325,7 @@ export class Autopilot {
       const distance = _aim.distanceTo(_eye);
       closestAny = Math.min(closestAny, distance);
       if (distance < 3) crowd++;
+      if (distance < 2.2) atArmsLength++;
       if (robot.fuse >= 0 && distance < SPECIALS.bomber.radius + 1) fuseNear = true;
       // (A practised player picks the bomber out of the crowd while it is
       // still a way off, and leaves the robots that are proof against the
@@ -356,6 +389,8 @@ export class Autopilot {
     // clear and turns. (Not once they are within reach: turning its back on
     // a robot at arm's length only gets it hit from behind.)
     if (profile.practised && this.fleeTimer <= 0 && !player.stamina.winded && weapons.reloading && closestAny < 6 && closestAny > 2.2) this.fleeTimer = 1.2;
+    // In among them: someone who has played before breaks out of the crowd.
+    if (profile.breaksAway > 0 && atArmsLength >= profile.breaksAway && this.fleeTimer <= 0 && !player.stamina.winded) this.fleeTimer = 1.3;
     // A bomber beeping within reach of its blast: anybody runs.
     if (fuseNear && this.fleeTimer <= 0 && !player.stamina.winded) this.fleeTimer = 1.0;
     if (this.fleeTimer > 0) {
@@ -402,7 +437,7 @@ export class Autopilot {
     // something is close enough to hit.
     const offered = duty !== null && !duty.hold && game.mission.interaction()?.use != null;
     const errand =
-      duty !== null && !shopping && this.givingGround <= 0 && (zone ? outside && (!seen || nearest > 2.5) : duty.urgent === true ? !seen || nearest > 1.6 || offered : !seen || nearest > profile.errandAt);
+      duty !== null && !shopping && this.givingGround <= 0 && (zone ? outside && (!seen || nearest > 2.5) : duty.urgent === true ? !seen || nearest > 1.6 || offered : !seen || nearest > (duty.quick && profile.practised ? Math.min(4, profile.errandAt) : profile.errandAt));
 
     if (seen && !shopping && !errand) {
       this.lull = 0;
@@ -476,8 +511,11 @@ export class Autopilot {
         if (nearest > MELEE.range - 0.5 && !reacting && error < 0.5) input.press('forward');
         return;
       }
-      // Keep them at arm's length: back toward open floor, still facing them.
-      if (nearest < profile.retreatAt) this.backAway(dt);
+      // Keep them at arm's length: back toward open floor, still facing
+      // them. (Any of them, for someone who has played before, not only
+      // the one being shot at: a robot it has no line to, round the end of
+      // a rack, can still reach it. The beginner watches only its target.)
+      if ((profile.practised ? Math.min(nearest, closestAny) : nearest) < profile.retreatAt) this.backAway(dt);
       return;
     }
 
@@ -562,7 +600,7 @@ export class Autopilot {
     if (!target || target === 'custodian' || state.phase === 'saved') return null;
     if (target === 'custodianKey') {
       const at = world.mission.droppedAt;
-      return at ? { x: at.x, z: at.z, label: "the Custodian's key", reach: 1.1 } : null;
+      return at ? { x: at.x, z: at.z, label: "the Custodian's key", reach: 1.1, quick: true } : null;
     }
     const place = MISSION_PLACES[target];
     if (!world.reachable.has(place.area)) return null;
@@ -584,12 +622,13 @@ export class Autopilot {
     if (startsFight && this.profile.prepares) {
       const slot = weapons.loadout.slots[weapons.loadout.current];
       const loaded = !slot || slot.state.ammo >= WEAPONS[slot.id].magazine * 0.6 || slot.state.reserve === 0;
-      // (And it does not start one with less than the best gun on the map,
-      // once the rack that sells it can be reached.)
+      // (It does not start one with less than the best gun on the map,
+      // once the rack that sells it can be reached; and the patient player
+      // not with the room still full of the last round, either.)
       const best = RACKS_BEST_FIRST[0]!;
+      // (Anyone who prepares at all knows to bring the good gun: that much is learnt on the first attempt.)
       const armed = !world.reachable.has(best.area) || weapons.loadout.slots.some((s) => s?.id === best.weapon);
-      // (Nor with the room still full of the last one.)
-      if (player.health < 85 || !loaded || !armed || standing > 3) return null;
+      if (player.health < (this.profile.patient ? 85 : 70) || !loaded || !armed || (this.profile.patient && standing > 3)) return null;
     }
     return { ...at, label: PLACE_NAMES[target] };
   }
@@ -686,6 +725,11 @@ export class Autopilot {
         const c = Math.floor((x - nav.x0) / nav.cell);
         const r = Math.floor((z - nav.z0) / nav.cell);
         if (c < 3 || r < 3 || c >= nav.cols - 3 || r >= nav.rows - 3 || !nav.reach[r * nav.cols + c]) continue;
+        // Indoors: nobody who knows the building falls back into the
+        // yards and truck bays the robots walk in from. They are dead ends,
+        // and where the next robot appears. (The beginner does not know
+        // that yet, and is sometimes cornered there.)
+        if (this.profile.practised && !ROOMS.some(([x0, z0, x1, z1]) => x > x0 + 0.4 && x < x1 - 0.4 && z > z0 + 0.4 && z < z1 - 0.4)) continue;
         // Open floor around it: corners and dead ends score low.
         // (Measured over the few metres round the spot, not just the square it is in:
         // the corner of a room is open floor too, and the worst place to be caught.)
@@ -821,13 +865,20 @@ export class Autopilot {
     // Ammunition is worth the walk when a gun is running low; in a quiet
     // moment the practised player tops up well before that, and with the
     // final stand ahead, sooner still.
-    const lowAt = this.mission && this.profile.prepares && this.game.mission.state.phase === 'core' ? 0.8 : this.profile.practised && quiet ? 0.7 : 0.34;
+    // (Only the patient player makes a special trip to fill up before the
+    // final stand. Across a map this size, in the round the Custodian came
+    // with, that trip costs anyone slower more than the ammunition is worth.)
+    const lowAt = this.mission && this.profile.patient && this.game.mission.state.phase === 'core' ? 0.8 : this.profile.practised && quiet ? 0.7 : 0.34;
     const reachable = world.reachable;
     const carried = weapons.loadout.slots.filter((slot) => slot !== null).map((slot) => slot!.id);
     const full = carried.length === weapons.loadout.slots.length;
     const least = carried.reduce((a, b) => (WORTH[a] <= WORTH[b] ? a : b));
+    const { x: px, z: pz } = this.game.player.position;
+    const away = (rack: (typeof RACKS_BEST_FIRST)[number]): number => Math.hypot(rack.at[0] - px, rack.at[2] - pz);
     for (const rack of RACKS_BEST_FIRST) {
       if (!reachable.has(rack.area)) continue;
+      // (Two racks sell the same gun now: it walks to the nearer one it can get to.)
+      if (RACKS_BEST_FIRST.some((other) => other !== rack && other.weapon === rack.weapon && reachable.has(other.area) && away(other) < away(rack))) continue;
       const offer = rackOffer(wallet, weapons.loadout, rack.weapon, WEAPONS[rack.weapon]);
       if (offer.kind === 'weapon' && full) {
         // Both hands full: only a better gun than its worst is worth having.
@@ -846,13 +897,14 @@ export class Autopilot {
       }
     }
     // On the mission it buys the door that stands between it and the next
-    // objective, by the cheapest way there, and saves its scrap otherwise:
-    // every other door is a luxury.
+    // objective, by the cheapest way there. Every other door is a luxury:
+    // it buys one only with scrap to spare, as a person does once the gun
+    // they want is paid for (more doors open is more room to run a horde).
     const needed = this.mission ? this.doorToObjective() : null;
     for (const plan of DOOR_PLANS) {
       const door = world.door(plan.id);
       if (door.open || plan.cost === null || wallet.scrap < plan.cost) continue;
-      if (this.mission && plan.id !== needed) continue;
+      if (this.mission && plan.id !== needed && wallet.scrap < plan.cost + SPARE_SCRAP) continue;
       const near = reachable.has(plan.a) ? plan.a : reachable.has(plan.b) ? plan.b : null;
       if (!near) continue;
       // Stand a little way back from the door, on the side it can be reached from.
