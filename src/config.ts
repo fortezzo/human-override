@@ -314,10 +314,11 @@ export const MISSION = {
    * The Custodian comes for the last key: with the first round to start
    * once the player holds the other two, and never before this round. (So
    * the mission's length follows the player. A fast one meets it in round
-   * 8 and can be at the final stand before round 10; a slower one meets it
-   * the round after their second key, whenever that is.)
+   * 6; a slower one meets it the round after their second key, whenever
+   * that is. It was round 8 until the designer, asked, chose 6: "I'd
+   * rather more people reach the ending than keep the mission long".)
    */
-  custodianFromRound: 8,
+  custodianFromRound: 6,
   /** Seconds the ground round the uplink has to be held, and how far from it that ground reaches (metres). */
   uplinkSeconds: 60,
   uplinkRadius: 8.5,

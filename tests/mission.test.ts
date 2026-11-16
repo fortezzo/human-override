@@ -337,8 +337,8 @@ describe('the mission: the numbers in the config', () => {
   it('asks for a full minute at the uplink, and sends the boss in before the switch is armed', () => {
     expect(MISSION.uplinkSeconds).toBe(60);
     expect(MISSION.bossAfter).toBeLessThan(MISSION.armSeconds);
-    // (The Custodian: never before round 8, the player asked.)
-    expect(MISSION.custodianFromRound).toBe(8);
+    // (The Custodian: never before round 6. The player asked for 8, then for 6.)
+    expect(MISSION.custodianFromRound).toBe(6);
   });
 });
 
