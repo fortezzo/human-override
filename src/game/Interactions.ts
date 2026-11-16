@@ -100,7 +100,7 @@ export class Interactions {
 
     const rack = this.nearestRack();
     if (rack) {
-      const def = WEAPONS[rack.weapon];
+      const def = this.weapons.defFor(rack.weapon);
       const offer = rackOffer(wallet, loadout, rack.weapon, def);
       if (offer.kind === 'full') {
         this.prompt = { text: `${def.name}: ammunition full`, cost: null, usable: false, note: '' };

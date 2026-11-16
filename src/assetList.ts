@@ -65,6 +65,7 @@ export const MODELS = {
   rifle: 'models/rifle.glb',
   pistol: 'models/pistol.glb',
   shotgun: 'models/shotgun.glb',
+  turncoat: 'models/turncoat.glb',
 } as const;
 
 export const SKY = 'env/night_sky.webp';

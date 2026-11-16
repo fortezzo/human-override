@@ -41,6 +41,27 @@ export interface HordeRules {
   guard: { share: number };
 }
 
+/** Swarm rounds: every `every`th round is all drones, `count` of them the first time and `countStep` more each time after. */
+export interface SwarmRules {
+  every: number;
+  count: number;
+  countStep: number;
+}
+
+export function isSwarmRound(rules: SwarmRules, round: number): boolean {
+  return rules.every > 0 && round > 0 && round % rules.every === 0;
+}
+
+/** How many drones a swarm round sends. */
+export function swarmSize(rules: SwarmRules, round: number): number {
+  return rules.count + rules.countStep * Math.max(0, Math.floor(round / rules.every) - 1);
+}
+
+/** The robots of a swarm round: drones and nothing else. ARGUS's counters are for the rounds between. */
+export function composeSwarm(rules: SwarmRules, round: number): SpawnOrder[] {
+  return Array.from({ length: swarmSize(rules, round) }, (): SpawnOrder => ({ kind: 'drone' }));
+}
+
 /** How many of a special kind an ordinary round has. */
 export function specialsIn(rule: SpecialRule, round: number): number {
   if (round < rule.from) return 0;

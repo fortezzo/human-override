@@ -6,10 +6,11 @@
 // things the player does with their hands: swapping weapons and striking.
 
 import * as THREE from 'three';
-import { LOADOUT, MELEE, WEAPONS, type WeaponDef, type WeaponId } from '../../config';
+import { BENCH, LOADOUT, MELEE, WEAPONS, type WeaponDef, type WeaponId } from '../../config';
+import { markName, tune, type HandSpeed } from '../../sim/bench';
 import type { Input } from '../../core/input';
 import { damp } from '../../core/math';
-import { createLoadout, held, nextSlot, type Loadout } from '../../sim/loadout';
+import { createLoadout, held, nextSlot, slotOf, type CarriedWeapon, type Loadout } from '../../sim/loadout';
 import { cancelReload, canReload, fire, reloadProgress, startReload, updateWeapon, type WeaponState } from '../../sim/weapon';
 import type { Player } from '../Player';
 
@@ -43,6 +44,10 @@ export class WeaponController {
   loadout: Loadout<WeaponId> = createLoadout(LOADOUT.slots, LOADOUT.starting, WEAPONS[LOADOUT.starting]);
   /** Extra spread built up by sustained fire; decays when the trigger rests. */
   bloom = 0;
+  /** What the player's boosts do to every gun (see sim/bench.ts). Set through `setHands`. */
+  private hands: HandSpeed = { reload: 1, fire: 1 };
+  /** Each weapon as it really is at each level, worked out once. */
+  private readonly tuned = new Map<string, WeaponDef>();
 
   onShot: (shot: ShotEvent) => void = () => {};
   onDryFire: () => void = () => {};
@@ -78,11 +83,48 @@ export class WeaponController {
     this.sinceMelee = 99;
     this.meleeLanded = true;
     this.lastProgress = 0;
+    this.setHands({ reload: 1, fire: 1 });
+  }
+
+  /** The player's boosts have changed: how fast their hands reload and fire now. */
+  setHands(hands: HandSpeed): void {
+    this.hands = hands;
+    this.tuned.clear();
+  }
+
+  /** A weapon as it is at a given level in this player's hands: the bench's upgrades and the boosts applied. */
+  defAt(id: WeaponId, level: number): WeaponDef {
+    const key = `${id}:${level}`;
+    let def = this.tuned.get(key);
+    if (!def) this.tuned.set(key, (def = tune(WEAPONS[id], level, BENCH, this.hands)));
+    return def;
+  }
+
+  /** One of the weapons being carried, as it really is. */
+  defOf(weapon: CarriedWeapon<WeaponId>): WeaponDef {
+    return this.defAt(weapon.id, weapon.level);
+  }
+
+  /** A kind of weapon as the player has it (at the level of the one they carry), or as it comes off the wall if they have none. */
+  defFor(id: WeaponId): WeaponDef {
+    const slot = slotOf(this.loadout, id);
+    return this.defAt(id, slot >= 0 ? this.loadout.slots[slot]!.level : 0);
   }
 
   /** The weapon in hand. */
   get def(): WeaponDef {
-    return WEAPONS[held(this.loadout).id];
+    return this.defOf(held(this.loadout));
+  }
+
+  /** How many times the weapon in hand has been overclocked. */
+  get level(): number {
+    return held(this.loadout).level;
+  }
+
+  /** The weapon in hand by name, with its mark if it has been overclocked ("KR-7 Carbine Mk II"). */
+  get title(): string {
+    const mark = markName(this.level);
+    return mark ? `${this.def.name} ${mark}` : this.def.name;
   }
 
   get state(): WeaponState {
@@ -142,7 +184,7 @@ export class WeaponController {
 
     // Weapons not in hand still cool down, so a swap never grants a free shot.
     for (const slot of loadout.slots) {
-      if (slot && slot !== held(loadout)) updateWeapon(slot.state, WEAPONS[slot.id], dt);
+      if (slot && slot !== held(loadout)) updateWeapon(slot.state, this.defOf(slot), dt);
     }
     const tick = updateWeapon(state, def, dt);
     this.bloom = damp(this.bloom, 0, def.spreadRecovery, dt);

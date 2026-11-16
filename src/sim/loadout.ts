@@ -9,6 +9,8 @@ import { createWeapon, type WeaponSpec, type WeaponState } from './weapon';
 export interface CarriedWeapon<Id extends string> {
   id: Id;
   state: WeaponState;
+  /** How many times the Overclock Bench has upgraded it (0 = as it comes off the wall). */
+  level: number;
 }
 
 export interface Loadout<Id extends string> {
@@ -19,7 +21,7 @@ export interface Loadout<Id extends string> {
 
 export function createLoadout<Id extends string>(slotCount: number, starting: Id, spec: WeaponSpec): Loadout<Id> {
   const slots: Array<CarriedWeapon<Id> | null> = Array.from({ length: slotCount }, () => null);
-  slots[0] = { id: starting, state: createWeapon(spec) };
+  slots[0] = { id: starting, state: createWeapon(spec), level: 0 };
   return { slots, current: 0 };
 }
 
@@ -48,16 +50,30 @@ export interface TakeResult<Id extends string> {
  * in the player's hands. (Taking a weapon already carried is a refill; use
  * `refill` for that.)
  */
-export function takeWeapon<Id extends string>(loadout: Loadout<Id>, id: Id, spec: WeaponSpec): TakeResult<Id> {
+export function takeWeapon<Id extends string>(loadout: Loadout<Id>, id: Id, spec: WeaponSpec, level = 0): TakeResult<Id> {
   let slot = loadout.slots.findIndex((s) => s === null);
   let replaced: Id | null = null;
   if (slot < 0) {
     slot = loadout.current;
     replaced = loadout.slots[slot]!.id;
   }
-  loadout.slots[slot] = { id, state: createWeapon(spec) };
+  loadout.slots[slot] = { id, state: createWeapon(spec), level };
   loadout.current = slot;
   return { slot, replaced };
+}
+
+/**
+ * Take what the Prototype Crate is offering: a weapon at a given level,
+ * fully loaded (`spec` is that weapon at that level). If the player is
+ * already carrying one of the same kind, the new one takes its place;
+ * otherwise it is picked up like any other. Either way it ends up in hand.
+ */
+export function takeOffer<Id extends string>(loadout: Loadout<Id>, id: Id, spec: WeaponSpec, level: number): TakeResult<Id> {
+  const own = slotOf(loadout, id);
+  if (own < 0) return takeWeapon(loadout, id, spec, level);
+  loadout.slots[own] = { id, state: createWeapon(spec), level };
+  loadout.current = own;
+  return { slot: own, replaced: null };
 }
 
 /** True if the weapon has room for more spare rounds or a fuller magazine. */

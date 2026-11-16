@@ -9,7 +9,7 @@ import { createFogCard, type ConeShaft, type DustBeam, type FogCard } from '../.
 import type { LightDef } from '../../render/lighting';
 import type { MaterialKey } from '../../render/materials';
 import type { Collider } from '../../sim/collision';
-import { VIEW_MODELS } from '../../entities/weapon/viewModels';
+import { VIEW_MODELS, dressGun } from '../../entities/weapon/viewModels';
 import type { AreaId, RackPlan } from '../plan';
 import { COLUMN, VENT_SIZE, WALL } from '../plan';
 import { boxBetween } from './geometry';
@@ -244,15 +244,9 @@ export function weaponRack(b: LevelBuilder, atlas: SignAtlas, assets: Assets, pl
   // The weapon itself, muzzle up, flat against the board.
   const view = VIEW_MODELS[plan.weapon as WeaponId];
   const gun = assets.model(view.model).scene.clone(true);
+  dressGun(gun, view, assets, { paint: 1.2, glow: 0.83 });
   gun.traverse((node) => {
-    const mesh = node as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    const material = (mesh.material as THREE.MeshStandardMaterial).clone();
-    material.color.setScalar(view.paint * 1.2);
-    material.envMapIntensity = 1.3;
-    if (material.emissiveMap) material.emissiveIntensity = 2;
-    mesh.material = material;
-    mesh.castShadow = false;
+    if ((node as THREE.Mesh).isMesh) node.castShadow = false;
   });
   const holder = new THREE.Group();
   holder.add(gun);
@@ -260,8 +254,7 @@ export function weaponRack(b: LevelBuilder, atlas: SignAtlas, assets: Assets, pl
   // then turn that side to face the room.
   gun.rotation.x = Math.PI / 2;
   holder.rotation.y = Math.atan2(nx, nz) + Math.PI / 2;
-  const length = plan.weapon === 'shotgun' ? 0.66 : plan.weapon === 'carbine' ? 0.92 : 0.2;
-  holder.scale.setScalar(Math.min(1, 0.8 / length));
+  holder.scale.setScalar(Math.min(1, 0.8 / view.length));
   holder.position.set(...point(0.1, 0.04, 0));
   holder.name = `rack-${plan.weapon}`;
   b.addObject(holder);

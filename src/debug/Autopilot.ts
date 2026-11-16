@@ -160,7 +160,8 @@ const ROOMS: ReadonlyArray<readonly [number, number, number, number]> = [...Obje
 const SPARE_SCRAP = 2500;
 
 /** Which gun is worth more than which: it never trades down. */
-const WORTH: Record<WeaponId, number> = { pistol: 0, shotgun: 1, carbine: 2 };
+// (The Turncoat is not a gun it can fight a round with: it never takes one from the crate.)
+const WORTH: Record<WeaponId, number> = { turncoat: -1, pistol: 0, shotgun: 1, carbine: 2 };
 /** The wall racks, the best gun's first: that is the one it buys, and tops up, before the others. */
 const RACKS_BEST_FIRST = [...RACK_PLANS].sort((a, b) => WORTH[b.weapon] - WORTH[a.weapon]);
 

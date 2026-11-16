@@ -136,6 +136,8 @@ export interface FlashLook {
   /** How long it stays after the frame it fires on, in seconds. */
   seconds: number;
   shape: 'star' | 'burst';
+  /** Its colour, if not a gunshot's (linear red, green and blue; above 1 glows). */
+  tint?: [number, number, number];
 }
 
 export class MuzzleFlash {
@@ -166,7 +168,7 @@ export class MuzzleFlash {
         side: THREE.DoubleSide,
       });
       // Bright enough to bloom a little, not enough to wash into a ball.
-      material.color.setRGB(3.2, 2.6, 1.9);
+      material.color.setRGB(...(look.tint ?? [3.2, 2.6, 1.9]));
       prepare(material);
       return material;
     };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARGUS, MELEE, SPECIALS, WEAPONS } from '../src/config';
+import { ARGUS, MELEE, ORDINARY_GUNS, SPECIALS, WEAPONS } from '../src/config';
 import { createArmour, resolveHit, type Armour } from '../src/sim/armour';
 
 const carbine = WEAPONS.carbine;
@@ -50,7 +50,8 @@ describe("the heavy's plating", () => {
   });
 
   it('makes the core worth far more than the plate with every gun', () => {
-    for (const weapon of Object.values(WEAPONS)) {
+    // (Every gun that shoots holes in things. The Turncoat's beam turns a robot or does not: it has no weak-point damage.)
+    for (const weapon of ORDINARY_GUNS.map((id) => WEAPONS[id])) {
       const core = resolveHit(heavy(), 'head', weapon.id, weapon).damage;
       const plate = resolveHit(heavy(), 'torso', weapon.id, weapon).damage;
       expect(core / plate).toBeGreaterThan(4);

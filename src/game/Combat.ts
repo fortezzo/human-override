@@ -21,7 +21,7 @@ import type { SurfaceKind } from '../render/materials';
 import { awardFor } from '../sim/economy';
 import type { World } from '../world/World';
 
-const SHOT_SOUND: Record<WeaponId, SoundId> = { pistol: 'pistolShot', shotgun: 'shotgunShot', carbine: 'rifleShot' };
+const SHOT_SOUND: Record<WeaponId, SoundId> = { pistol: 'pistolShot', shotgun: 'shotgunShot', carbine: 'rifleShot', turncoat: 'beamShot' };
 
 /** What one shot or strike did to one robot. */
 export interface HitResult {

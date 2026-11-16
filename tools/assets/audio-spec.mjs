@@ -286,6 +286,100 @@ export const AUDIO_SPEC = [
   },
   // ARGUS passes a remark: two low notes.
   { name: 'argus_remark', stereo: true, peak: 0.45, layers: [whole('interface-sounds', `${KENNEY_UI}/question_001.ogg`, { pitch: 0.55 })] },
+  // ---- Stage 4: the economy.
+  // The Turncoat firing: a large laser pitched down, with a breath of force field behind it.
+  ...[0, 2].map((n, i) => ({
+    name: `beam_shot_${i}`,
+    stereo: true,
+    peak: 0.88,
+    duration: 0.8,
+    fadeOut: 0.35,
+    layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/laserLarge_00${n}.ogg`, { pitch: 0.72 }), whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_001.ogg`, { gain: 0.35, pitch: 1.5 })],
+  })),
+  // A robot turned to the player's side: a machine starting up.
+  { name: 'turned', peak: 0.75, duration: 1.3, fadeOut: 0.4, layers: [whole('scifi-sfx-library', `${SCIFI_LIB}/Robot_Activated_00.wav`, { pitch: 1.25 })] },
+  // A boost bought: the station's door, a low confirming note, and the charge going in.
+  {
+    name: 'boost_buy',
+    stereo: true,
+    peak: 0.8,
+    duration: 1.5,
+    fadeOut: 0.7,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorClose_001.ogg`, { pitch: 1.35, gain: 0.8 }),
+      whole('interface-sounds', `${KENNEY_UI}/confirmation_003.ogg`, { pitch: 0.62 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_003.ogg`, { gain: 0.4, pitch: 0.9 }),
+    ],
+  },
+  // The Overclock Bench at work: an arc, a struck plate and machine chatter.
+  {
+    name: 'bench_work',
+    peak: 0.85,
+    duration: 1.6,
+    fadeOut: 0.5,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/laserRetro_002.ogg`, { pitch: 0.5, gain: 0.8 }),
+      whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_medium_002.ogg`, { gain: 0.7 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/computerNoise_002.ogg`, { gain: 0.45, pitch: 1.2, filter: 'highpass=f=400' }),
+    ],
+  },
+  // The Prototype Crate: its lid, the ticking while it chooses, the note it settles on, and the lid again.
+  { name: 'crate_open', peak: 0.85, duration: 1.1, fadeOut: 0.4, layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorOpen_001.ogg`, { pitch: 0.8 }), whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_heavy_003.ogg`, { gain: 0.5, pitch: 0.8 })] },
+  { name: 'crate_tick', peak: 0.4, duration: 0.14, fadeOut: 0.05, layers: [whole('interface-sounds', `${KENNEY_UI}/select_003.ogg`, { pitch: 1.4 })] },
+  { name: 'crate_offer', stereo: true, peak: 0.7, duration: 1.1, fadeOut: 0.6, layers: [whole('interface-sounds', `${KENNEY_UI}/confirmation_001.ogg`, { pitch: 0.75 }), whole('interface-sounds', `${KENNEY_UI}/glass_005.ogg`, { gain: 0.4, pitch: 0.7 })] },
+  { name: 'crate_close', peak: 0.8, duration: 0.9, fadeOut: 0.3, layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorClose_000.ogg`, { pitch: 0.9 }), whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_medium_001.ogg`, { gain: 0.5, pitch: 0.7 })] },
+  // A pickup taken.
+  { name: 'pickup', stereo: true, peak: 0.7, duration: 1.0, fadeOut: 0.5, layers: [whole('interface-sounds', `${KENNEY_UI}/maximize_003.ogg`, { pitch: 1.1 }), whole('interface-sounds', `${KENNEY_UI}/confirmation_001.ogg`, { gain: 0.7, pitch: 1.0 })] },
+  // An EMP Blast: a low boom, a force field collapsing and a long falling tone.
+  {
+    name: 'emp_blast',
+    stereo: true,
+    bitrate: '112k',
+    peak: 0.95,
+    duration: 2.3,
+    fadeOut: 1.2,
+    drive: 2,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_000.ogg`),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_004.ogg`, { gain: 0.6, pitch: 0.6 }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/laserLarge_004.ogg`, { gain: 0.5, pitch: 0.4 }),
+    ],
+  },
+  // A robot battering a shutter: heavy steel struck, and the slats rattling.
+  ...[2, 3, 4].map((n, i) => ({
+    name: `shutter_hit_${i}`,
+    peak: 0.92,
+    duration: 0.8,
+    fadeOut: 0.3,
+    drive: 2,
+    layers: [whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_heavy_00${n}.ogg`, { pitch: 0.6 }), whole('impact-sounds', `${KENNEY_IMPACT}/impactTin_medium_00${i}.ogg`, { gain: 0.6, pitch: 0.7 })],
+  })),
+  // A shutter forced up: sheet metal giving way.
+  {
+    name: 'shutter_break',
+    peak: 0.97,
+    duration: 1.7,
+    fadeOut: 0.6,
+    drive: 2,
+    layers: [whole('breaking-falling-hit', 'breaking-falling-hit/bfh1_metal_falling_02.ogg'), whole('impact-sounds', `${KENNEY_IMPACT}/impactMetal_heavy_000.ogg`, { gain: 0.9, pitch: 0.5 })],
+  },
+  // A shutter run back down, and home.
+  { name: 'shutter_repair', peak: 0.85, duration: 1.0, fadeOut: 0.3, layers: [whole('sci-fi-sounds', `${KENNEY_SCIFI}/doorClose_002.ogg`, { pitch: 0.7 }), whole('impact-sounds', `${KENNEY_IMPACT}/impactPlate_medium_002.ogg`, { gain: 0.6, pitch: 0.8 })] },
+  // A grenade bouncing.
+  { name: 'grenade_bounce', peak: 0.6, layers: [whole('metal-impact-sounds', 'metal-impact-sounds/clink2.wav', { pitch: 0.6 })] },
+  // The fail-safe bringing the player back: a thump in the chest and a rising charge.
+  {
+    name: 'revive',
+    stereo: true,
+    peak: 0.9,
+    duration: 1.7,
+    fadeOut: 0.8,
+    layers: [
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/lowFrequency_explosion_001.ogg`, { pitch: 1.2, filter: 'lowpass=f=400' }),
+      whole('sci-fi-sounds', `${KENNEY_SCIFI}/forceField_002.ogg`, { gain: 0.6, pitch: 1.3 }),
+      whole('interface-sounds', `${KENNEY_UI}/confirmation_004.ogg`, { gain: 0.5, pitch: 0.8 }),
+    ],
+  },
   // The round stings. The round number snaps onto the screen the moment a
   // round begins, so each sting opens on something just as sharp: a short
   // burst of machine noise over a low thump. The dark swell underneath is

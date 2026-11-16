@@ -3,6 +3,7 @@
 //   public/assets/models/rifle.glb     (from an OBJ, below)
 //   public/assets/models/pistol.glb    (from an FBX, see lib/fbx-gun.mjs)
 //   public/assets/models/shotgun.glb   (from an FBX)
+//   public/assets/models/turncoat.glb  (from an FBX: the Prototype Crate's special weapon)
 //
 // Every source arrives in its own units, facing its own way and sitting
 // wherever its author left it, so each is re-centred, scaled to real-world
@@ -249,6 +250,23 @@ const FBX_GUNS = [
     colorSize: 2048,
     ormSize: 1024,
     maps: { color: 'SciFiDoubleBarrel_Albedo.png', normal: 'SciFiDoubleBarrel_Normal.png', ao: 'SciFiDoubleBarrel_AO.png', rough: 'SciFiDoubleBarrel_Roughness.png', metal: 'SciFiDoubleBarrel_Metalness.png', emissive: 'Shotgun_Emit.png' },
+  },
+  {
+    // The Prototype Crate's special weapon. The images that came with this
+    // download look like a scanned-surface library's, which has a licence
+    // of its own, so none of them is used: the model's three kinds of part
+    // are kept by name and painted in the game from surfaces it already
+    // has. It is also a third of a million triangles, most of them
+    // smoothing curves nobody will see; a twelfth of that is plenty.
+    name: 'turncoat',
+    dir: 'arma-sci-fisci-fi-weapon',
+    fbx: 'source/raygun2.fbx',
+    keep: () => true,
+    length: 0.44,
+    forward: '-x',
+    parts: { Steel_se4nad3c: 'body', 'Material.001': 'coil', 'Material.002': 'cell', 'Material.003': 'cell' },
+    boxUv: 0.16,
+    simplifyTo: 28000,
   },
 ];
 

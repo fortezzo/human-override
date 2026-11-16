@@ -78,7 +78,7 @@ export const LOOK = {
   pitchLimit: 1.5,
 };
 
-export type WeaponId = 'pistol' | 'shotgun' | 'carbine';
+export type WeaponId = 'pistol' | 'shotgun' | 'carbine' | 'turncoat';
 
 /** Everything that makes one gun different from another. */
 export interface WeaponDef {
@@ -270,6 +270,76 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     price: 1500,
     ammoPrice: 600,
   },
+  // The Prototype Crate's special weapon, found nowhere else. It fires a
+  // beam that turns a robot to the player's side for a few seconds (see
+  // TURNCOAT below). It hangs on no wall, so it has no price: its
+  // ammunition comes back with a Full Resupply, or with another one from
+  // the crate.
+  turncoat: {
+    id: 'turncoat',
+    name: 'XM-0 Turncoat',
+    kind: 'TURNCOAT',
+    automatic: false,
+    damage: 40,
+    pellets: 1,
+    weakPointMultiplier: 1,
+    limbMultiplier: 1,
+    falloffStart: 60,
+    falloffEnd: 60,
+    falloffMin: 1,
+    fireInterval: 0.6,
+    magazine: 4,
+    reserve: 12,
+    reserveMax: 16,
+    reloadTime: 2.5,
+    reloadCommit: 0.72,
+    range: 60,
+    spreadHip: 0.006,
+    spreadAim: 0.0012,
+    spreadMoveBonus: 0.006,
+    spreadPerShot: 0.002,
+    spreadMax: 0.012,
+    spreadRecovery: 8,
+    pelletSpread: 0,
+    aimTime: 0.2,
+    aimFov: 55,
+    recoilPitch: 1.5,
+    recoilPitchAim: 1.1,
+    recoilYaw: 0.3,
+    kickBack: 0.07,
+    kickUp: 0.018,
+    kickTilt: 0.07,
+    kickRecovery: 10,
+    shake: 0.22,
+    casingSpeed: 0,
+    flash: 1.2,
+    thump: 1.0,
+    price: 0,
+    ammoPrice: 0,
+  },
+};
+
+/** The guns that hang on walls and that the crate hands out overclocked. */
+export const ORDINARY_GUNS: WeaponId[] = ['pistol', 'shotgun', 'carbine'];
+
+/**
+ * What the Turncoat's beam does. A robot it hits fights for the player:
+ * it goes for the nearest robot and strikes it, and when the time is up
+ * its own core burns out (which counts as the player's kill). ARGUS's own
+ * machines, the Custodian and the Proxy, cannot be turned: the beam only
+ * hurts them.
+ */
+export const TURNCOAT = {
+  /** Seconds a turned robot fights for the player. */
+  seconds: 10,
+  /** One blow from a turned robot, as a multiple of an ordinary robot's health in that round. */
+  blow: 1.1,
+  /** How far it will go to find a robot to fight (metres). */
+  seek: 16,
+  /** What the beam does to a machine it cannot turn, as a multiple of an ordinary robot's health. */
+  eliteDamage: 1.5,
+  /** The colour of a turned robot's lights. */
+  color: 0x4fe6ff,
 };
 
 /** What the player carries, and how the two-weapon limit behaves. */
@@ -292,6 +362,28 @@ export const MELEE = {
   cooldown: 0.62,
   hitTime: 0.12,
   shake: 0.3,
+};
+
+/**
+ * Grenades (G). A run starts with a few and each new round hands out more;
+ * a Full Resupply fills the pouch.
+ */
+export const GRENADE = {
+  start: 2,
+  max: 4,
+  perRound: 1,
+  /** Seconds from leaving the hand to going off, and seconds before another can be thrown. */
+  fuse: 1.7,
+  cooldown: 0.9,
+  /** How hard it is thrown (metres per second) and how much speed it keeps when it bounces. */
+  throwSpeed: 14,
+  bounce: 0.38,
+  /** How far the blast reaches (metres). */
+  radius: 5.5,
+  /** Damage to robots at the middle of it, as a multiple of an ordinary robot's health in that round. */
+  wreck: 3,
+  /** Damage to the player at the middle of it. (Less than a bomber's: it is the player's own.) */
+  selfDamage: 30,
 };
 
 /** Scrap: what earns it. Prices live with the things they buy. */
@@ -378,6 +470,126 @@ export const MISSION = {
    */
   custodian: { health: 5, speed: 3.0, damage: 28, scrap: 500, stagger: 2, flinch: 0.1 },
   proxy: { health: 8, speed: 3.6, damage: 36, scrap: 1500, stagger: 12, flinch: 0 },
+};
+
+/**
+ * The four Boost Stations, one boost each, permanent for the run. They
+ * only work while the power is on. (The rules are in sim/boosts.ts.)
+ * `name` is the boost's own name, `effect` what it does in plain words.
+ */
+export const BOOSTS = {
+  /** More health: this is the player's health with it (without: PLAYER.maxHealth). */
+  carapace: { name: 'CARAPACE', effect: 'More health', price: 2500, maxHealth: 160 },
+  /** Faster reload: a reload takes this share of its usual time. */
+  autoloader: { name: 'AUTOLOADER', effect: 'Faster reload', price: 1500, reloadFactor: 0.6 },
+  /** Faster fire rate: the time between shots is this share of the usual. */
+  hairTrigger: { name: 'HAIR TRIGGER', effect: 'Faster fire rate', price: 2000, fireFactor: 0.75 },
+  /**
+   * One self-revive. It is used up when it saves the player, and can be
+   * bought again for `priceStep` more each time. Getting back up: with
+   * this share of full health, untouchable for `grace` seconds, and every
+   * robot within `shove` metres knocked off balance.
+   */
+  failsafe: { name: 'FAILSAFE', effect: 'One self-revive', price: 1500, priceStep: 1000, health: 0.6, grace: 3, shove: 5 },
+} as const;
+
+/**
+ * The Overclock Bench: it upgrades the weapon in hand, again and again.
+ * The first upgrade of a weapon costs `price`, each one after it
+ * `priceStep` more, up to `maxLevel`. Every level adds this share of the
+ * weapon's own damage, magazine and spare ammunition, and fills it up.
+ * (The rules are in sim/bench.ts.)
+ */
+export const BENCH = {
+  price: 2000,
+  priceStep: 1500,
+  maxLevel: 4,
+  damagePerLevel: 0.3,
+  magazinePerLevel: 0.2,
+  reservePerLevel: 0.2,
+};
+
+/**
+ * The Prototype Crate: a random weapon for a fixed price. (The rules are
+ * in sim/crate.ts.) What it offers can be left where it is.
+ */
+export const CRATE = {
+  price: 1000,
+  /** The chance of the Turncoat on a roll, and how much that grows with every roll that misses it. */
+  specialChance: 0.2,
+  specialChanceStep: 0.1,
+  /** The level an ordinary gun the player is not carrying comes at (1 = Mk II). */
+  freshLevel: 1,
+  maxLevel: BENCH.maxLevel,
+  /** Seconds the crate takes to choose, and seconds its offer stays before the lid shuts on it. */
+  cycleSeconds: 2.4,
+  offerSeconds: 9,
+};
+
+/**
+ * Timed pickups: what destroyed robots sometimes leave. (The rules are in
+ * sim/pickups.ts.)
+ */
+export const PICKUPS = {
+  chance: 0.04,
+  perRound: 3,
+  minKills: 5,
+  weights: { resupply: 3, overload: 3, emp: 2, doubleScrap: 3, lockdown: 2 },
+  overloadSeconds: 20,
+  doubleSeconds: 30,
+  /** Seconds one lies on the floor before it is gone, and how long before that it starts to blink. */
+  lifetime: 25,
+  blink: 6,
+  /** The one a swarm round ends with waits longer. */
+  swarmLifetime: 60,
+  /** How near the player must come to pick one up (metres). */
+  reach: 1.4,
+  /**
+   * ARGUS's own machines, the Custodian and the Proxy, are not destroyed by
+   * an EMP Blast or by one hit under Overload: the blast takes this share
+   * of their health, and Overload multiplies what a hit does to them.
+   */
+  empElite: 0.25,
+  overloadElite: 3,
+  names: { resupply: 'FULL RESUPPLY', overload: 'OVERLOAD', emp: 'EMP BLAST', doubleScrap: 'DOUBLE SCRAP', lockdown: 'LOCKDOWN' },
+  notes: {
+    resupply: 'Every weapon filled',
+    overload: 'One-hit kills',
+    emp: 'Every robot destroyed',
+    doubleScrap: 'Everything pays double',
+    lockdown: 'Every shutter repaired',
+  },
+} as const;
+
+/**
+ * Shutters: the roller doors over the five openings robots walk in
+ * through. (The rules are in sim/shutters.ts.)
+ */
+export const SHUTTERS = {
+  /** Blows a sound shutter takes before it is forced up. ARGUS's Proxy forces one with a single blow. */
+  strength: 5,
+  /** Scrap to run one back down, and how near it the player must stand (metres). */
+  repairCost: 50,
+  reach: 2.8,
+  /** Seconds a shutter takes to be forced up, and to run back down. */
+  raiseTime: 0.28,
+  lowerTime: 0.55,
+};
+
+/**
+ * Swarm rounds: every `every`th round is all drones. The first has
+ * `count` of them and each later one `countStep` more; they come in
+ * quickly (one every `spawnInterval` seconds, up to `maxActive` at
+ * once), fly at `speed` metres a second, and the last one to be destroyed
+ * leaves a Full Resupply.
+ */
+export const SWARM = {
+  every: 5,
+  count: 14,
+  countStep: 6,
+  spawnInterval: 0.9,
+  maxActive: 10,
+  speed: 5.6,
 };
 
 /** How rounds grow. Round numbers start at 1. */

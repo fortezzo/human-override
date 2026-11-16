@@ -26,7 +26,7 @@ import { settings } from '../../core/settings';
 import type { Player } from '../Player';
 import { MuzzleFlash } from './MuzzleFlash';
 import { ReflexSight } from './ReflexSight';
-import { VIEW_MODELS, type Pose, type ViewModelDef } from './viewModels';
+import { VIEW_MODELS, dressGun, type Pose, type ViewModelDef } from './viewModels';
 
 const SCALE = 0.25;
 /** The gun's own lens, in degrees (the world camera is wider). */
@@ -222,16 +222,10 @@ export class WeaponView {
         mesh.castShadow = false;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;
-        // Each view model gets its own copy, so the same download can also
-        // hang on a wall rack with ordinary materials.
-        const material = (mesh.material as THREE.MeshStandardMaterial).clone();
-        material.envMapIntensity = 1.35;
-        material.color.setScalar(def.paint);
-        material.roughness = def.roughness;
-        if (material.emissiveMap) material.emissiveIntensity = 2.4;
-        useViewLens(material, this.lens, this.light);
-        mesh.material = material;
       });
+      // Each view model gets its own copy of its materials, so the same
+      // download can also hang on a wall rack with ordinary ones.
+      for (const material of dressGun(model, def, assets, { env: 1.35 })) useViewLens(material, this.lens, this.light);
       group.add(model);
 
       let sight: ReflexSight | null = null;

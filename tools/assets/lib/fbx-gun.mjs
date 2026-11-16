@@ -11,8 +11,9 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import sharp from 'sharp';
-import { getBounds, join, meshopt, prune, transformMesh, weld } from '@gltf-transform/functions';
-import { MeshoptEncoder } from 'meshoptimizer';
+import { getBounds, join, meshopt, prune, simplify, transformMesh, weld } from '@gltf-transform/functions';
+import { MeshoptEncoder, MeshoptSimplifier } from 'meshoptimizer';
+import { addBoxUvs } from './box-uv.mjs';
 
 const require = createRequire(import.meta.url);
 const platformDir = process.platform === 'win32' ? 'Windows_NT' : process.platform === 'darwin' ? 'Darwin' : 'Linux';
@@ -44,9 +45,14 @@ const TURN = {
  * @param options.level    degrees to tip the gun back so its barrel is level (for guns posed at an angle)
  * @param options.maps     texture file names: color, normal, ao, metal, and either
  *                         rough or (Unity style) smoothness in the metal image's alpha; optional emissive
+ * @param options.parts    instead of `maps`, for a gun whose own images are not used: the name each of
+ *                         the source's materials is to have in the game file ({ sourceName: partName }).
+ *                         The parts come out untextured, with box-projected UVs (one repeat every
+ *                         `options.boxUv` metres), and the game paints them itself.
+ * @param options.simplifyTo  for a model far heavier than it needs to be: the number of triangles to keep
  * @returns a one-line description, or null if the download is missing
  */
-export async function buildFbxGun(io, { name, src, fbx, keep, length, forward, level, colorSize, ormSize, maps, outDir, tempDir }) {
+export async function buildFbxGun(io, { name, src, fbx, keep, length, forward, level, colorSize, ormSize, maps, parts: partNames, boxUv, simplifyTo, outDir, tempDir }) {
   if (!fs.existsSync(src)) return null;
   const temp = path.join(tempDir, name);
   fs.mkdirSync(tempDir, { recursive: true });
@@ -88,6 +94,34 @@ export async function buildFbxGun(io, { name, src, fbx, keep, length, forward, l
   const scale = length / (bounds.max[2] - bounds.min[2]);
   const fit = [scale, 0, 0, 0, 0, scale, 0, 0, 0, 0, scale, 0, -centre[0] * scale, -centre[1] * scale, -centre[2] * scale, 1];
   for (const mesh of parts) transformMesh(mesh, fit);
+
+  if (partNames) {
+    // The game paints this one: each of its materials is kept as a named
+    // part with no images of its own.
+    for (const texture of root.listTextures()) texture.dispose();
+    const made = new Map();
+    let before = 0;
+    for (const mesh of parts) {
+      for (const prim of mesh.listPrimitives()) {
+        const part = partNames[prim.getMaterial()?.getName() ?? ''] ?? Object.values(partNames)[0];
+        if (!made.has(part)) made.set(part, doc.createMaterial(part).setBaseColorFactor([0.8, 0.8, 0.8, 1]).setMetallicFactor(1).setRoughnessFactor(0.5));
+        prim.setMaterial(made.get(part));
+        before += (prim.getIndices()?.getCount() ?? prim.getAttribute('POSITION').getCount()) / 3;
+      }
+    }
+    for (const material of root.listMaterials()) if (![...made.values()].includes(material)) material.dispose();
+    await doc.transform(weld(), ...(simplifyTo && simplifyTo < before ? [simplify({ simplifier: MeshoptSimplifier, ratio: simplifyTo / before, error: 0.004, lockBorder: false })] : []));
+    for (const mesh of parts) addBoxUvs(doc, mesh, boxUv ?? 0.2);
+    let after = 0;
+    for (const mesh of parts) for (const prim of mesh.listPrimitives()) after += prim.getIndices().getCount() / 3;
+    // (The UVs are kept although nothing in this file uses them: the game's own surfaces will.)
+    await doc.transform(join(), prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+    const out = path.join(outDir, `${name}.glb`);
+    await io.write(out, doc);
+    const size = getBounds(doc.getRoot().listScenes()[0]);
+    const dims = size.max.map((v, k) => (v - size.min[k]).toFixed(3)).join(' x ');
+    return `${name}: ${after} tris (of ${before}), parts ${[...made.keys()].join(', ')}, ${(fs.statSync(out).size / 1024).toFixed(0)} KB, ${dims} m`;
+  }
 
   // One material from the gun's own images, with AO / roughness / metalness packed into R / G / B.
   const tex = (file) => path.join(src, 'textures', file);
