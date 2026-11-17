@@ -1,29 +1,47 @@
 # HUMAN OVERRIDE
 
-**Don't let the AI win.**
+[![HUMAN OVERRIDE: round eight, and a full horde of robots comes through the breach](media/gallery/horde.jpg)](https://fortezzo.github.io/human-override/)
 
-A first-person survival shooter that runs in the browser. One human holds a facility against endless rounds of AI-controlled robots while fighting through to the only manual kill switch for ARGUS, a rogue AI that has taken over the world's networks. ARGUS studies how you play, changes its tactics between rounds, and tells you what it noticed. Inspired by classic round-based survival modes; every name, place and design in it is original.
+**A first-person survival shooter that runs in your browser: hold a facility against endless rounds of robots and fight through to the kill switch, while ARGUS, the AI that commands them, studies how you play and changes its tactics.**
 
-> **Status: complete (Stage 5 of 5, polish).** Everything in the design is in the game: a map of six areas in three loops, rounds that grow, the mission from first breaker to kill switch with endless rounds after it, ARGUS studying how you play, and everything scrap can buy. The last stage polished it: a first minute that teaches itself, a jump that clears anything waist-high without opening anywhere the robots cannot follow, a fail-safe you cannot miss, and the things a public link needs. [PROGRESS.md](PROGRESS.md) records what exists, what was decided and what is still rough.
+## [Play it now: fortezzo.github.io/human-override](https://fortezzo.github.io/human-override/)
 
-![Round eight: a full horde comes through the breach](media/stage-5/05-horde.jpg)
+It needs a computer with a mouse and keyboard, and nothing else: no install, no account, about 18 MB to load. The first rounds teach the controls as you play.
+
+## The idea: an enemy that reads you
+
+Most horde shooters send more robots each round. This one also watches. ARGUS keeps count of how you fought the round just gone (which gun you leaned on, whether you held one spot, whether you ran the horde in circles, how often you hit the weak point), and in the lull before the next round it tells you what it saw and what it is changing:
+
+> **OBSERVED** 77% of damage from the carbine. **ADAPTING** carbine-resistant plating.
+
+Every counter can be seen on the robots that carry it, and every one has an answer, so the game keeps asking you to change how you play. When the run ends, ARGUS shows you its profile of you. It is rule-based game AI, not machine learning: a handful of counts, fixed thresholds and four responses, in one readable file with a test for every rule. ([More about ARGUS](#argus-the-ai-that-studies-you) below.)
 
 | | |
 | --- | --- |
-| ![A Boost Station: more health, beside the breaker that powers it](media/stage-5/48-boost-station-carapace.jpg) | ![The Prototype Crate, holding out the one weapon found nowhere else](media/stage-5/54-prototype-crate.jpg) |
-| ![The Turncoat's beam turns a robot to your side](media/stage-5/55-turncoat-beam.jpg) | ![Timed pickups on the floor; boosts and pickup timers on the HUD](media/stage-5/57-pickups-and-timers.jpg) |
-| ![The entrance shutter holding, with a robot beating on the other side of it](media/stage-5/58-shutter-under-attack.jpg) | ![Every fifth round is a swarm of drones](media/stage-5/61-swarm-round.jpg) |
-| ![ARGUS's analysis between rounds: what it saw, and what it is changing](media/stage-5/31-argus-analysis.jpg) | ![A shot turned by plating that resists the carbine](media/stage-5/32b-resisted-hit.jpg) |
-| ![The loading dock: containers, a truck in its bay, sodium lamps](media/stage-5/38-loading-dock.jpg) | ![The robotics lab: an assembly cell, torsos on the line, the key cage](media/stage-5/42-robotics-lab.jpg) |
-| ![The special robots: a bomber running ahead of a heavy, drones overhead](media/stage-5/33-special-robots.jpg) | ![The heavy beside one of the horde: the same machine in armour made for it, its reactor burning in its chest](media/stage-5/35b-heavy-beside-a-drudge.jpg) |
-| ![A bomber shot while it is still among its own](media/stage-5/34-bomber-blast.jpg) | ![ARGUS's profile of you, at the end of a run](media/stage-5/37-argus-profile.jpg) |
-| ![The final stand: ARGUS's Proxy comes into the core](media/stage-5/26-mission-final-stand.jpg) | ![The Custodian, carrying an override key](media/stage-5/25-mission-custodian.jpg) |
-| ![The kill switch, armed](media/stage-5/27-mission-kill-switch.jpg) | ![ARGUS goes dark and every robot powers down](media/stage-5/28-mission-powered-down.jpg) |
-| ![A new round is announced](media/stage-5/19-round-announcement.jpg) | ![Humanity saved](media/stage-5/29-humanity-saved.jpg) |
-| ![A new player's first hint](media/stage-5/65-first-hint.jpg) | ![The fail-safe: down, the world slowed, a flat line](media/stage-5/67-failsafe-down.jpg) |
-| ![The fail-safe fires](media/stage-5/68-failsafe-engaged.jpg) | ![Over the fence: inside the lab's assembly cell, the robots coming in by its gateway](media/stage-5/69-inside-the-fence.jpg) |
+| ![ARGUS's analysis between rounds: what it saw, and what it is changing](media/gallery/argus-analysis.jpg) | ![ARGUS's profile of you, at the end of a run](media/gallery/argus-profile.jpg) |
 
-## Play it
+## How it was built
+
+Designed and directed by Christian Fortezzo. The code was written by [Claude Code](https://claude.com/claude-code), Anthropic's AI coding agent, working stage by stage from Christian's specification and feedback. Art and sound come from the free sources credited in [CREDITS.md](CREDITS.md).
+
+How it was directed and built is all in this repository:
+
+- [SPEC.md](SPEC.md) is the specification the game was built from, with every later change of mind marked in it.
+- [PROGRESS.md](PROGRESS.md) is the record of each stage: what was built, what was decided and why, what the feedback was and what was done about it, what was measured, and what is still rough.
+- [HOW_IT_WORKS.md](HOW_IT_WORKS.md) is a plain-English tour of how the game works under the hood.
+
+An AI agent cannot pick up a mouse, so the project carries its own proof: 258 unit tests of the rules, 216 checks that play the built game in a real browser (the whole mission, every purchase, every way in), and test players that fight whole runs to measure how hard it is. See [Checks](#checks-and-how-a-game-written-by-an-ai-gets-tested).
+
+## In pictures
+
+| | |
+| --- | --- |
+| ![The final stand: ARGUS's Proxy comes into the core](media/gallery/final-stand.jpg) | ![The kill switch, armed, under ARGUS's eye](media/gallery/kill-switch.jpg) |
+| ![The heavy beside one of the horde: the same machine in armour made for it, its reactor burning in its chest](media/gallery/heavy.jpg) | ![The Turncoat, a lab prototype whose beam turns a robot to your side](media/gallery/turncoat.jpg) |
+| ![The loading dock: containers, a truck in its bay, sodium lamps](media/gallery/loading-dock.jpg) | ![The robotics lab: an assembly cell, torsos on the line](media/gallery/robotics-lab.jpg) |
+| ![A Boost Station: more health, beside the breaker that powers it](media/gallery/boost-station.jpg) | ![The fail-safe fires: back on your feet, the robots thrown back](media/gallery/failsafe.jpg) |
+
+## Run it on your own computer
 
 You need [Node.js](https://nodejs.org/) 20 or newer.
 
@@ -34,7 +52,7 @@ npm run dev
 
 Your browser opens the game. Click **PLAY**: the first rounds teach the basics with short hints that go away as you do what they say. **HOW TO PLAY** has five lines to start with and the rest for when you want it. It needs a mouse and keyboard; on a phone it shows the title scene and a friendly note instead.
 
-To put it on the web, run `npm run build` and publish the `dist` folder as it is: a static site with relative paths, which works from any address. Before that build, put the address it will have on a line in [`site-address.txt`](site-address.txt), so that the picture shown when the link is shared can be found (LinkedIn and the rest want its full address).
+The game on the web is this repository's `gh-pages` branch, served by GitHub Pages. `npm run build` makes the `dist` folder (a static site with relative paths, which works from any address), `npm run deploy` publishes that folder as it is, and `npm run check:live` then visits the public address the way a stranger would. The address is written in one place, [`site-address.txt`](site-address.txt), so that the picture other sites show when the link is shared can be found (they want its full address).
 
 ## Controls
 
@@ -102,7 +120,7 @@ At most two counters are in force at once. Every one of them can be seen on the 
 
 ARGUS also passes remarks while you play, and when the run ends it offers **its profile of you**: a play-style label, your numbers, every counter it used against you and in which rounds, and the page's address, so a screenshot of the card carries the link. Once the kill switch is pulled, ARGUS is off: no more analysis, counters or remarks.
 
-## What is in the game so far
+## What is in the game
 
 - **Six areas** joined in three loops: the security lobby, a server hall of blinking racks, a power room running on emergency lamps, a loading dock under sodium lamps (shipping containers, a truck backed into its bay; the biggest open space on the map), a robotics lab where ARGUS builds its machines (assembly arms over a half-built unit, torsos hanging on the line), and the core where ARGUS's eye watches over the kill switch.
 - **Robots**: a hunched, armor-plated machine with a glowing visor, built in code on a motion-captured skeleton, with two elites (the Custodian and the Proxy) and three specials (a flying drone, a bomber and a heavy in armour made for it, with a reactor burning in its chest) built on the same frame. They find their way around obstacles and each other, hurry in from outside, drop from vents, attack, flinch and stagger when hit, take extra damage at their weak point, and break apart into scrap and sparks. Up to 24 at once.
@@ -150,8 +168,10 @@ npm run e2e            216 checks that drive the built game in a headless browse
 npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
 npm run mission        the whole mission with no god mode, played by a model of a player (skilled, regular or first-timer)
 npm run hop            a player who does nothing but hop a barrier: do the robots still get them?
-npm run shots          re-takes the screenshots in media/stage-5
+npm run shots          re-takes the full set of screenshots (kept on the author's computer, not in the repository)
 npm run social         re-takes the link preview picture and the icons
+npm run deploy         publishes the built game to GitHub Pages
+npm run check:live     visits the published game as a stranger would
 npm run perf           frame rate, smoothness, start-up time and download size
 npm run check:credits  every shipped asset traces to a credited source; nothing raw is in git
 ```
@@ -166,11 +186,13 @@ It checks **the economy** the way a player meets it: a station in every area; ea
 
 And it checks that **there is nowhere to hide**. The first person to finish the mission did it from a corner no robot could reach, got to by a jump. For a while the answer was that nothing could be jumped, which left the player stopped dead by a knee-high barrier. Now anything up to waist height can be jumped, and the answer is the check: it stands the player in every place the rules of movement allow (152,874 of them, a sample every 10 cm across the whole map: the floor, the top of every low thing, the floor inside the lab's fence) and fails if a robot cannot get within striking distance of any one; then it sends a real robot to each of the sixteen most awkward and waits for the blow to land, and sets a bomber off beside a player standing on a desk and inside the fence. That check found three more such corners along the way, one of them only after a test player had wandered into it by itself. And a player who does nothing but hop back and forth over a barrier is played against a full horde, to see that hopping buys a little time and never safety.
 
+The server those checks fetch the game from tells capital letters from small ones, as the web server it is published on does and Windows does not, so a file asked for by the wrong capitals fails here before it can fail there.
+
 Then it does it the way a visitor would: real clicks on the real buttons, the browser really capturing the mouse, and every key on the controls list really pressed. That last part is not decoration. It found that sprinting had never made the player any faster, which the scripted checks had walked straight past. And last of all it loads the page as a visitor gets it, with no debug flag: no test tools on the page, no counter or debug word on the screen, the share tags and the preview picture in place, and a new player's first hint waiting.
 
-The performance report earns its place the same way. Adding this stage's heaviest scene to it showed that each of ARGUS's plates was being drawn as six pieces and each shield as four. Asking where one slow frame in a thousand came from led to fourteen small panes of lamp glass that had been drawn twice a frame, with their shader chosen afresh each time, since the first stage: fixing that made the heaviest scene about a fifth faster at every quality level but the highest, where the graphics card is the limit. The story is in [PROGRESS.md](PROGRESS.md).
+Once the game is on the web, `npm run check:live` goes to the public address in a fresh browser and does what a stranger does: waits for the start screen (and times it, on the full connection and on a slower one), presses PLAY, walks, fires, and fights the first round with the real mouse and keys and no help with aiming; reads the title, the icons and the link preview picture as another site would fetch them; and visits again at a phone's size.
 
-![Debug mode: the autopilot fighting through round three](media/stage-5/17-debug-autopilot.jpg)
+The performance report earns its place the same way. Adding this stage's heaviest scene to it showed that each of ARGUS's plates was being drawn as six pieces and each shield as four. Asking where one slow frame in a thousand came from led to fourteen small panes of lamp glass that had been drawn twice a frame, with their shader chosen afresh each time, since the first stage: fixing that made the heaviest scene about a fifth faster at every quality level but the highest, where the graphics card is the limit. The story is in [PROGRESS.md](PROGRESS.md).
 
 **Debug mode**: add `?debug=1` to the address for an overlay and five keys: **6** next mission step, **7** god mode, **8** free scrap, **9** skip to the next round, **0** autopilot.
 
@@ -184,6 +206,6 @@ Every third-party asset, with its author, source and license, is listed in [CRED
 
 Rebuilding the assets from source (`npm run assets:fetch`, then `npm run assets:build`) needs the Mixamo and Sketchfab downloads placed in `assets-source/`, which is deliberately kept out of this repository. The converted game files in `public/assets` are committed, so this is not needed to play or to work on the code.
 
-## How this was built
+## License
 
-Designed and directed by Christian Fortezzo. The code was written by [Claude Code](https://claude.com/claude-code), Anthropic's AI coding agent, working stage by stage from Christian's specification and feedback. Art and sound come from the free sources credited in [CREDITS.md](CREDITS.md).
+Copyright (c) 2026 Christian Fortezzo. All rights reserved. This project is not open source at present: the code is published to be read, and no license to copy, modify or redistribute it is granted. Third-party assets stay under their own licenses, as listed in [CREDITS.md](CREDITS.md). See [LICENSE](LICENSE).

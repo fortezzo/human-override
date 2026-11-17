@@ -8,3 +8,4 @@
 # (they need a full address for that; "next to the page" is not enough).
 # Left empty, the game still works anywhere; only that picture is missing
 # from a shared link.
+https://fortezzo.github.io/human-override/

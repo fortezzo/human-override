@@ -20,3 +20,9 @@ Thumbs.db
 
 # Feedback screenshots from play-testing (kept on this computer only)
 media/feedback/
+
+# The full sets of screenshots (each stage's, and the approved look they were
+# judged against). They are kept on the author's computer; the README's
+# pictures are a curated set in media/gallery.
+media/stage-*/
+media/look-target/

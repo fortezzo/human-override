@@ -418,6 +418,14 @@ The numbers the models produce now are in PROGRESS.md, with how many runs each i
 
 ## Putting it on the web
 
-Everything in the design is built, and the last stage polished it. `npm run build` produces a folder (`dist`) that is the whole game: a plain set of files that works from any web address, with no server behind it.
+The game is live at [fortezzo.github.io/human-override](https://fortezzo.github.io/human-override/).
 
-One thing about a public link is worth knowing. When you paste the link into LinkedIn or a chat, that site fetches the page and shows a title, a line of description and a picture. The game's page carries all three (the picture is `social-preview.jpg`, a photograph of the game's own lobby with a horde in it under the title; `npm run social` re-takes it). But those sites want the picture's full address, and the game cannot know where it will live. So there is one small text file, `site-address.txt`: when the game has a public address, it goes on a line in that file, and the next build writes it into the page. Until then the game works everywhere and only that picture is missing from a shared link.
+`npm run build` produces a folder (`dist`) that is the whole game: a plain set of files that works from any web address, with no server behind it. `npm run deploy` puts that folder, exactly as it was built and checked, on a branch of this repository called `gh-pages`, and GitHub Pages serves whatever is on that branch. The branch only ever holds the latest build, so the repository does not grow by a copy of the game each time.
+
+Two things about a public address are worth knowing.
+
+**The link preview.** When you paste the link into LinkedIn or a chat, that site fetches the page and shows a title, a line of description and a picture. The game's page carries all three (the picture is `social-preview.jpg`, a photograph of the game's own lobby with a horde in it under the title; `npm run social` re-takes it). But those sites want the picture's full address, and a build cannot know where it will live. So the address is written down in one small text file, `site-address.txt`, and the build writes it into the page.
+
+**Capital letters.** Windows treats `Barrel_01.glb` and `barrel_01.glb` as the same file. The computers that serve the game on the web do not. A file asked for by the wrong capitals would have worked every day on the computer the game was built on and failed for every visitor. So the server the checks fetch the game from was made as strict as the real one, and every one of the files the game asks for was found to be asked for by its exact name.
+
+After a deploy, `npm run check:live` goes to the public address in a fresh browser and does what a stranger does: it waits for the start screen and times it (again on a slower connection), presses PLAY with a real click, walks, fires, and fights the first round with the real mouse and keys and no help with aiming; it reads the title, the icons and the preview picture as another site would fetch them; and it visits again at a phone's size, where the game shows its note about needing a mouse and keyboard, with the address to open on a computer.

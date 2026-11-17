@@ -44,6 +44,15 @@ export function serve(root, prefix = '/') {
       res.writeHead(404).end('Not found');
       return;
     }
+    // GitHub Pages serves from a file system that tells capitals from small letters, and Windows does not: a
+    // request for "barrel_01.glb" finds "Barrel_01.glb" here and nothing there. So a request whose capitals are
+    // not the file's own is refused here too, and the checks would see it.
+    const asAsked = path.relative(path.resolve(root), path.resolve(file));
+    const asStored = path.relative(fs.realpathSync.native(path.resolve(root)), fs.realpathSync.native(file));
+    if (asAsked !== asStored) {
+      res.writeHead(404).end(`Not found (the file is "${asStored}", with different capitals)`);
+      return;
+    }
     res.writeHead(200, { 'Content-Type': TYPES[path.extname(file)] ?? 'application/octet-stream', 'Cache-Control': 'no-store' });
     fs.createReadStream(file).pipe(res);
   });

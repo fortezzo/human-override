@@ -3,6 +3,13 @@
   "version": "0.0.1",
   "private": true,
   "description": "HUMAN OVERRIDE - a round-based survival shooter for the browser. Don't let the AI win.",
+  "license": "UNLICENSED",
+  "author": "Christian Fortezzo",
+  "homepage": "https://fortezzo.github.io/human-override/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fortezzo/human-override.git"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite --open",
@@ -19,7 +26,9 @@
     "balance": "node tools/balance.mjs",
     "mission": "node tools/mission.mjs",
     "hop": "node tools/hop.mjs",
-    "social": "node tools/social.mjs"
+    "social": "node tools/social.mjs",
+    "deploy": "node tools/deploy.mjs",
+    "check:live": "node tools/live.mjs"
   },
   "dependencies": {
     "n8ao": "^2.0.2",

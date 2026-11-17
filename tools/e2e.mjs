@@ -56,6 +56,7 @@ import fs from 'node:fs';
 import sharp from 'sharp';
 import { gpuName, launch } from './lib/browser.mjs';
 import { HOP_SITES, hopTrial, jumpTrials } from './lib/jumping.mjs';
+import { parseSiteAddress } from './lib/site-address.mjs';
 import { serve } from './lib/static-server.mjs';
 
 if (!fs.existsSync('dist/index.html')) {
@@ -4364,7 +4365,8 @@ try {
       const image = new Image();
       image.onload = () => resolve([image.naturalWidth, image.naturalHeight]);
       image.onerror = () => resolve([0, 0]);
-      image.src = new URL(meta('og:image'), location.href).href;
+      // (The picture in this build. The tag may name the public address it will be served from, which is not what is being tested here.)
+      image.src = new URL('social-preview.jpg', location.href).href;
     });
     return {
       title: document.title,
@@ -4377,10 +4379,14 @@ try {
       words: document.body.innerText,
     };
   });
+  // Other sites want the picture's full address. It is written down in one place, site-address.txt; while that
+  // is empty the tags are relative ("next to the page").
+  const publicAddress = fs.existsSync('site-address.txt') ? parseSiteAddress(fs.readFileSync('site-address.txt', 'utf8')) : '';
+  const base = publicAddress || './';
   check(
-    'the page a visitor loads has a title, a description, the tags other sites read when the link is shared, a preview picture 1200 by 630, and its icons',
-    /^HUMAN OVERRIDE/.test(head.title) && (head.description ?? '').length > 80 && head.og.every(Boolean) && head.icons >= 3 && head.iconsLoad && head.picture[0] === 1200 && head.picture[1] === 630,
-    `"${head.title}"; preview picture ${head.picture.join(' x ')}; ${head.icons} icons`,
+    'the page a visitor loads has a title, a description, the tags other sites read when the link is shared (carrying the public address in full, if the game has one), a preview picture 1200 by 630, and its icons',
+    /^HUMAN OVERRIDE/.test(head.title) && (head.description ?? '').length > 80 && head.og.every(Boolean) && head.og[2] === `${base}social-preview.jpg` && head.og[3] === base && head.og[5] === `${base}social-preview.jpg` && head.icons >= 3 && head.iconsLoad && head.picture[0] === 1200 && head.picture[1] === 630,
+    `"${head.title}"; preview picture ${head.picture.join(' x ')}, named in the tags as ${head.og[2]}; ${head.icons} icons`,
   );
   await visit.click('.screen.title [data-action="start"]');
   await visit.waitForFunction(() => !document.querySelector('.hud').classList.contains('hidden') && document.querySelector('.hud-coach').classList.contains('show'), null, { timeout: 15000 });

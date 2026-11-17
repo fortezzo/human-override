@@ -11,7 +11,10 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 | 2 | The mission: power, three keys, the Custodian, the uplink, the final stand, HUMANITY SAVED, endless rounds, the objective tracker | **Played; four items of feedback, all done** (recorded below) |
 | 3 | ARGUS: specials, tracking, counters, banner, remarks, end-of-run report | **Played; eight items of feedback, all done, and approved from the screenshots** (recorded below). The map is six areas. |
 | 4 | Full economy: stations, shutters, pickups, grenades, swarm rounds, the special weapon, settings and how-to-play screens, the phone message | **Approved from the screenshots; three answers and one fix (jumping), all done** (recorded below) |
-| 5 | Polish: no new features. Feel, hints, the fail-safe, the Turncoat, the truck and the wall, speed, a public link's needs, the final documents | **Built. Waiting for you to play it.** |
+| 5 | Polish: no new features. Feel, hints, the fail-safe, the Turncoat, the truck and the wall, speed, a public link's needs, the final documents | **Approved from the screenshots**, with the speed result accepted as it stands and nothing more to be merged |
+| | Publishing: a public repository and the game live on GitHub Pages (a soft launch) | **Done** (recorded below) |
+
+**Where the pictures are.** The pictures the README shows are a curated set of eleven, in `media/gallery/`. The full sets named all through this record (`media/look-target/` and `media/stage-1/` to `media/stage-5/`) are kept on the author's computer and are not in the public repository: with their history they were nine tenths of its size. `npm run shots` re-makes the current set.
 
 The approved look lives in `media/look-target/` and is never overwritten. Stage 5's pictures are in `media/stage-5/` (76 of them: every earlier view re-taken on this build as 01 to 64, and this stage's as 65 to 73) and are re-made with `npm run build` then `npm run shots`. Stage 4's and Stage 3's are kept in `media/stage-4/` and `media/stage-3/` as they were when you approved them. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
 
@@ -1376,7 +1379,9 @@ npm run dev            play it (opens the browser)
 npm run build          type-check and production build
 npm test               unit tests
 npm run e2e            end-to-end check of the built game
-npm run shots          re-take the screenshots (media/stage-5)
+npm run shots          re-take the screenshots (media/stage-5, kept out of the repository)
+npm run deploy         publish the built game to GitHub Pages (the gh-pages branch)
+npm run check:live     visit the published game the way a stranger would
 npm run social         re-take the link preview picture and the icons
 npm run balance        whole runs of ordinary rounds, played by a model of a first-time player
 npm run mission        the whole mission with no god mode, played by a model of a player (and what it bought)
