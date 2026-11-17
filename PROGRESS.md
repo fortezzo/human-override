@@ -18,6 +18,80 @@ The full specification is in [SPEC.md](SPEC.md). This file records what has been
 
 The approved look lives in `media/look-target/` and is never overwritten. Stage 5's pictures are in `media/stage-5/` (76 of them: every earlier view re-taken on this build as 01 to 64, and this stage's as 65 to 73) and are re-made with `npm run build` then `npm run shots`. Stage 4's and Stage 3's are kept in `media/stage-4/` and `media/stage-3/` as they were when you approved them. Stage 2's and Stage 1's are kept in `media/stage-2/` and `media/stage-1/` as they were when you played them.
 
+## Published: the soft launch (16 November 2026)
+
+You approved Stage 5 ("the speed result is fine as it stands. Don't merge anything more.") and asked for the game to be published: a public repository, and the game live on GitHub Pages, as a soft launch ("the link goes live, but I won't share it until it has been tested on other computers").
+
+- **The game:** https://fortezzo.github.io/human-override/
+- **The repository:** https://github.com/fortezzo/human-override
+
+The link has not been posted or shared anywhere.
+
+### Before anything was pushed
+
+Your five points, in your order.
+
+1. **The account.** This computer was logged in to GitHub as `fortezzo`, a personal account in your name and the only one logged in. That is where it was published.
+2. **The commits.** All 48 carried your name and a personal email address. Every commit now carries your GitHub no-reply address instead. Names, dates and messages are as they were.
+3. **The audit.** Every version of every file ever committed (1,337 of them, 256 MB), every path, and every commit message were read for raw downloads, anything from `assets-source`, scratch or cache files, feedback pictures, working files, keys or passwords, email addresses, this computer's name, and paths that show the Windows user folder. None of the first eight had ever been committed. The user folder's path was in one place: a line of `SPEC.md`, in four versions of it. It is out of all four, and that line now says so. No model, sound, texture or picture carried a path inside it.
+4. **Lean.** The screenshot folders were 221 MB of the repository's 244 MB. They are out of the repository and out of its history, and they are still on your computer (`media/stage-1` to `media/stage-5`, and `media/look-target`). The README's pictures are a curated set of eleven in `media/gallery` (2.9 MB). **The code's commit history was kept**: all 49 commits, each replayed with those three changes and no others (the email, the pictures, the one path). The result was then compared with the original commit by commit, 15,552 file entries in all, and a replay with no changes at all was shown to give back the very same commits first. **The repository is 23 MB.**
+5. **The license.** `LICENSE`: copyright Christian Fortezzo, all rights reserved; not open source at present; third-party assets stay under their own licenses, as listed in `CREDITS.md`. The README and `package.json` say the same.
+
+One more check before pushing, which nothing in your list asked for but a public launch needs: **a stranger's copy builds.** A fresh clone of the rewritten repository installed with `npm ci`, built, and passed its 258 unit tests, and its build was byte for byte the build the 216 browser checks had just passed.
+
+### Found while getting ready, and fixed
+
+- **Capital letters.** Windows treats `Barrel_01.glb` and `barrel_01.glb` as one file; the computers that serve GitHub Pages do not. A file asked for by the wrong capitals would have worked every day here and failed for every visitor. The server the checks fetch the game from is now as strict as the real one, and the whole suite was run again through it: every one of the 204 files the game asks for is asked for by its exact name. (None was wrong. It is a check now, so none can become wrong unnoticed.)
+- **The first check of a live-site tool is the tool.** My stranger's-visit check fought its first round facing a wall: with the mouse captured, a move to a place on the screen is a turn by however far that place is from where the pointer was, and its first move went from the PLAY button to the middle of the screen. Found by trying the tool on the local build before the game was public, with the aim and the robots' places read out beside it.
+
+### Publishing
+
+- The repository was created public, with a one-line description, the game's address as its website, and ten topics (three.js, TypeScript, Vite, WebGL, browser game, FPS, first-person shooter, wave survival, game AI, Claude Code).
+- The game is served from a branch called `gh-pages`, which holds one commit: the latest build, exactly as it was built and checked. `npm run deploy` replaces it.
+- The public address is in `site-address.txt`, so the tags other sites read name the preview picture in full; the phone message and ARGUS's profile card print the page's own address, which is now that one.
+
+### The live site, visited the way a stranger would
+
+`npm run check:live` opens the public address in a fresh browser (nothing remembered, nothing cached, no debug flag). **17 of 17 checks passed.**
+
+| What | Result |
+| --- | --- |
+| The address answers, over https | Yes; a plain `http://` address is sent on to it |
+| Time to the start screen, nothing cached | 6.4 s (four visits: 6.3 to 6.5; the very first visit after publishing took 9.1 s, before GitHub's servers had the files to hand) on this computer's connection (the loading screen is up within a second); 7.0 s held to 100 megabits a second, 8.4 s (three visits: 8.2 to 8.5) at 50, 10.4 s at 25. The spec's budget is about ten seconds on a normal connection |
+| How much is fetched | 16.5 MB in 361 files, all of it from the game's own address: no trackers, no outside scripts or fonts |
+| Page title | "HUMAN OVERRIDE · Don't let the AI win" |
+| Icons | The red eye for the browser tab, a PNG, and one for a phone's home screen: all three load |
+| Link preview picture | Named in the page by its full public address; fetched from outside as another site would: there, a JPEG, 1200 by 630, 98 KB |
+| Nothing of the test tools | None on the page; no debug word or frame-rate counter on the start screen |
+| PLAY | A real click captures the mouse and starts a run; the first hint (MOVE) is waiting, and holding W does it; a real left click fires one round |
+| A round, with the real mouse and keys | Round 1 fought with no help of any kind (stand, fire, sweep, reload): cleared, 530 scrap earned, round 2 begun |
+| On through three rounds | With the debug flag on the live address, the autopilot played into round 3 |
+| A phone's size, with a touch screen | The note to play on a computer, with `fortezzo.github.io/human-override/` to open there and a button that copies it |
+| Console errors and failed requests | None, in any of those visits |
+
+I also looked at pictures of the live start screen, the first seconds of play and the phone view, and at the repository's page as a visitor who is not logged in sees it: the README's top renders as intended and all eleven pictures load.
+
+### Decisions made while publishing
+
+Numbered on from Stage 5's (which ended at 175).
+
+176. **The approved-look folder went with the stage folders.** You said to keep one curated set and remove the rest; `media/look-target` is fourteen more screenshots and, with its history, 23 MB. It is still on your computer and the screenshot tool still refuses to overwrite it.
+177. **Eleven pictures, re-encoded.** The ones that show the most in the least: the horde, ARGUS's analysis and its profile card, the final stand, the kill switch, the heavy, the Turncoat, the dock, the lab, a Boost Station, the fail-safe. The picture of debug mode is not among them: the autopilot's moment is a different one every time, and this time it was a dull one.
+178. **The game is published as built, not rebuilt by GitHub.** A `gh-pages` branch holding only the latest build, pushed by `npm run deploy`. What goes live is then exactly the folder the checks ran against. It costs the repository almost nothing, because git stores a file once however many branches hold it and the built game's models, textures and sounds are the same files as the source's.
+179. **The history was rewritten in place, and the old one kept beside it.** The project folder's own history is now the published one. A complete copy of the history as it was (old email, every screenshot) is in `.cache/backup` on your computer, which git ignores; delete it whenever you like.
+180. **`SPEC.md` says what was taken out.** The line reads "[the folder's path on my computer, removed before publishing]", in every version in the history, so the one edit to your words is marked as an edit.
+181. **`claude-code` is one of the topics**, because the README's first screen says who wrote the code, and the topic says the same thing in the place people search.
+182. **Future commits use the no-reply address too.** It is set for this project folder only; nothing about git on the rest of your computer was changed.
+
+### Not verified
+
+- **Other computers.** Everything above ran on this one (a fast desktop graphics card, Windows, Chromium). That is the test you said you will do before sharing the link.
+- **Other browsers.** Firefox and Safari were not tried.
+- **A real phone.** The phone check is a desktop browser at a phone's size with a touch screen switched on.
+- **The preview as LinkedIn draws it.** The page's tags and the picture are right and reachable. I did not put the link through LinkedIn's own inspector, because that hands the link to LinkedIn, and you asked for it not to be shared anywhere.
+- **A slow connection.** At 25 megabits a second the start screen takes a little over the ten seconds the spec allows.
+- **Sound**, as before: I cannot hear it.
+
 ## Before Stage 5: your answers to the Stage 4 feedback
 
 You approved Stage 4 from the screenshots (the four Boost Stations, the Overclock Bench, the Prototype Crate, the pickups and timers, the shutters, swarm rounds, grenades, the settings and how-to-play screens, the phone message) and the design calls listed for it. Your three answers, and what was done about each:
